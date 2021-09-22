@@ -6,6 +6,15 @@ authors = ["github.com/containers"]
 description = "A container network stack"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["serde", "deps-serde"]
+deps-serde = ["chrono/serde", "url/serde"]
 
 [dependencies]
 clap = "3.0.0-beta.4"
+chrono = "0.4.7"
+serde = { version = "1.0.124", features = ["derive"], optional = true }
+url = "2.1.0"
+serde-value = "0.7.0"
+serde_json = "1.0.64"
+serde_derive = "1.0.125"
