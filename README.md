@@ -14,6 +14,18 @@ Netavark is capable of the following given the proper JSON input:
 As this project is in very early development, we will add more capabilities in
 the near future.
 
+## Requires
+
+- [Rust](https://www.rust-lang.org/tools/install)
+
+## Build
+
+```console
+$ make
+```
+## Latest release
+Not applicable yet (TBD)
+
 ## Latest release
 Not applicable yet (TBD)
 
