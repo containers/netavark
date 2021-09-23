@@ -3,6 +3,46 @@
 extern crate serde_derive;
 use std::collections::HashMap;
 
+// Network describes the Network attributes.
+#[derive(Serialize, Deserialize)]
+pub struct Network {
+    #[serde(rename = "created")]
+    pub created: Option<String>,
+
+    #[serde(rename = "dns_enabled")]
+    pub dns_enabled: bool,
+
+    #[serde(rename = "driver")]
+    pub driver: String,
+
+    #[serde(rename = "id")]
+    pub id: String,
+
+    #[serde(rename = "internal")]
+    pub internal: bool,
+
+    #[serde(rename = "ipam_options")]
+    pub ipam_options: Option<HashMap<String, String>>,
+
+    #[serde(rename = "ipv6_enabled")]
+    pub ipv6_enabled: bool,
+
+    #[serde(rename = "labels")]
+    pub labels: Option<HashMap<String, String>>,
+
+    #[serde(rename = "name")]
+    pub name: String,
+
+    #[serde(rename = "network_interface")]
+    pub network_interface: Option<String>,
+
+    #[serde(rename = "options")]
+    pub options: Option<HashMap<String, String>>,
+
+    #[serde(rename = "subnets")]
+    pub subnets: Option<Vec<Subnet>>,
+}
+
 // NetworkOptions for a given container.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NetworkOptions {
@@ -89,7 +129,7 @@ pub struct NetAddress {
 }
 
 // IPNet is used as custom net.IPNet type to add Marshal/Unmarshal methods.
-// TODO: We can use native IP network types, fix this when we are going to see issues.
+// TODO: [Not important] Transformed from golang net.IPNet. Swtich to native rust if needed.
 #[derive(Serialize, Deserialize)]
 pub struct IpNet {
     #[serde(rename = "IP")]
@@ -97,4 +137,26 @@ pub struct IpNet {
 
     #[serde(rename = "Mask")]
     pub mask: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Subnet {
+    #[serde(rename = "gateway")]
+    pub gateway: Option<String>,
+
+    #[serde(rename = "lease_range")]
+    pub lease_range: Option<LeaseRange>,
+
+    #[serde(rename = "subnet")]
+    pub subnet: IpNet,
+}
+
+// LeaseRange contains the range where IP are leased.
+#[derive(Serialize, Deserialize)]
+pub struct LeaseRange {
+    #[serde(rename = "end_ip")]
+    pub end_ip: Option<String>,
+
+    #[serde(rename = "start_ip")]
+    pub start_ip: Option<String>,
 }
