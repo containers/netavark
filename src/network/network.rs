@@ -125,7 +125,8 @@ pub struct NetAddress {
     pub gateway: Option<String>,
 
     #[serde(rename = "subnet")]
-    pub subnet: IpNet,
+    //TODO: Cast this to IpNet
+    pub subnet: String,
 }
 
 // IPNet is used as custom net.IPNet type to add Marshal/Unmarshal methods.
@@ -148,7 +149,8 @@ pub struct Subnet {
     pub lease_range: Option<LeaseRange>,
 
     #[serde(rename = "subnet")]
-    pub subnet: IpNet,
+    //TODO: Cast this to IpNet
+    pub subnet: String,
 }
 
 // LeaseRange contains the range where IP are leased.
