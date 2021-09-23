@@ -53,3 +53,48 @@ pub struct PortMapping {
     #[serde(rename = "range")]
     pub range: u16,
 }
+
+// StatusBlock contains the network information about a container
+// connected to one Network.
+#[derive(Serialize, Deserialize)]
+pub struct StatusBlock {
+    #[serde(rename = "dns_search_domains")]
+    pub dns_search_domains: Option<Vec<String>>,
+
+    #[serde(rename = "dns_server_ips")]
+    pub dns_server_ips: Option<Vec<String>>,
+
+    #[serde(rename = "interfaces")]
+    pub interfaces: Option<HashMap<String, NetInterface>>,
+}
+
+// NetInterface contains the settings for a given network interface.
+#[derive(Serialize, Deserialize)]
+pub struct NetInterface {
+    #[serde(rename = "mac_address")]
+    pub mac_address: String,
+
+    #[serde(rename = "networks")]
+    pub networks: Option<Vec<NetAddress>>,
+}
+
+// NetAddress contains the subnet and gatway.
+#[derive(Serialize, Deserialize)]
+pub struct NetAddress {
+    #[serde(rename = "gateway")]
+    pub gateway: Option<String>,
+
+    #[serde(rename = "subnet")]
+    pub subnet: IpNet,
+}
+
+// IPNet is used as custom net.IPNet type to add Marshal/Unmarshal methods.
+// TODO: We can use native IP network types, fix this when we are going to see issues.
+#[derive(Serialize, Deserialize)]
+pub struct IpNet {
+    #[serde(rename = "IP")]
+    pub ip: String,
+
+    #[serde(rename = "Mask")]
+    pub mask: String,
+}
