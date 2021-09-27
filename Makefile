@@ -22,6 +22,9 @@ build:
 clean:
 	rm -rf bin
 
+test:
+	cargo test
+
 all: build
 
 help:
