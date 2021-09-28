@@ -1,0 +1,18 @@
+{
+   "container_id":"6ce776ea58b5",
+   "container_name":"testcontainer",
+   "port_mappings":[
+      {
+         "host_ip":"127.0.0.1",
+         "container_port":5000,
+         "host_port":5001,
+         "range":3,
+         "protocol":"tcp"
+      }
+   ],
+   "networks":{
+      "defaultNetwork":{
+         "interface_name":"eth0"
+      }
+   }
+}

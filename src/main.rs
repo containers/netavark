@@ -34,3 +34,6 @@ fn main() {
         SubCommand::Teardown(teardown) => teardown.exec(opts.file.unwrap()),
     }
 }
+
+#[cfg(test)]
+mod test;
