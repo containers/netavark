@@ -31,8 +31,8 @@ Not applicable yet (TBD)
 
 ## Communications
 
-For general questions and discussion, please use the
-IRC `#podman` channel on `irc.libera.chat`.
+For general questions and discussion, please use Podman's
+[channels](https://podman.io/community/#slack-irc-matrix-and-discord).
 
 For discussions around issues/bugs and features, you can use the GitHub
 [issues](https://github.com/containers/netavark/issues)
