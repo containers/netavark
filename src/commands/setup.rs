@@ -2,6 +2,7 @@
 use std::path::PathBuf;
 use clap::{self, Clap};
 use crate::network;
+use log::debug;
 
 #[derive(Clap, Debug)]
 pub struct Setup {
@@ -20,12 +21,15 @@ impl Setup {
 
     pub fn exec(&self, input_file: PathBuf) {
 
+        debug!("{:?}", "Setting up...");
+
         //TODO: Can we be more safe while converting PathBuf to string
         let _network_options = match network::NetworkOptions::load(&input_file.into_os_string().into_string().unwrap()) {
             Ok(opts) => opts,
             Err(e) => panic!("{}", e),
         };
 
+        debug!("{:?}", "Setup complete");
         ()
     }
 }
