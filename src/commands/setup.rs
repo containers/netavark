@@ -1,5 +1,5 @@
 //! Configures the given network namespace with provided specs
-use crate::firewall;
+//use crate::firewall;
 use crate::network;
 use clap::{self, Clap};
 use log::debug;
@@ -27,7 +27,8 @@ impl Setup {
             Err(e) => panic!("{}", e),
         };
 
-        let firewall_driver = match firewall::get_supported_firewall_driver() {
+        // TODO: Remove comments for firewall setup when its in working state. NO_OP as of now.
+        /*let firewall_driver = match firewall::get_supported_firewall_driver() {
             Ok(driver) => driver,
             Err(e) => panic!("{}", e.to_string()),
         };
@@ -45,6 +46,14 @@ impl Setup {
                 Ok(_) => {}
                 Err(e) => panic!("{}", e.to_string()),
             };
+        }*/
+
+        //Configure Bridge and veth_pairs
+        if let Err(err) = network::core::Core::bridge_per_podman_network(
+            &network_options,
+            &self.network_namespace_path,
+        ) {
+            panic!("{}", err)
         }
 
         // TODO: Set up port forwarding. How? What network do we point to?
