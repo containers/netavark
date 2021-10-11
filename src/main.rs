@@ -1,3 +1,4 @@
+extern crate env_logger;
 
 use std::path::PathBuf;
 use clap::{crate_version, Clap};
@@ -27,6 +28,7 @@ enum SubCommand {
 }
 
 fn main() {
+    env_logger::init();
     let opts = Opts::parse();
 
     match opts.subcmd {
