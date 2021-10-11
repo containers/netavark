@@ -20,4 +20,18 @@ mod tests {
         Err(e) => panic!("{}", e),
     }
   }
+
+  // Deserialize values correctly
+  // Try mutating deserialized struct
+  #[test]
+  fn test_setup_opts_mutablity(){
+    match network::NetworkOptions::load("src/test/config/setupopts.test.json") {
+        Ok(mut setupopts) => {
+            assert_eq!(setupopts.container_name, "testcontainer");
+            setupopts.container_name = "mutatedcontainername".to_string();
+            assert_eq!(setupopts.container_name, "mutatedcontainername");
+        },
+        Err(e) => panic!("{}", e),
+    }
+  }
 }
