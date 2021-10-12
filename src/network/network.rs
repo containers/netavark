@@ -55,6 +55,9 @@ pub struct NetworkOptions {
     #[serde(rename = "networks")]
     pub networks: HashMap<String, PerNetworkOptions>,
 
+    #[serde(rename = "network_info")]
+    pub network_info: HashMap<String, Network>,
+
     #[serde(rename = "port_mappings")]
     pub port_mappings: Option<Vec<PortMapping>>,
 }
