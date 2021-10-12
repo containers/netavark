@@ -1,9 +1,8 @@
-pub mod network;
+pub mod types;
 use crate::serialize;
-pub use network::NetworkOptions;
 
-impl network::NetworkOptions {
-    pub fn load(path: &str) -> Result<network::NetworkOptions, serialize::SerializeError> {
+impl types::NetworkOptions {
+    pub fn load(path: &str) -> Result<types::NetworkOptions, serialize::SerializeError> {
         serialize::deserialize(path)
     }
     pub fn save(&self, path: &str) -> Result<(), serialize::SerializeError> {
