@@ -25,6 +25,8 @@ clean:
 test:
 	cargo test
 
+validate:
+	cargo clippy -p netavark -- -D warnings
 all: build
 
 help:

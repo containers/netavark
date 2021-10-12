@@ -4,14 +4,22 @@ test_task:
   alias: "build_and_test"
   name: "Build and Test"
   container:
-    image: docker.io/library/rust
+    image: quay.io/libpod/netavark-devel
   install_script: cargo build
   test_script: cargo test
+
+test_task:
+  alias: "validate_test"
+  name: "Validate Code"
+  container:
+    image: quay.io/libpod/netavark-devel
+  test_script: cargo clippy -p netavark -- -D warnings
 
 success_task:
   name: "Total success"
   depends_on:
     - "build_and_test"
+    - "validate_test"
   clone_script: /bin/true
   script: /bin/true
   container: 
