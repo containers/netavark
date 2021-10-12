@@ -4,7 +4,7 @@ extern crate serde_derive;
 use std::collections::HashMap;
 
 // Network describes the Network attributes.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Network {
     #[serde(rename = "created")]
     pub created: Option<String>,
@@ -96,7 +96,7 @@ pub struct PortMapping {
 
 // StatusBlock contains the network information about a container
 // connected to one Network.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct StatusBlock {
     #[serde(rename = "dns_search_domains")]
     pub dns_search_domains: Option<Vec<String>>,
@@ -109,7 +109,7 @@ pub struct StatusBlock {
 }
 
 // NetInterface contains the settings for a given network interface.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NetInterface {
     #[serde(rename = "mac_address")]
     pub mac_address: String,
@@ -119,7 +119,7 @@ pub struct NetInterface {
 }
 
 // NetAddress contains the subnet and gatway.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NetAddress {
     #[serde(rename = "gateway")]
     pub gateway: Option<String>,
@@ -131,7 +131,7 @@ pub struct NetAddress {
 
 // IPNet is used as custom net.IPNet type to add Marshal/Unmarshal methods.
 // TODO: [Not important] Transformed from golang net.IPNet. Swtich to native rust if needed.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct IpNet {
     #[serde(rename = "IP")]
     pub ip: String,
@@ -140,7 +140,7 @@ pub struct IpNet {
     pub mask: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Subnet {
     #[serde(rename = "gateway")]
     pub gateway: Option<String>,
@@ -154,7 +154,7 @@ pub struct Subnet {
 }
 
 // LeaseRange contains the range where IP are leased.
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct LeaseRange {
     #[serde(rename = "end_ip")]
     pub end_ip: Option<String>,
