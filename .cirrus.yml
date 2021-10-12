@@ -6,7 +6,9 @@ test_task:
   container:
     image: docker.io/library/rust
   install_script: cargo build
-  test_script: cargo test
+  test_script:
+    - cargo-clippy
+    - cargo test
 
 success_task:
   name: "Total success"
