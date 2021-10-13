@@ -3,9 +3,8 @@
 
 debug ?=
 
-$(info debug is $(debug))
-
 ifdef debug
+$(info debug is $(debug))
   release :=
   target :=debug
   extension :=debug
