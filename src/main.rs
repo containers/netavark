@@ -1,7 +1,5 @@
-extern crate env_logger;
-
-use clap::{crate_version, Clap};
 use std::path::PathBuf;
+use clap::{crate_version, Clap};
 
 use netavark::commands::setup;
 use netavark::commands::teardown;
