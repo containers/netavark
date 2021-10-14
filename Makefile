@@ -20,13 +20,28 @@ build:
 
 clean:
 	rm -rf bin
+	$(MAKE) -C docs clean
+
+.PHONY: docs
+docs: ## build the docs on the host
+	$(MAKE) -C docs
+
+.PHONY: install
+install:
+	install -D -m0755 bin/buildah $(DESTDIR)/$(BINDIR)/netavark
+	$(MAKE) -C docs install
+
+.PHONY: uninstall
+uninstall:
+	rm -f $(DESTDIR)/$(BINDIR)/netavark
+	rm -f $(PREFIX)/share/man/man1/netavark*.1
 
 test:
 	cargo test
 
 validate:
 	cargo clippy -p netavark -- -D warnings
-all: build
+all: build docs
 
 help:
 	@echo "usage: make $(prog) [debug=1]"
