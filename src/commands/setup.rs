@@ -1,8 +1,8 @@
 //! Configures the given network namespace with provided specs
-use std::path::PathBuf;
-use clap::{self, Clap};
 use crate::network;
+use clap::{self, Clap};
 use log::debug;
+use std::path::PathBuf;
 
 #[derive(Clap, Debug)]
 pub struct Setup {
@@ -20,11 +20,14 @@ impl Setup {
     }
 
     pub fn exec(&self, input_file: PathBuf) {
-
         debug!("{:?}", "Setting up...");
 
-        //TODO: Can we be more safe while converting PathBuf to string
-        let _network_options = match network::types::NetworkOptions::load(&input_file.into_os_string().into_string().unwrap()) {
+        let _network_options = match network::types::NetworkOptions::load(
+            &input_file
+                .into_os_string()
+                .into_string()
+                .expect("Failed to convert PathBuf to string during network setup"),
+        ) {
             Ok(opts) => opts,
             Err(e) => panic!("{}", e),
         };
