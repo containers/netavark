@@ -1,4 +1,5 @@
 pub mod types;
+pub mod adapter;
 use crate::serialize;
 
 impl types::NetworkOptions {
