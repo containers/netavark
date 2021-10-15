@@ -2,6 +2,7 @@
 
 extern crate serde_derive;
 use std::collections::HashMap;
+use ipnet::IpNet;
 
 // Network describes the Network attributes.
 #[derive(Debug, Serialize, Deserialize)]
@@ -132,17 +133,6 @@ pub struct NetAddress {
     pub subnet: String,
 }
 
-// IPNet is used as custom net.IPNet type to add Marshal/Unmarshal methods.
-// TODO: [Not important] Transformed from golang net.IPNet. Swtich to native rust if needed.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct IpNet {
-    #[serde(rename = "IP")]
-    pub ip: String,
-
-    #[serde(rename = "Mask")]
-    pub mask: String,
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Subnet {
     #[serde(rename = "gateway")]
@@ -153,7 +143,7 @@ pub struct Subnet {
 
     #[serde(rename = "subnet")]
     //TODO: Cast this to IpNet
-    pub subnet: String,
+    pub subnet: IpNet,
 }
 
 // LeaseRange contains the range where IP are leased.

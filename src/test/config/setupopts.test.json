@@ -23,12 +23,12 @@
          "internal":false,
          "ipv6_enabled":true,
          "name":"defaultNetwork",
-	  "network_interface": "podman0",
-	  "subnets": [
-		 {
-			 "gateway":"192.168.43.1",
-			 "subnet": "192.168.43.0/24"
-		 }
+	 "network_interface": "podman0",
+ 	 "subnets": [
+	    {
+	      "gateway":"192.168.43.1",
+	      "subnet": "192.168.43.0/24"
+            }
 	 ]
       }
    }
