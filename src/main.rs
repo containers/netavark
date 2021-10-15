@@ -1,7 +1,7 @@
 extern crate env_logger;
 
-use std::path::PathBuf;
 use clap::{crate_version, Clap};
+use std::path::PathBuf;
 
 use netavark::commands::setup;
 use netavark::commands::teardown;
@@ -32,8 +32,12 @@ fn main() {
     let opts = Opts::parse();
 
     match opts.subcmd {
-        SubCommand::Setup(setup) => setup.exec(opts.file.unwrap()),
-        SubCommand::Teardown(teardown) => teardown.exec(opts.file.unwrap()),
+        SubCommand::Setup(setup) => {
+            setup.exec(opts.file.expect("Failed to read file for network setup"))
+        }
+        SubCommand::Teardown(teardown) => {
+            teardown.exec(opts.file.expect("Failed to read file for network teardown"))
+        }
     }
 }
 
