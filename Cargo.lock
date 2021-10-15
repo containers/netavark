@@ -365,6 +365,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ipnet"
+version = "2.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68f2d64f2edebec4ce84ad108148e67e1064789bee435edc5b60ad398714a3a9"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "iptables"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5451d970ceaf1d94b287f060eda6c553b0bd93412986765e3274c28a89b50830"
+dependencies = [
+ "lazy_static",
+ "nix",
+ "regex",
+]
+
+[[package]]
 name = "itoa"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -429,6 +449,8 @@ dependencies = [
  "chrono",
  "clap",
  "env_logger",
+ "ipnet",
+ "iptables",
  "log",
  "serde",
  "serde-value",
