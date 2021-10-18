@@ -3,7 +3,6 @@ use crate::firewall;
 use crate::network;
 use clap::{self, Clap};
 use log::debug;
-use std::path::PathBuf;
 
 #[derive(Clap, Debug)]
 pub struct Setup {
@@ -20,14 +19,11 @@ impl Setup {
         }
     }
 
-    pub fn exec(&self, input_file: PathBuf) {
+    pub fn exec(&self, input_file: String) {
         debug!("{:?}", "Setting up...");
 
         let network_options = match network::types::NetworkOptions::load(
             &input_file
-                .into_os_string()
-                .into_string()
-                .expect("Failed to convert PathBuf to string during network setup"),
         ) {
             Ok(opts) => opts,
             Err(e) => panic!("{}", e),

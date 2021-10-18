@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use clap::{crate_version, Clap};
 
 use netavark::commands::setup;
@@ -9,7 +8,7 @@ use netavark::commands::teardown;
 struct Opts {
     /// Instead of reading from STDIN, read the configuration to be applied from the given file.
     #[clap(short, long)]
-    file: Option<PathBuf>,
+    file: Option<String>,
     /// Netavark trig command
     #[clap(subcommand)]
     subcmd: SubCommand,
@@ -29,12 +28,14 @@ fn main() {
     env_logger::init();
     let opts = Opts::parse();
 
+    let file = opts.file.unwrap_or_else(|| String::from("/dev/stdin"));
+
     match opts.subcmd {
         SubCommand::Setup(setup) => {
-            setup.exec(opts.file.expect("Failed to read file for network setup"))
+            setup.exec(file)
         }
         SubCommand::Teardown(teardown) => {
-            teardown.exec(opts.file.expect("Failed to read file for network teardown"))
+            teardown.exec(file)
         }
     }
 }
