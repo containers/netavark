@@ -1,11 +1,14 @@
 pub mod types;
-use crate::serialize;
+use anyhow::Result;
+use std::fs::File;
 
 impl types::NetworkOptions {
-    pub fn load(path: &str) -> Result<types::NetworkOptions, serialize::SerializeError> {
-        serialize::deserialize(path)
+    pub fn load(path: &str) -> Result<types::NetworkOptions> {
+        let file = std::io::BufReader::new(File::open(path)?);
+        Ok(serde_json::from_reader(file)?)
     }
-    pub fn save(&self, path: &str) -> Result<(), serialize::SerializeError> {
-        serialize::serialize(self, path)
+    pub fn save(&self, path: &str) -> Result<()> {
+        let mut file = std::io::BufWriter::new(File::create(path)?);
+        Ok(serde_json::to_writer_pretty(&mut file, self)?)
     }
 }

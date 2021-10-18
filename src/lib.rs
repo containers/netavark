@@ -5,7 +5,6 @@ extern crate serde_json;
 #[macro_use]
 extern crate simple_error;
 
-pub mod serialize;
 pub mod network;
 pub mod commands;
 pub mod firewall;
