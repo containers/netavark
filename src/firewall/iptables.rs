@@ -7,6 +7,8 @@ use std::error::Error;
 
 //  NAT constant for iptables
 const NAT: &str = "nat";
+const PRIV_CHAIN_NAME: &str = "NETAVARK_FORWARD";
+const FILTER: &str = "filter";
 
 // Iptables driver - uses direct iptables commands via the iptables crate.
 pub struct IptablesDriver {
@@ -22,22 +24,20 @@ pub fn new() -> Result<Box<dyn firewall::FirewallDriver>, Box<dyn Error>> {
 
 impl firewall::FirewallDriver for IptablesDriver {
     fn setup_network(&self, net: types::Network) -> Result<(), Box<dyn Error>> {
-        debug!("iptables");
         let network_name = net.network_interface.unwrap();
-        // let ipt = self.conn;
         if let Some(subnet) = net.subnets {
             for network in subnet {
                 // Basic object setup
                 //  Check if the chain exists, if not - create it
+                // self.conn.list_chains()
                 let chain_check = self.conn.chain_exists(NAT, &network_name);
                 match chain_check {
-                    Ok(true) => debug!("{} chain exists", &network_name),
+                    Ok(true) => debug_chain_exists(NAT, &network_name),
                     Ok(false) => {
                         // The chain did not exist
-                        debug!("need to create chain {}", network_name);
                         self.conn
                             .new_chain(NAT, &network_name)
-                            .map(|_| debug!("chain {} created", network_name))?;
+                            .map(|_| debug_chain_create(NAT, &network_name))?;
                     }
                     Err(e) => return Err(e),
                 }
@@ -46,35 +46,81 @@ impl firewall::FirewallDriver for IptablesDriver {
                 let nat_rule = format!("-d {} -j ACCEPT", network.subnet.to_string()).to_string();
                 let nat_check = self.conn.exists(NAT, &network_name, &nat_rule);
                 match nat_check {
-                    Ok(true) => debug!("nat rule {} exists for {}", nat_rule, network_name),
+                    Ok(true) => debug_rule_exists(NAT, &network_name, nat_rule),
                     Ok(false) => {
                         // nat rule does not exists
-                        self.conn.append(NAT, &network_name, &nat_rule).map(|_| {
-                            debug!(
-                                "created iptables nat rule for {}:{}",
-                                &network_name, nat_rule
-                            )
-                        })?;
+                        self.conn
+                            .append(NAT, &network_name, &nat_rule)
+                            .map(|_| debug_rule_create(NAT, &network_name, nat_rule))?;
                     }
                     Err(e) => return Err(e),
                 }
 
                 //  Add first rule for the network
                 let masq_rule = "-d 224.0.0.0/4 -j MASQUERADE".to_string();
-                debug!("{}", masq_rule);
                 let masq_check = self.conn.exists(NAT, &network_name, &masq_rule);
                 match masq_check {
-                    Ok(true) => debug!("nat rule {} exists for {}", network_name, masq_rule),
+                    Ok(true) => debug_rule_exists(NAT, &network_name, masq_rule),
                     Ok(false) => {
                         // Need to create the masq rule
-                        self.conn.append(NAT, &network_name, &masq_rule).map(|_| {
-                            debug!(
-                                "create iptables nat rule for {}:{}",
-                                &network_name, masq_rule
-                            )
-                        })?;
+                        self.conn
+                            .append(NAT, &network_name, &masq_rule)
+                            .map(|_| debug_rule_create(NAT, &network_name, masq_rule))?;
                     }
                     Err(e) => return Err(e),
+                }
+
+                // Check if our private chain exists, if not create
+                let priv_chain_filter_check = self.conn.chain_exists(FILTER, PRIV_CHAIN_NAME)?;
+                if !priv_chain_filter_check {
+                    self.conn
+                        .new_chain(FILTER, PRIV_CHAIN_NAME)
+                        .map(|_| debug_chain_create(FILTER, PRIV_CHAIN_NAME))?;
+                } else {
+                    debug_chain_exists(FILTER, PRIV_CHAIN_NAME);
+                }
+
+                //  Create netavark firewall rule
+                //  this is not working ... and must be figured out
+                let netavark_fw = format!(
+                    "-m comment --comment 'netavark firewall plugin rules' -j {}",
+                    PRIV_CHAIN_NAME
+                );
+                if !self.conn.exists(FILTER, "FORWARD", &netavark_fw)? {
+                    self.conn
+                        .insert(FILTER, "FORWARD", &netavark_fw, 1)
+                        .map(|_| debug_rule_create(FILTER, "FORWARD", netavark_fw))?;
+                }
+                // Create incoming traffic rule
+                // CNI did this by IP address, this is implemented per subnet
+                let allow_incoming_rule = format!(
+                    "-d {} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+                    network.subnet.to_string()
+                );
+                if !self
+                    .conn
+                    .exists(FILTER, PRIV_CHAIN_NAME, &allow_incoming_rule)?
+                {
+                    let _ = self
+                        .conn
+                        .append(FILTER, PRIV_CHAIN_NAME, &allow_incoming_rule)
+                        .map(|_| debug_rule_create(FILTER, PRIV_CHAIN_NAME, allow_incoming_rule))?;
+                } else {
+                    debug_rule_exists(FILTER, PRIV_CHAIN_NAME, allow_incoming_rule);
+                }
+
+                // Create outgoing traffic rule
+                // CNI did this by IP address, this is implemented per subnet
+                let allow_outgoing_rule = format!("-s {} -j ACCEPT", network.subnet.to_string());
+                if !self
+                    .conn
+                    .exists(FILTER, PRIV_CHAIN_NAME, &allow_outgoing_rule)?
+                {
+                    self.conn
+                        .append(FILTER, PRIV_CHAIN_NAME, &allow_outgoing_rule)
+                        .map(|_| debug_rule_create(FILTER, PRIV_CHAIN_NAME, allow_outgoing_rule))?;
+                } else {
+                    debug_rule_exists(FILTER, PRIV_CHAIN_NAME, allow_outgoing_rule);
                 }
             }
         }
@@ -102,4 +148,25 @@ impl firewall::FirewallDriver for IptablesDriver {
     ) -> Result<(), Box<dyn Error>> {
         todo!();
     }
+}
+fn debug_chain_create(table: &str, chain: &str) {
+    debug!("chain {} created on table {}", chain, table);
+}
+
+fn debug_chain_exists(table: &str, chain: &str) {
+    debug!("chain {} exists on table {}", chain, table);
+}
+
+fn debug_rule_create(table: &str, chain: &str, rule: String) {
+    debug!(
+        "rule {} created on table {} and chain {}",
+        rule, table, chain
+    );
+}
+
+fn debug_rule_exists(table: &str, chain: &str, rule: String) {
+    debug!(
+        "rule {} exists on table {} and chain {}",
+        rule, table, chain
+    );
 }
