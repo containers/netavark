@@ -19,9 +19,7 @@ impl Teardown {
 
     pub fn exec(&self, input_file: String) {
         debug!("{:?}", "Tearing down..");
-        let _network_options = match network::types::NetworkOptions::load(
-            &input_file
-        ) {
+        let _network_options = match network::types::NetworkOptions::load(&input_file) {
             Ok(opts) => opts,
             Err(e) => panic!("{}", e),
         };

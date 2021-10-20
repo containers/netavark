@@ -47,12 +47,8 @@ fn get_firewall_impl() -> FirewallImpl {
 // configuration.
 pub fn get_supported_firewall_driver() -> Result<Box<dyn FirewallDriver>, Box<dyn Error>> {
     match get_firewall_impl() {
-        FirewallImpl::Iptables => {
-            iptables::new()
-        }
-        FirewallImpl::Firewalld => {
-            firewalld::new()
-        }
+        FirewallImpl::Iptables => iptables::new(),
+        FirewallImpl::Firewalld => firewalld::new(),
         FirewallImpl::Nftables => {
             bail!("nftables support not presently available");
         }
