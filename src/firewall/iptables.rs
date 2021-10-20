@@ -27,19 +27,15 @@ impl firewall::FirewallDriver for IptablesDriver {
         let network_name = net.network_interface.unwrap();
         if let Some(subnet) = net.subnets {
             for network in subnet {
-                // Basic object setup
-                //  Check if the chain exists, if not - create it
-                // self.conn.list_chains()
-                let chain_check = self.conn.chain_exists(NAT, &network_name);
-                match chain_check {
-                    Ok(true) => debug_chain_exists(NAT, &network_name),
-                    Ok(false) => {
-                        // The chain did not exist
-                        self.conn
-                            .new_chain(NAT, &network_name)
-                            .map(|_| debug_chain_create(NAT, &network_name))?;
-                    }
-                    Err(e) => return Err(e),
+                // Check if the chain exists, if not - create it
+                // Note: while there is an API provided to check if a chain exists in a table
+                // by iptables, it, for some reason, is slow.  Instead we just get a list of
+                // chains in a table and iterate.  Same is being done in golang implementations
+                let nat_chains = self.conn.list_chains(NAT)?;
+                if !nat_chains.iter().any(|i| i == &network_name){
+                    self.conn.new_chain(NAT, &network_name).map(|_| debug_chain_create(NAT, &network_name))?;
+                } else {
+                    debug_chain_exists(NAT, &network_name);
                 }
 
                 // declare the rule
@@ -71,17 +67,17 @@ impl firewall::FirewallDriver for IptablesDriver {
                 }
 
                 // Check if our private chain exists, if not create
-                let priv_chain_filter_check = self.conn.chain_exists(FILTER, PRIV_CHAIN_NAME)?;
-                if !priv_chain_filter_check {
-                    self.conn
-                        .new_chain(FILTER, PRIV_CHAIN_NAME)
-                        .map(|_| debug_chain_create(FILTER, PRIV_CHAIN_NAME))?;
+                // Note: while there is an API provided to check if a chain exists in a table
+                // by iptables, it, for some reason, is slow.  Instead we just get a list of
+                // chains in a table and iterate.  Same is being done in golang implementations
+                let filter_chains = self.conn.list_chains(FILTER)?;
+                if !filter_chains.iter().any(|i| i == PRIV_CHAIN_NAME){
+                    self.conn.new_chain(FILTER, PRIV_CHAIN_NAME).map(|_| debug_chain_create(FILTER, PRIV_CHAIN_NAME))?;
                 } else {
                     debug_chain_exists(FILTER, PRIV_CHAIN_NAME);
                 }
 
                 //  Create netavark firewall rule
-                //  this is not working ... and must be figured out
                 let netavark_fw = format!(
                     "-m comment --comment 'netavark firewall plugin rules' -j {}",
                     PRIV_CHAIN_NAME
