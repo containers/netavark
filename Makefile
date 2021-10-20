@@ -40,7 +40,9 @@ test:
 	cargo test
 
 validate:
+	cargo fmt --all -- --check
 	cargo clippy -p netavark -- -D warnings
+
 all: build docs
 
 help:

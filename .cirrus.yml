@@ -5,15 +5,15 @@ test_task:
   name: "Build and Test"
   container:
     image: quay.io/libpod/netavark-devel
-  install_script: cargo build
-  test_script: cargo test
+  install_script: make all
+  test_script: make test
 
 test_task:
   alias: "validate_test"
   name: "Validate Code"
   container:
     image: quay.io/libpod/netavark-devel
-  test_script: cargo clippy -p netavark -- -D warnings
+  test_script: make validate
 
 success_task:
   name: "Total success"
