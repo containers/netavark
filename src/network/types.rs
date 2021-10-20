@@ -1,8 +1,8 @@
 // Crate contains the types which are accepted by netvark.
 
 extern crate serde_derive;
-use std::collections::HashMap;
 use ipnet::IpNet;
+use std::collections::HashMap;
 
 // Network describes the Network attributes.
 #[derive(Debug, Serialize, Deserialize)]

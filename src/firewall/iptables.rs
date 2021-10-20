@@ -1,22 +1,22 @@
 use crate::firewall;
 use crate::network::types;
-use std::error::Error;
-use log::debug;
 use iptables;
 use iptables::IPTables;
+use log::debug;
+use std::error::Error;
 
 //  NAT constant for iptables
 const NAT: &str = "nat";
 
 // Iptables driver - uses direct iptables commands via the iptables crate.
 pub struct IptablesDriver {
-    conn: IPTables
+    conn: IPTables,
 }
 
 pub fn new() -> Result<Box<dyn firewall::FirewallDriver>, Box<dyn Error>> {
     // create an iptables connection
     let ipt = iptables::new(false)?;
-    let driver = IptablesDriver{ conn: ipt };
+    let driver = IptablesDriver { conn: ipt };
     Ok(Box::new(driver))
 }
 
@@ -35,9 +35,11 @@ impl firewall::FirewallDriver for IptablesDriver {
                     Ok(false) => {
                         // The chain did not exist
                         debug!("need to create chain {}", network_name);
-                        self.conn.new_chain(NAT, &network_name).map(|_| debug!("chain {} created", network_name))?;
+                        self.conn
+                            .new_chain(NAT, &network_name)
+                            .map(|_| debug!("chain {} created", network_name))?;
                     }
-                    Err(e) => return Err(e)
+                    Err(e) => return Err(e),
                 }
 
                 // declare the rule
@@ -47,9 +49,14 @@ impl firewall::FirewallDriver for IptablesDriver {
                     Ok(true) => debug!("nat rule {} exists for {}", nat_rule, network_name),
                     Ok(false) => {
                         // nat rule does not exists
-                        self.conn.append(NAT, &network_name, &nat_rule).map(|_| debug!("created iptables nat rule for {}:{}", &network_name, nat_rule))?;
+                        self.conn.append(NAT, &network_name, &nat_rule).map(|_| {
+                            debug!(
+                                "created iptables nat rule for {}:{}",
+                                &network_name, nat_rule
+                            )
+                        })?;
                     }
-                    Err(e) => return Err(e)
+                    Err(e) => return Err(e),
                 }
 
                 //  Add first rule for the network
@@ -60,7 +67,12 @@ impl firewall::FirewallDriver for IptablesDriver {
                     Ok(true) => debug!("nat rule {} exists for {}", network_name, masq_rule),
                     Ok(false) => {
                         // Need to create the masq rule
-                        self.conn.append(NAT, &network_name, &masq_rule).map(|_| debug!("create iptables nat rule for {}:{}", &network_name, masq_rule))?;
+                        self.conn.append(NAT, &network_name, &masq_rule).map(|_| {
+                            debug!(
+                                "create iptables nat rule for {}:{}",
+                                &network_name, masq_rule
+                            )
+                        })?;
                     }
                     Err(e) => return Err(e),
                 }

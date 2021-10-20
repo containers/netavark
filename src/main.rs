@@ -31,12 +31,8 @@ fn main() {
     let file = opts.file.unwrap_or_else(|| String::from("/dev/stdin"));
 
     match opts.subcmd {
-        SubCommand::Setup(setup) => {
-            setup.exec(file)
-        }
-        SubCommand::Teardown(teardown) => {
-            teardown.exec(file)
-        }
+        SubCommand::Setup(setup) => setup.exec(file),
+        SubCommand::Teardown(teardown) => teardown.exec(file),
     }
 }
 

@@ -22,9 +22,7 @@ impl Setup {
     pub fn exec(&self, input_file: String) {
         debug!("{:?}", "Setting up...");
 
-        let network_options = match network::types::NetworkOptions::load(
-            &input_file
-        ) {
+        let network_options = match network::types::NetworkOptions::load(&input_file) {
             Ok(opts) => opts,
             Err(e) => panic!("{}", e),
         };
