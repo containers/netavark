@@ -1,7 +1,7 @@
-PREFIX := /usr/local
-DATADIR := ${PREFIX}/share
-MANDIR := $(DATADIR)/man
-GOMD2MAN ?= $(shell command -v go-md2man || echo '$(GOBIN)/go-md2man')
+PREFIX ?= /usr/local
+DATADIR ?= ${PREFIX}/share
+MANDIR ?= $(DATADIR)/man
+MANDOWN ?= $(shell command -v mandown)
 
 docs: $(patsubst %.md,%,$(wildcard *.md))
 
@@ -15,7 +15,7 @@ docs: $(patsubst %.md,%,$(wildcard *.md))
 	 -e 's/\[\([^]]*\)](http[^)]\+)/\1/g' \
 	 -e 's;<\(/\)\?\(a\|a\s\+[^>]*\|sup\)>;;g' \
 	 -e 's/\\$$/  /g' $<  | \
-	$(GOMD2MAN) -in /dev/stdin -out  $@
+	$(MANDOWN) /dev/stdin > $@
 
 .PHONY: install
 install:
