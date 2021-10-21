@@ -3,6 +3,7 @@
 extern crate serde_derive;
 use ipnet::IpNet;
 use std::collections::HashMap;
+use std::net::IpAddr;
 
 // Network describes the Network attributes.
 #[derive(Debug, Serialize, Deserialize)]
@@ -73,7 +74,7 @@ pub struct PerNetworkOptions {
     pub interface_name: String,
 
     #[serde(rename = "static_ips")]
-    pub static_ips: Option<Vec<String>>,
+    pub static_ips: Option<Vec<IpAddr>>,
 
     #[serde(rename = "static_mac")]
     pub static_mac: Option<String>,
