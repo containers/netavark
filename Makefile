@@ -1,6 +1,13 @@
 # TODO: Make this more configurable
 #prog :=xnixperms
 
+DESTDIR ?=
+PREFIX ?= /usr/local
+LIBEXECDIR ?= ${PREFIX}/libexec
+LIBEXECPODMAN ?= ${LIBEXECDIR}/podman
+
+SELINUXOPT ?= $(shell test -x /usr/sbin/selinuxenabled && selinuxenabled && echo -Z)
+
 debug ?=
 
 ifdef debug
@@ -27,13 +34,13 @@ docs: ## build the docs on the host
 	$(MAKE) -C docs
 
 .PHONY: install
-install:
-	install -D -m0755 bin/buildah $(DESTDIR)/$(BINDIR)/netavark
-	$(MAKE) -C docs install
+install: docs build
+	install ${SELINUXOPT} -D -m0755 bin/netavark $(DESTDIR)/$(LIBEXECPODMAN)/netavark
+	$(MAKE) -C install
 
 .PHONY: uninstall
 uninstall:
-	rm -f $(DESTDIR)/$(BINDIR)/netavark
+	rm -f $(DESTDIR)/$(LIBEXECPODMAN)/netavark
 	rm -f $(PREFIX)/share/man/man1/netavark*.1
 
 test:

@@ -32,8 +32,10 @@ impl firewall::FirewallDriver for IptablesDriver {
                 // by iptables, it, for some reason, is slow.  Instead we just get a list of
                 // chains in a table and iterate.  Same is being done in golang implementations
                 let nat_chains = self.conn.list_chains(NAT)?;
-                if !nat_chains.iter().any(|i| i == &network_name){
-                    self.conn.new_chain(NAT, &network_name).map(|_| debug_chain_create(NAT, &network_name))?;
+                if !nat_chains.iter().any(|i| i == &network_name) {
+                    self.conn
+                        .new_chain(NAT, &network_name)
+                        .map(|_| debug_chain_create(NAT, &network_name))?;
                 } else {
                     debug_chain_exists(NAT, &network_name);
                 }
@@ -71,8 +73,10 @@ impl firewall::FirewallDriver for IptablesDriver {
                 // by iptables, it, for some reason, is slow.  Instead we just get a list of
                 // chains in a table and iterate.  Same is being done in golang implementations
                 let filter_chains = self.conn.list_chains(FILTER)?;
-                if !filter_chains.iter().any(|i| i == PRIV_CHAIN_NAME){
-                    self.conn.new_chain(FILTER, PRIV_CHAIN_NAME).map(|_| debug_chain_create(FILTER, PRIV_CHAIN_NAME))?;
+                if !filter_chains.iter().any(|i| i == PRIV_CHAIN_NAME) {
+                    self.conn
+                        .new_chain(FILTER, PRIV_CHAIN_NAME)
+                        .map(|_| debug_chain_create(FILTER, PRIV_CHAIN_NAME))?;
                 } else {
                     debug_chain_exists(FILTER, PRIV_CHAIN_NAME);
                 }
