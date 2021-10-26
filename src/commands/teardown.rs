@@ -1,6 +1,7 @@
 use crate::network;
 use clap::{self, Clap};
 use log::debug;
+use std::error::Error;
 
 #[derive(Clap, Debug)]
 pub struct Teardown {
@@ -17,7 +18,7 @@ impl Teardown {
         }
     }
 
-    pub fn exec(&self, input_file: String) {
+    pub fn exec(&self, input_file: String) -> Result<(), Box<dyn Error>> {
         debug!("{:?}", "Tearing down..");
         let _network_options = match network::types::NetworkOptions::load(&input_file) {
             Ok(opts) => opts,
@@ -25,6 +26,6 @@ impl Teardown {
         };
 
         debug!("{:?}", "Teardown complete");
-        //()
+        Ok(())
     }
 }
