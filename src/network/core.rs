@@ -4,6 +4,7 @@ use nix::sched;
 use rand::Rng;
 use std::fs::File;
 use std::io::Error;
+use std::net::IpAddr;
 use std::os::unix::prelude::*;
 use std::thread;
 
@@ -32,9 +33,9 @@ impl Core {
             let mut gw_ipaddr_vector = Vec::new();
 
             let container_veth_name: String = network_per_opts.unwrap().interface_name.to_owned();
-            let static_ips: &Vec<String> = network_per_opts.unwrap().static_ips.as_ref().unwrap();
+            let static_ips: &Vec<IpAddr> = network_per_opts.unwrap().static_ips.as_ref().unwrap();
             for ip in static_ips {
-                let _ip_addr: String = ip.to_owned();
+                let _ip_addr: String = ip.to_string().to_owned();
                 address_vector.push(_ip_addr);
             }
 
