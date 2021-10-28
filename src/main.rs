@@ -1,4 +1,5 @@
 use clap::{crate_version, Clap};
+use std::error::Error;
 
 use netavark::commands::setup;
 use netavark::commands::teardown;
@@ -24,12 +25,11 @@ enum SubCommand {
     Teardown(teardown::Teardown),
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
     let opts = Opts::parse();
 
     let file = opts.file.unwrap_or_else(|| String::from("/dev/stdin"));
-
     match opts.subcmd {
         SubCommand::Setup(setup) => setup.exec(file),
         SubCommand::Teardown(teardown) => teardown.exec(file),
