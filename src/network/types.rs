@@ -130,8 +130,7 @@ pub struct NetAddress {
     pub gateway: Option<String>,
 
     #[serde(rename = "subnet")]
-    //TODO: Cast this to IpNet
-    pub subnet: String,
+    pub subnet: IpNet,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

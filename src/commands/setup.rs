@@ -1,5 +1,5 @@
 //! Configures the given network namespace with provided specs
-//use crate::firewall;
+use crate::firewall;
 use crate::network;
 use clap::{self, Clap};
 use log::debug;
@@ -34,21 +34,10 @@ impl Setup {
             Err(e) => panic!("{}", e),
         };
 
-        // TODO: Remove comments for firewall setup when its in working state. NO_OP as of now.
-        /*let firewall_driver = match firewall::get_supported_firewall_driver() {
+        let firewall_driver = match firewall::get_supported_firewall_driver() {
             Ok(driver) => driver,
             Err(e) => panic!("{}", e.to_string()),
         };
-
-        // Perform per-network setup
-        for (net_name, network) in network_options.network_info {
-            debug!("Setting up network {}", net_name);
-            // Setup up network interface
-            //make_network_interface(net_name, network);
-
-            // Setup basic firewall rules for each network.
-            firewall_driver.setup_network(network)?;
-        }*/
 
         // Sysctl setup
         // set ip forwarding to 1 if not already
@@ -58,13 +47,23 @@ impl Setup {
         }
 
         //Configure Bridge and veth_pairs
-        network::core::Core::bridge_per_podman_network(
+        let response = network::core::Core::bridge_per_podman_network(
             &network_options,
             &self.network_namespace_path,
         )?;
 
-        // TODO: Set up port forwarding. How? What network do we point to?
+        // Perform per-network setup
+        for (net_name, network) in network_options.network_info {
+            debug!("Setting up network {} firewall rules", net_name);
 
+            // Setup basic firewall rules for each network.
+            firewall_driver.setup_network(network)?;
+        }
+
+        // TODO: Set up port forwarding. How? What network do we point to?
+        debug!("{:#?}", response);
+        let response_json = serde_json::to_string(&response)?;
+        println!("{}", response_json);
         debug!("{:?}", "Setup complete");
         Ok(())
     }
