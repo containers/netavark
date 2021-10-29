@@ -539,6 +539,7 @@ dependencies = [
  "tokio",
  "url",
  "zbus",
+ "zvariant",
 ]
 
 [[package]]
