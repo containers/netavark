@@ -2,6 +2,7 @@ use futures::stream::TryStreamExt;
 use ipnetwork::IpNetwork;
 use ipnetwork::Ipv4Network;
 use ipnetwork::Ipv6Network;
+use libc;
 use rtnetlink;
 use std::fs::File;
 use std::io::Error;
@@ -31,10 +32,17 @@ impl CoreUtils {
                     .await
                 {
                     Ok(_) => Ok(()),
-                    Err(rtnetlink::Error::NetlinkError(err)) => Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("failed to set ip address to {}: {}", ifname, err),
-                    )),
+                    Err(rtnetlink::Error::NetlinkError(err)) => {
+                        // the returned errno codes are negative
+                        // ignore EEXIST error beccause the ip is already assigned
+                        if -err.code == libc::EEXIST {
+                            return Ok(());
+                        };
+                        Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("failed to set ip address to {}: {}", ifname, err),
+                        ))
+                    }
                     Err(err) => Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         format!("failed to set ip address to {}: {}", ifname, err),
@@ -146,6 +154,8 @@ impl CoreUtils {
             .set_name_filter(ifname.to_string())
             .execute();
         match links.try_next().await {
+            // FIXME: Make sure this interface is a bridge, if not error.
+            // I am unable to decipher how I can get get the link mode.
             Ok(Some(_)) => (),
             Ok(None) => {
                 if let Err(err) = handle
