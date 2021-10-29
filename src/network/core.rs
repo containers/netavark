@@ -52,7 +52,7 @@ impl Core {
             debug!("IP address for veth vector: {:?}", address_vector);
             debug!("Gateway ip address vector: {:?}", gw_ipaddr_vector);
 
-            if let Err(err) = Core::add_bridge_and_veth(
+            let container_veth_mac = match Core::add_bridge_and_veth(
                 &bridge_name,
                 address_vector,
                 subnet_mask_vector,
@@ -60,11 +60,16 @@ impl Core {
                 &container_veth_name,
                 netns,
             ) {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("failed configure bridge and veth interface: {:?}", err),
-                ));
-            }
+                Ok(addr) => addr,
+                Err(err) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("failed configure bridge and veth interface: {:?}", err),
+                    ))
+                }
+            };
+
+            debug!("Container veth mac: {:?}", container_veth_mac);
         }
 
         Ok(())
@@ -77,7 +82,7 @@ impl Core {
         gw_ipaddr: Vec<String>,
         container_veth_name: &str,
         netns: &str,
-    ) -> Result<(), std::io::Error> {
+    ) -> Result<String, std::io::Error> {
         //copy subnet masks and gateway ips since we are going to use it later
         let mut netns_ipaddr_mask_clone = Vec::new();
         let mut gw_ipaddr_clone = Vec::new();
@@ -154,11 +159,15 @@ impl Core {
                         "Configured static up address for {}",
                         container_veth_name_clone
                     );
-                    //TODO: we can verify mac here
-                    Ok("applied interface".to_string())
+
+                    //return MAC address to status block could use this
+                    match core_utils::CoreUtils::get_interface_address(&container_veth_name_clone) {
+                        Ok(addr) => Ok(addr),
+                        Err(err) => Err(err),
+                    }
                 });
                 match handle.join() {
-                    Ok(_status) => (),
+                    Ok(interface_address) => interface_address,
                     Err(err) => {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::Other,
@@ -174,7 +183,5 @@ impl Core {
                 ))
             }
         }
-
-        Ok(())
     }
 }
