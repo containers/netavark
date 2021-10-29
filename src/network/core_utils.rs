@@ -4,6 +4,8 @@ use ipnetwork::Ipv4Network;
 use ipnetwork::Ipv6Network;
 use libc;
 use rtnetlink;
+use rtnetlink::packet::rtnl::link::nlas::Nla;
+use std::fmt::Write;
 use std::fs::File;
 use std::io::Error;
 use std::os::unix::prelude::*;
@@ -13,6 +15,71 @@ pub struct CoreUtils {
 }
 
 impl CoreUtils {
+    fn encode_address_to_hex(bytes: &[u8]) -> String {
+        let mut final_slice = Vec::new();
+        for &b in bytes {
+            let mut a = String::with_capacity(bytes.len() * 2);
+            write!(&mut a, "{:02x}", b).unwrap();
+            final_slice.push(a);
+        }
+        final_slice.join(":")
+    }
+
+    #[tokio::main]
+    pub async fn get_interface_address(link_name: &str) -> Result<String, std::io::Error> {
+        let (_connection, handle, _) = match rtnetlink::new_connection() {
+            Ok((conn, handle, messages)) => (conn, handle, messages),
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to connect: {}", err),
+                ))
+            }
+        };
+
+        tokio::spawn(_connection);
+
+        let mut links = handle
+            .link()
+            .get()
+            .set_name_filter(link_name.to_string())
+            .execute();
+        match links.try_next().await {
+            Ok(Some(link)) => {
+                for nla in link.nlas.into_iter() {
+                    if let Nla::Address(ref addr) = nla {
+                        return Ok(CoreUtils::encode_address_to_hex(addr));
+                    }
+                }
+
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "Unable to resolve physical address for interface {}",
+                        link_name
+                    ),
+                ));
+            }
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "Unable to resolve physical address for interface {}: {}",
+                        link_name, err
+                    ),
+                ));
+            }
+            Ok(None) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "Unable to resolve physical address for interface {}",
+                        link_name
+                    ),
+                ))
+            }
+        }
+    }
     async fn add_ip_address(
         handle: &rtnetlink::Handle,
         ifname: &str,
