@@ -32,5 +32,5 @@ rtnetlink = "0.8.1"
 futures = "0.3.17"
 nix = "0.23.0"
 rand = "0.8.3"
-tokio = { version = "1.5.0", features = ["full"] }
+tokio = { version = "1.13.0", features = ["full"] }
 faccess = "0.2.3"
