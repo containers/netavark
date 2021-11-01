@@ -171,6 +171,52 @@ impl CoreUtils {
         }
     }
 
+    #[tokio::main]
+    pub async fn remove_interface(ifname: &str) -> Result<(), Error> {
+        let (connection, handle, _) = match rtnetlink::new_connection() {
+            Ok((conn, handle, messages)) => (conn, handle, messages),
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to connect: {}", err),
+                ))
+            }
+        };
+
+        tokio::spawn(connection);
+
+        if let Err(err) = CoreUtils::remove_link(&handle, ifname).await {
+            return Err(err);
+        }
+
+        Ok(())
+    }
+
+    async fn remove_link(handle: &rtnetlink::Handle, ifname: &str) -> Result<(), std::io::Error> {
+        let mut links = handle
+            .link()
+            .get()
+            .set_name_filter(ifname.to_string())
+            .execute();
+        match links.try_next().await {
+            Ok(Some(link)) => match handle.link().del(link.header.index).execute().await {
+                Ok(_) => Ok(()),
+                Err(err) => Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to delete if {}: {}", ifname, err),
+                )),
+            },
+            Ok(None) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("link {} not found", ifname),
+            )),
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("failed to get if {}: {}", ifname, err),
+            )),
+        }
+    }
+
     async fn set_link_up(handle: &rtnetlink::Handle, ifname: &str) -> Result<(), std::io::Error> {
         let mut links = handle
             .link()

@@ -184,4 +184,74 @@ impl Core {
             }
         }
     }
+
+    pub fn remove_interface_per_podman_network(
+        network_opts: &types::NetworkOptions,
+        netns: &str,
+    ) -> Result<(), std::io::Error> {
+        for (net_name, network) in &network_opts.network_info {
+            // get network name
+            let network_name: String = net_name.to_owned();
+            // get PerNetworkOptions for this network
+            let network_per_opts = network_opts.networks.get(&network_name);
+            let container_veth_name: String = network_per_opts.unwrap().interface_name.to_owned();
+            let _subnets = network.subnets.as_ref().unwrap();
+
+            debug!(
+                "Container veth name being removed: {:?}",
+                container_veth_name
+            );
+
+            if let Err(err) = Core::remove_container_veth(&container_veth_name, netns) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("unable to remove container veth: {:?}", err),
+                ));
+            }
+
+            debug!("Container veth removed: {:?}", container_veth_name);
+        }
+
+        Ok(())
+    }
+
+    fn remove_container_veth(ifname: &str, netns: &str) -> Result<(), std::io::Error> {
+        match File::open(netns) {
+            Ok(file) => {
+                let netns_fd = file.as_raw_fd();
+                let container_veth: String = ifname.to_owned();
+                let handle = thread::spawn(move || -> Result<(), Error> {
+                    if let Err(err) = sched::setns(netns_fd, sched::CloneFlags::CLONE_NEWNET) {
+                        panic!(
+                            "{}",
+                            format!(
+                                "failed to setns on container network namespace fd={}: {}",
+                                netns_fd, err
+                            )
+                        )
+                    }
+
+                    if let Err(err) = core_utils::CoreUtils::remove_interface(&container_veth) {
+                        return Err(err);
+                    }
+
+                    Ok(())
+                });
+                if let Err(err) = handle.join() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("unable to join thread: {:?}", err),
+                    ));
+                }
+            }
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to open network namespace: {}", err),
+                ))
+            }
+        };
+
+        Ok(())
+    }
 }
