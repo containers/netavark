@@ -1,4 +1,4 @@
-// Crate contains the types which are accepted by netvark.
+// Crate contains the types which are accepted by netavark.
 
 extern crate serde_derive;
 use ipnet::IpNet;
