@@ -22,10 +22,16 @@ impl Teardown {
         network::validation::ns_checks(&self.network_namespace_path);
 
         debug!("{:?}", "Tearing down..");
-        let _network_options = match network::types::NetworkOptions::load(&input_file) {
+        let network_options = match network::types::NetworkOptions::load(&input_file) {
             Ok(opts) => opts,
             Err(e) => panic!("{}", e),
         };
+
+        //Remove container interfaces
+        network::core::Core::remove_interface_per_podman_network(
+            &network_options,
+            &self.network_namespace_path,
+        )?;
 
         debug!("{:?}", "Teardown complete");
         Ok(())
