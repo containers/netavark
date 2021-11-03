@@ -7,6 +7,7 @@ use std::error::Error;
 
 //  NAT constant for iptables
 const NAT: &str = "nat";
+const POSTROUTING: &str = "POSTROUTING";
 const PRIV_CHAIN_NAME: &str = "NETAVARK_FORWARD";
 const FILTER: &str = "filter";
 
@@ -55,7 +56,8 @@ impl firewall::FirewallDriver for IptablesDriver {
                 }
 
                 //  Add first rule for the network
-                let masq_rule = "-d 224.0.0.0/4 -j MASQUERADE".to_string();
+                let masq_rule = "! -d 224.0.0.0/4 -j MASQUERADE".to_string();
+                debug!("{}", masq_rule);
                 let masq_check = self.conn.exists(NAT, &network_name, &masq_rule);
                 match masq_check {
                     Ok(true) => debug_rule_exists(NAT, &network_name, masq_rule),
@@ -64,6 +66,26 @@ impl firewall::FirewallDriver for IptablesDriver {
                         self.conn
                             .append(NAT, &network_name, &masq_rule)
                             .map(|_| debug_rule_create(NAT, &network_name, masq_rule))?;
+                    }
+                    Err(e) => return Err(e),
+                }
+
+                //  Add POSTROUTING rule
+                let jump_podman_rule = format!(
+                    "--source {} --jump {}",
+                    network.subnet.to_string(),
+                    network_name
+                )
+                .to_string();
+                let jump_check = self
+                    .conn
+                    .exists(&network_name, POSTROUTING, &jump_podman_rule);
+                match jump_check {
+                    Ok(true) => debug_rule_exists(NAT, POSTROUTING, jump_podman_rule),
+                    Ok(false) => {
+                        self.conn
+                            .append(NAT, POSTROUTING, &jump_podman_rule)
+                            .map(|_| debug_rule_create(NAT, POSTROUTING, jump_podman_rule))?;
                     }
                     Err(e) => return Err(e),
                 }
