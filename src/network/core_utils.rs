@@ -192,6 +192,27 @@ impl CoreUtils {
         Ok(())
     }
 
+    #[tokio::main]
+    pub async fn turn_up_interface(ifname: &str) -> Result<(), Error> {
+        let (connection, handle, _) = match rtnetlink::new_connection() {
+            Ok((conn, handle, messages)) => (conn, handle, messages),
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to connect: {}", err),
+                ))
+            }
+        };
+
+        tokio::spawn(connection);
+
+        if let Err(err) = CoreUtils::set_link_up(&handle, ifname).await {
+            return Err(err);
+        }
+
+        Ok(())
+    }
+
     async fn remove_link(handle: &rtnetlink::Handle, ifname: &str) -> Result<(), std::io::Error> {
         let mut links = handle
             .link()

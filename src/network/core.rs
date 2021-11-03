@@ -168,6 +168,13 @@ impl Core {
                         container_veth_name_clone
                     );
 
+                    if let Err(er) = core_utils::CoreUtils::turn_up_interface("lo") {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("failed while turning up `lo` in container namespace {}", er),
+                        ));
+                    }
+
                     //return MAC address to status block could use this
                     match core_utils::CoreUtils::get_interface_address(&container_veth_name_clone) {
                         Ok(addr) => Ok(addr),
