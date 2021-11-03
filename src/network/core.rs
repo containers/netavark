@@ -1,5 +1,6 @@
 use crate::network::{core_utils, types};
 use log::debug;
+use log::warn;
 use nix::sched;
 use rand::Rng;
 use std::fs::File;
@@ -119,10 +120,17 @@ impl Core {
         ) {
             Ok(_) => (),
             Err(err) => {
+                // it seems something went wrong
+                // we must not leave dangling interfaces
+                // otherwise cleanup would become mess
+                // try removing leaking interfaces from host
+                if let Err(er) = core_utils::CoreUtils::remove_interface(&host_veth_name) {
+                    warn!("Failed while cleaning up interfaces: {}", er);
+                }
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!("Error while configuring network interface {}:", err),
-                ))
+                ));
             }
         };
 
