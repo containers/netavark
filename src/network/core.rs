@@ -1,8 +1,11 @@
+use crate::network::types::NetAddress;
 use crate::network::{core_utils, types};
+use ipnet;
 use log::debug;
 use log::warn;
 use nix::sched;
 use rand::Rng;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Error;
 use std::net::IpAddr;
@@ -17,36 +20,56 @@ impl Core {
     pub fn bridge_per_podman_network(
         network_opts: &types::NetworkOptions,
         netns: &str,
-    ) -> Result<(), std::io::Error> {
+    ) -> Result<HashMap<String, types::StatusBlock>, std::io::Error> {
+        let mut status_blocks: HashMap<String, types::StatusBlock> = HashMap::new();
         for (net_name, network) in &network_opts.network_info {
+            //  StatusBlock response
+            let mut response = types::StatusBlock {
+                dns_search_domains: Some(Vec::new()),
+                dns_server_ips: Some(Vec::new()),
+                interfaces: Some(HashMap::new()),
+            };
             let network_name: String = net_name.to_owned();
             // get PerNetworkOptions for this network
             let network_per_opts = network_opts.networks.get(&network_name);
             // get bridge name
             let bridge_name: String = network.network_interface.as_ref().unwrap().to_owned();
-            //let _br_subnets = &network.subnets;
-
             // create a vector for all subnet masks
             let mut subnet_mask_vector = Vec::new();
             // static ip vector
             let mut address_vector = Vec::new();
             // gateway ip vector
             let mut gw_ipaddr_vector = Vec::new();
+            // network addresses for response
+            let mut response_net_addresses: Vec<NetAddress> = Vec::new();
+            // interfaces map, but we only ever expect one, for response
+            let mut interfaces: HashMap<String, types::NetInterface> = HashMap::new();
 
             let container_veth_name: String = network_per_opts.unwrap().interface_name.to_owned();
             let static_ips: &Vec<IpAddr> = network_per_opts.unwrap().static_ips.as_ref().unwrap();
-            for ip in static_ips {
-                let _ip_addr: String = ip.to_string().to_owned();
-                address_vector.push(_ip_addr);
-            }
 
             //we have the bridge name but we must iterate for all the available gateways
-            for subnet in network.subnets.as_ref().unwrap() {
+            for (idx, subnet) in network.subnets.iter().flatten().enumerate() {
                 gw_ipaddr_vector.push(subnet.gateway.as_ref().unwrap().to_owned());
-                let _subnet = subnet.subnet.netmask().to_string();
-                subnet_mask_vector.push(_subnet);
-            }
+                let subnet_mask = subnet.subnet.netmask().to_string();
+                let subnet_mask_cidr = subnet.subnet.prefix_len();
 
+                // Build up response information
+                let container_address: ipnet::IpNet =
+                    match format!("{}/{}", static_ips[idx].to_string(), subnet_mask_cidr).parse() {
+                        Ok(i) => i,
+                        Err(e) => {
+                            return Err(Error::new(std::io::ErrorKind::Other, e));
+                        }
+                    };
+                // Add the IP to the address_vector
+                address_vector.push(static_ips[idx].to_string());
+                response_net_addresses.push(types::NetAddress {
+                    gateway: subnet.gateway.to_owned(),
+                    subnet: container_address,
+                });
+                subnet_mask_vector.push(subnet_mask);
+            }
             debug!("Container veth name: {:?}", container_veth_name);
             debug!("Brige name: {:?}", bridge_name);
             debug!("Subnet masks vector: {:?}", subnet_mask_vector);
@@ -69,11 +92,17 @@ impl Core {
                     ))
                 }
             };
-
             debug!("Container veth mac: {:?}", container_veth_mac);
+            let interface = types::NetInterface {
+                mac_address: container_veth_mac,
+                networks: Option::from(response_net_addresses),
+            };
+            // Add interface to interfaces (part of StatusBlock)
+            interfaces.insert(container_veth_name, interface);
+            let _ = response.interfaces.insert(interfaces);
+            status_blocks.insert(network_name, response);
         }
-
-        Ok(())
+        Ok(status_blocks)
     }
 
     pub fn add_bridge_and_veth(
