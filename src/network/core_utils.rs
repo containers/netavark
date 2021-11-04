@@ -3,12 +3,15 @@ use ipnetwork::IpNetwork;
 use ipnetwork::Ipv4Network;
 use ipnetwork::Ipv6Network;
 use libc;
+use nix::sched;
 use rtnetlink;
 use rtnetlink::packet::rtnl::link::nlas::Nla;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::Error;
 use std::os::unix::prelude::*;
+use std::process;
+use std::thread;
 
 pub struct CoreUtils {
     pub networkns: String,
@@ -342,6 +345,105 @@ impl CoreUtils {
         Ok(())
     }
 
+    /* generates veth pair in configured namespace and moves other to namespace of the host_pid */
+    /* for netavark this will be called inside container namespace. */
+    #[tokio::main]
+    async fn generate_veth_pair_internal(
+        host_pid: u32,
+        host_veth: &str,
+        container_veth: &str,
+    ) -> Result<(), std::io::Error> {
+        /* Note: most likely this is called in a seperate thread so create a new connection, rather than
+         * sharing from parent stack */
+        /* Reason: rtnetlink handle does not implements copy so we cant share it across stack and
+         * copying manually is more expesive than creating a new handle */
+        let (_connection, handle, _) = match rtnetlink::new_connection() {
+            Ok((conn, handle, messages)) => (conn, handle, messages),
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to connect: {}", err),
+                ))
+            }
+        };
+
+        tokio::spawn(_connection);
+
+        // ip link add <eth> type veth peer name <ifname>
+        if let Err(err) = handle
+            .link()
+            .add()
+            .veth(host_veth.to_string(), container_veth.to_string())
+            .execute()
+            .await
+        {
+            if let rtnetlink::Error::NetlinkError(ref er) = err {
+                if -er.code == libc::EEXIST {
+                    // Note: Most likely network interface already exists on container namespace
+                    // Add a hist
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!(
+                            "interface {} already exists on container namespace",
+                            container_veth
+                        ),
+                    ));
+                }
+            }
+
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "failed to create a pair of veth interfaces on container namespace: {}",
+                    err
+                ),
+            ));
+        }
+
+        // ip link set <ifname> netns <namespace> up
+        let mut links = handle
+            .link()
+            .get()
+            .set_name_filter(host_veth.to_string())
+            .execute();
+        match links.try_next().await {
+            Ok(Some(link)) => {
+                match handle
+                    .link()
+                    .set(link.header.index)
+                    .setns_by_pid(host_pid)
+                    .execute()
+                    .await
+                {
+                    Ok(_) => (),
+                    Err(err) => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!(
+                                "failed to set veth {} to host namespace: {}",
+                                &container_veth, err
+                            ),
+                        ))
+                    }
+                }
+            }
+            Ok(None) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("host veth interface {} not found", &container_veth),
+                ))
+            }
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to get veth interface {}: {}", &container_veth, err),
+                ))
+            }
+        }
+
+        Ok(())
+    }
+
     #[tokio::main]
     pub async fn configure_veth_async(
         host_veth: &str,
@@ -383,18 +485,46 @@ impl CoreUtils {
             }
         };
 
-        // ip link add <eth> type veth peer name <ifname>
-        if let Err(err) = handle
-            .link()
-            .add()
-            .veth(host_veth.to_string(), container_veth.to_string())
-            .execute()
-            .await
-        {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("failed to create a pair of veth interfaces: {}", err),
-            ));
+        //generate veth pair in container namespace and move host end back to hostnamespace
+        match File::open(netns_path) {
+            Ok(file) => {
+                let netns_fd = file.as_raw_fd();
+                let ctr_veth: String = container_veth.to_owned();
+                let hst_veth: String = host_veth.to_owned();
+                //we are going to use this pid to move back one end to host
+                let netavark_pid: u32 = process::id();
+                let thread_handle = thread::spawn(move || -> Result<(), Error> {
+                    if let Err(err) = sched::setns(netns_fd, sched::CloneFlags::CLONE_NEWNET) {
+                        panic!(
+                            "{}",
+                            format!(
+                                "failed to setns on container network namespace fd={}: {}",
+                                netns_fd, err
+                            )
+                        )
+                    }
+
+                    if let Err(err) =
+                        CoreUtils::generate_veth_pair_internal(netavark_pid, &hst_veth, &ctr_veth)
+                    {
+                        return Err(err);
+                    }
+
+                    Ok(())
+                });
+                if let Err(err) = thread_handle.join().unwrap() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("from container namespace: {:?}", err),
+                    ));
+                }
+            }
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to open network namespace: {}", err),
+                ))
+            }
         }
 
         // ip link set <veth_name> master <bridge>
@@ -441,58 +571,6 @@ impl CoreUtils {
         // ip link set <eth> up
         if let Err(err) = CoreUtils::set_link_up(&handle, host_veth).await {
             return Err(err);
-        }
-
-        // ip link set <ifname> netns <namespace> up
-        match File::open(netns_path) {
-            Ok(netns_file) => {
-                let netns_fd = netns_file.as_raw_fd();
-                let mut links = handle
-                    .link()
-                    .get()
-                    .set_name_filter(container_veth.to_string())
-                    .execute();
-                match links.try_next().await {
-                    Ok(Some(link)) => {
-                        match handle
-                            .link()
-                            .set(link.header.index)
-                            .setns_by_fd(netns_fd)
-                            .execute()
-                            .await
-                        {
-                            Ok(_) => (),
-                            Err(err) => {
-                                return Err(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    format!(
-                                        "failed to set veth {} to namespace: {}",
-                                        &container_veth, err
-                                    ),
-                                ))
-                            }
-                        }
-                    }
-                    Ok(None) => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("veth interface {} not found", &container_veth),
-                        ))
-                    }
-                    Err(err) => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("failed to get veth interface {}: {}", &container_veth, err),
-                        ))
-                    }
-                }
-            }
-            Err(err) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("failed to open namespace: {}", err),
-                ))
-            }
         }
 
         Ok(())
