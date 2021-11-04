@@ -1,8 +1,10 @@
 //! Configures the given network namespace with provided specs
 use crate::firewall;
 use crate::network;
+use crate::network::types;
 use clap::{self, Clap};
 use log::debug;
+use std::collections::HashMap;
 use std::error::Error;
 use sysctl::Sysctl;
 use sysctl::SysctlError;
@@ -46,18 +48,43 @@ impl Setup {
             set_sysctl_value(IPV4_FORWARD, "1")?;
         }
 
-        //Configure Bridge and veth_pairs
-        let response = network::core::Core::bridge_per_podman_network(
-            &network_options,
-            &self.network_namespace_path,
-        )?;
+        let mut response: HashMap<String, types::StatusBlock> = HashMap::new();
 
         // Perform per-network setup
         for (net_name, network) in network_options.network_info {
-            debug!("Setting up network {} firewall rules", net_name);
+            debug!(
+                "Setting up network {} with driver {}",
+                net_name, network.driver
+            );
 
-            // Setup basic firewall rules for each network.
-            firewall_driver.setup_network(network)?;
+            match network.driver.as_str() {
+                "bridge" => {
+                    let per_network_opts =
+                        network_options.networks.get(&net_name).ok_or_else(|| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!("network options for network {} not found", net_name),
+                            )
+                        })?;
+                    //Configure Bridge and veth_pairs
+                    let status_block = network::core::Core::bridge_per_podman_network(
+                        per_network_opts,
+                        &network,
+                        &self.network_namespace_path,
+                    )?;
+                    response.insert(net_name, status_block);
+                    // Setup basic firewall rules for each network.
+                    firewall_driver.setup_network(network)?;
+                }
+                // unknown driver
+                _ => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("unknown network driver {}", network.driver),
+                    )
+                    .into());
+                }
+            }
         }
 
         // TODO: Set up port forwarding. How? What network do we point to?
