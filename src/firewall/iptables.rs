@@ -77,9 +77,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                     network_name
                 )
                 .to_string();
-                let jump_check = self
-                    .conn
-                    .exists(&network_name, POSTROUTING, &jump_podman_rule);
+                let jump_check = self.conn.exists(NAT, POSTROUTING, &jump_podman_rule);
                 match jump_check {
                     Ok(true) => debug_rule_exists(NAT, POSTROUTING, jump_podman_rule),
                     Ok(false) => {
