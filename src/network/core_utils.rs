@@ -1,14 +1,21 @@
 use futures::stream::TryStreamExt;
+use futures::StreamExt;
 use ipnetwork::IpNetwork;
 use ipnetwork::Ipv4Network;
 use ipnetwork::Ipv6Network;
 use libc;
 use nix::sched;
 use rtnetlink;
+use rtnetlink::packet::constants::*;
 use rtnetlink::packet::rtnl::link::nlas::Nla;
+use rtnetlink::packet::NetlinkPayload;
+use rtnetlink::packet::RouteMessage;
 use std::fmt::Write;
 use std::fs::File;
 use std::io::Error;
+use std::net::IpAddr;
+use std::net::Ipv4Addr;
+use std::net::Ipv6Addr;
 use std::os::unix::prelude::*;
 use std::process;
 use std::thread;
@@ -133,45 +140,67 @@ impl CoreUtils {
     async fn add_route_v4(
         handle: &rtnetlink::Handle,
         dest: &Ipv4Network,
-        gateway: &Ipv4Network,
+        gateway: &Ipv4Addr,
     ) -> Result<(), std::io::Error> {
         let route = handle.route();
-        match route
+        let msg = route
             .add()
             .v4()
             .destination_prefix(dest.ip(), dest.prefix())
-            .gateway(gateway.ip())
-            .execute()
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(err) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("failed to add route: {}", err),
-            )),
-        }
+            .gateway(*gateway)
+            .message_mut()
+            .to_owned();
+
+        CoreUtils::execute_route_msg(handle, msg).await
     }
 
     async fn add_route_v6(
         handle: &rtnetlink::Handle,
         dest: &Ipv6Network,
-        gateway: &Ipv6Network,
+        gateway: &Ipv6Addr,
     ) -> Result<(), std::io::Error> {
         let route = handle.route();
-        match route
+        let msg = route
             .add()
             .v6()
             .destination_prefix(dest.ip(), dest.prefix())
-            .gateway(gateway.ip())
-            .execute()
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(err) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("failed to add route: {}", err),
-            )),
+            .gateway(*gateway)
+            .message_mut()
+            .to_owned();
+
+        CoreUtils::execute_route_msg(handle, msg).await
+    }
+
+    async fn execute_route_msg(
+        handle: &rtnetlink::Handle,
+        msg: RouteMessage,
+    ) -> Result<(), std::io::Error> {
+        // Note: we do not use .execute because we have to overwrite the request flags
+        // by default NLM_F_EXCL is set and this throws an error if we try to create multiple default routes
+        // We need to create a default route for each network because we need to keep the internet connectivity
+        // after a podman disconnect via the other network.
+        let mut req =
+            rtnetlink::packet::NetlinkMessage::from(rtnetlink::packet::RtnlMessage::NewRoute(msg));
+        req.header.flags = NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE;
+
+        let mut response = match handle.clone().request(req) {
+            Ok(res) => res,
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to add route: {}", err),
+                ));
+            }
+        };
+        while let Some(message) = response.next().await {
+            if let NetlinkPayload::Error(err) = message.payload {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to add route: {}", err),
+                ));
+            }
         }
+        Ok(())
     }
 
     #[tokio::main]
@@ -624,7 +653,7 @@ impl CoreUtils {
         for gw_ip_add in gw_ip_addrs {
             match gw_ip_add.to_string().parse() {
                 Ok(gateway) => match gateway {
-                    IpNetwork::V4(gateway) => match "0.0.0.0/0".to_string().parse() {
+                    IpAddr::V4(gateway) => match Ipv4Network::new(Ipv4Addr::new(0, 0, 0, 0), 0) {
                         Ok(dest) => {
                             if let Err(err) =
                                 CoreUtils::add_route_v4(&handle, &dest, &gateway).await
@@ -639,21 +668,23 @@ impl CoreUtils {
                             ))
                         }
                     },
-                    IpNetwork::V6(gateway) => match "::/0".to_string().parse() {
-                        Ok(dest) => {
-                            if let Err(err) =
-                                CoreUtils::add_route_v6(&handle, &dest, &gateway).await
-                            {
-                                return Err(err);
+                    IpAddr::V6(gateway) => {
+                        match Ipv6Network::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0) {
+                            Ok(dest) => {
+                                if let Err(err) =
+                                    CoreUtils::add_route_v6(&handle, &dest, &gateway).await
+                                {
+                                    return Err(err);
+                                }
+                            }
+                            Err(err) => {
+                                return Err(std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    format!("failed to parse address ::/0: {}", err),
+                                ))
                             }
                         }
-                        Err(err) => {
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                format!("failed to parse address ::/0: {}", err),
-                            ))
-                        }
-                    },
+                    }
                 },
                 Err(err) => {
                     return Err(std::io::Error::new(
