@@ -30,8 +30,6 @@ impl Core {
         };
         // get bridge name
         let bridge_name: String = network.network_interface.as_ref().unwrap().to_owned();
-        // create a vector for all subnet masks
-        let mut subnet_mask_vector = Vec::new();
         // static ip vector
         let mut address_vector = Vec::new();
         // gateway ip vector
@@ -46,9 +44,38 @@ impl Core {
 
         //we have the bridge name but we must iterate for all the available gateways
         for (idx, subnet) in network.subnets.iter().flatten().enumerate() {
-            gw_ipaddr_vector.push(subnet.gateway.as_ref().unwrap().to_owned());
-            let subnet_mask = subnet.subnet.netmask().to_string();
             let subnet_mask_cidr = subnet.subnet.prefix_len();
+
+            if let Some(gw) = subnet.gateway {
+                let gw_net = match gw {
+                    IpAddr::V4(gw4) => match ipnet::Ipv4Net::new(gw4, subnet_mask_cidr) {
+                        Ok(dest) => ipnet::IpNet::from(dest),
+                        Err(err) => {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!(
+                                    "failed to parse address {}/{}: {}",
+                                    gw4, subnet_mask_cidr, err
+                                ),
+                            ))
+                        }
+                    },
+                    IpAddr::V6(gw6) => match ipnet::Ipv6Net::new(gw6, subnet_mask_cidr) {
+                        Ok(dest) => ipnet::IpNet::from(dest),
+                        Err(err) => {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!(
+                                    "failed to parse address {}/{}: {}",
+                                    gw6, subnet_mask_cidr, err
+                                ),
+                            ))
+                        }
+                    },
+                };
+
+                gw_ipaddr_vector.push(gw_net)
+            }
 
             // Build up response information
             let container_address: ipnet::IpNet =
@@ -59,23 +86,20 @@ impl Core {
                     }
                 };
             // Add the IP to the address_vector
-            address_vector.push(static_ips[idx].to_string());
+            address_vector.push(container_address);
             response_net_addresses.push(types::NetAddress {
-                gateway: subnet.gateway.to_owned(),
+                gateway: subnet.gateway,
                 subnet: container_address,
             });
-            subnet_mask_vector.push(subnet_mask);
         }
         debug!("Container veth name: {:?}", container_veth_name);
         debug!("Brige name: {:?}", bridge_name);
-        debug!("Subnet masks vector: {:?}", subnet_mask_vector);
         debug!("IP address for veth vector: {:?}", address_vector);
         debug!("Gateway ip address vector: {:?}", gw_ipaddr_vector);
 
         let container_veth_mac = match Core::add_bridge_and_veth(
             &bridge_name,
             address_vector,
-            subnet_mask_vector,
             gw_ipaddr_vector,
             &container_veth_name,
             netns,
@@ -101,29 +125,18 @@ impl Core {
 
     pub fn add_bridge_and_veth(
         br_name: &str,
-        netns_ipaddr: Vec<String>,
-        netns_ipaddr_mask: Vec<String>,
-        gw_ipaddr: Vec<String>,
+        netns_ipaddr: Vec<ipnet::IpNet>,
+        gw_ipaddr: Vec<ipnet::IpNet>,
         container_veth_name: &str,
         netns: &str,
     ) -> Result<String, std::io::Error> {
         //copy subnet masks and gateway ips since we are going to use it later
-        let mut netns_ipaddr_mask_clone = Vec::new();
         let mut gw_ipaddr_clone = Vec::new();
-        for mask in &netns_ipaddr_mask {
-            let mask_add: String = mask.to_owned().to_string();
-            netns_ipaddr_mask_clone.push(mask_add)
-        }
         for gw_ip in &gw_ipaddr {
-            let gw_ip_add: String = gw_ip.to_owned().to_string();
-            gw_ipaddr_clone.push(gw_ip_add)
+            gw_ipaddr_clone.push(*gw_ip)
         }
         //call configure bridge
-        let _ = match core_utils::CoreUtils::configure_bridge_async(
-            br_name,
-            gw_ipaddr,
-            netns_ipaddr_mask,
-        ) {
+        let _ = match core_utils::CoreUtils::configure_bridge_async(br_name, gw_ipaddr) {
             Ok(_) => (),
             Err(err) => {
                 return Err(std::io::Error::new(
@@ -170,8 +183,7 @@ impl Core {
                 // TODO: simplify this later
                 let mut netns_ipaddr_clone = Vec::new();
                 for ip in &netns_ipaddr {
-                    let ip_add: String = ip.to_owned().to_string();
-                    netns_ipaddr_clone.push(ip_add)
+                    netns_ipaddr_clone.push(*ip)
                 }
                 let handle = thread::spawn(move || -> Result<String, Error> {
                     if let Err(err) = sched::setns(netns_fd, sched::CloneFlags::CLONE_NEWNET) {
@@ -181,7 +193,6 @@ impl Core {
                     if let Err(err) = core_utils::CoreUtils::configure_netns_interface_async(
                         &container_veth_name_clone,
                         netns_ipaddr_clone,
-                        netns_ipaddr_mask_clone,
                         gw_ipaddr_clone,
                     ) {
                         return Err(err);

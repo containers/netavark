@@ -127,7 +127,7 @@ pub struct NetInterface {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NetAddress {
     #[serde(rename = "gateway")]
-    pub gateway: Option<String>,
+    pub gateway: Option<IpAddr>,
 
     #[serde(rename = "subnet")]
     pub subnet: IpNet,
@@ -136,7 +136,7 @@ pub struct NetAddress {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Subnet {
     #[serde(rename = "gateway")]
-    pub gateway: Option<String>,
+    pub gateway: Option<IpAddr>,
 
     #[serde(rename = "lease_range")]
     pub lease_range: Option<LeaseRange>,
