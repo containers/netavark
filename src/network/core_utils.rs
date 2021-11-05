@@ -1,8 +1,5 @@
 use futures::stream::TryStreamExt;
 use futures::StreamExt;
-use ipnetwork::IpNetwork;
-use ipnetwork::Ipv4Network;
-use ipnetwork::Ipv6Network;
 use libc;
 use nix::sched;
 use rtnetlink;
@@ -93,7 +90,7 @@ impl CoreUtils {
     async fn add_ip_address(
         handle: &rtnetlink::Handle,
         ifname: &str,
-        ip: &IpNetwork,
+        ip: &ipnet::IpNet,
     ) -> Result<(), std::io::Error> {
         let mut links = handle
             .link()
@@ -104,7 +101,7 @@ impl CoreUtils {
             Ok(Some(link)) => {
                 match handle
                     .address()
-                    .add(link.header.index, ip.ip(), ip.prefix())
+                    .add(link.header.index, ip.addr(), ip.prefix_len())
                     .execute()
                     .await
                 {
@@ -139,14 +136,14 @@ impl CoreUtils {
 
     async fn add_route_v4(
         handle: &rtnetlink::Handle,
-        dest: &Ipv4Network,
+        dest: &ipnet::Ipv4Net,
         gateway: &Ipv4Addr,
     ) -> Result<(), std::io::Error> {
         let route = handle.route();
         let msg = route
             .add()
             .v4()
-            .destination_prefix(dest.ip(), dest.prefix())
+            .destination_prefix(dest.addr(), dest.prefix_len())
             .gateway(*gateway)
             .message_mut()
             .to_owned();
@@ -156,14 +153,14 @@ impl CoreUtils {
 
     async fn add_route_v6(
         handle: &rtnetlink::Handle,
-        dest: &Ipv6Network,
+        dest: &ipnet::Ipv6Net,
         gateway: &Ipv6Addr,
     ) -> Result<(), std::io::Error> {
         let route = handle.route();
         let msg = route
             .add()
             .v6()
-            .destination_prefix(dest.ip(), dest.prefix())
+            .destination_prefix(dest.addr(), dest.prefix_len())
             .gateway(*gateway)
             .message_mut()
             .to_owned();
@@ -653,23 +650,25 @@ impl CoreUtils {
         for gw_ip_add in gw_ip_addrs {
             match gw_ip_add.to_string().parse() {
                 Ok(gateway) => match gateway {
-                    IpAddr::V4(gateway) => match Ipv4Network::new(Ipv4Addr::new(0, 0, 0, 0), 0) {
-                        Ok(dest) => {
-                            if let Err(err) =
-                                CoreUtils::add_route_v4(&handle, &dest, &gateway).await
-                            {
-                                return Err(err);
+                    IpAddr::V4(gateway) => {
+                        match ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0) {
+                            Ok(dest) => {
+                                if let Err(err) =
+                                    CoreUtils::add_route_v4(&handle, &dest, &gateway).await
+                                {
+                                    return Err(err);
+                                }
+                            }
+                            Err(err) => {
+                                return Err(std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    format!("failed to parse address 0.0.0.0/0: {}", err),
+                                ))
                             }
                         }
-                        Err(err) => {
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                format!("failed to parse address 0.0.0.0/0: {}", err),
-                            ))
-                        }
-                    },
+                    }
                     IpAddr::V6(gateway) => {
-                        match Ipv6Network::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0) {
+                        match ipnet::Ipv6Net::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0) {
                             Ok(dest) => {
                                 if let Err(err) =
                                     CoreUtils::add_route_v6(&handle, &dest, &gateway).await
