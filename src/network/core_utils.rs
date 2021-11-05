@@ -293,11 +293,7 @@ impl CoreUtils {
     }
 
     #[tokio::main]
-    pub async fn configure_bridge_async(
-        ifname: &str,
-        ip_add: Vec<String>,
-        ip_mask: Vec<String>,
-    ) -> Result<(), Error> {
+    pub async fn configure_bridge_async(ifname: &str, ips: Vec<ipnet::IpNet>) -> Result<(), Error> {
         let (_connection, handle, _) = match rtnetlink::new_connection() {
             Ok((conn, handle, messages)) => (conn, handle, messages),
             Err(err) => {
@@ -342,24 +338,9 @@ impl CoreUtils {
             }
         }
 
-        for (index_iter, mask) in ip_mask.into_iter().enumerate() {
-            // add an ip address to the bridge interface
-            match format!("{}/{}", ip_add[index_iter], mask).parse() {
-                Ok(ip) => {
-                    if let Err(err) = CoreUtils::add_ip_address(&handle, ifname, &ip).await {
-                        return Err(err);
-                    }
-                }
-                Err(err) => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
-                            "failed to parse address {}: {}",
-                            format!("{}/{}", ip_add[index_iter], mask),
-                            err
-                        ),
-                    ))
-                }
+        for ip_net in ips.into_iter() {
+            if let Err(err) = CoreUtils::add_ip_address(&handle, ifname, &ip_net).await {
+                return Err(err);
             }
         }
 
@@ -606,9 +587,8 @@ impl CoreUtils {
     #[tokio::main]
     pub async fn configure_netns_interface_async(
         ifname: &str,
-        ip_add: Vec<String>,
-        ip_mask: Vec<String>,
-        gw_ip_addrs: Vec<String>,
+        ips: Vec<ipnet::IpNet>,
+        gw_ip_addrs: Vec<ipnet::IpNet>,
     ) -> Result<(), Error> {
         let (_connection, handle, _) = match rtnetlink::new_connection() {
             Ok((conn, handle, messages)) => (conn, handle, messages),
@@ -626,70 +606,44 @@ impl CoreUtils {
         }
 
         // ip netns exec <namespace> ip addr add <addr>/<mask> dev <ifname>
-        for (index_iter, addr) in ip_add.into_iter().enumerate() {
-            match format!("{}/{}", addr, ip_mask[index_iter]).parse() {
-                Ok(ip) => {
-                    if let Err(err) = CoreUtils::add_ip_address(&handle, ifname, &ip).await {
-                        return Err(err);
-                    }
-                }
-                Err(err) => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
-                            "failed to parse address {}: {}",
-                            format!("{}/{}", addr, ip_mask[index_iter]),
-                            err
-                        ),
-                    ))
-                }
+        for ip_net in ips.into_iter() {
+            if let Err(err) = CoreUtils::add_ip_address(&handle, ifname, &ip_net).await {
+                return Err(err);
             }
         }
 
         // ip netns exec <namespace> ip route add default via <gateway> dev <ifname>
         for gw_ip_add in gw_ip_addrs {
-            match gw_ip_add.to_string().parse() {
-                Ok(gateway) => match gateway {
-                    IpAddr::V4(gateway) => {
-                        match ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0) {
-                            Ok(dest) => {
-                                if let Err(err) =
-                                    CoreUtils::add_route_v4(&handle, &dest, &gateway).await
-                                {
-                                    return Err(err);
-                                }
-                            }
-                            Err(err) => {
-                                return Err(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    format!("failed to parse address 0.0.0.0/0: {}", err),
-                                ))
-                            }
+            match gw_ip_add.addr() {
+                IpAddr::V4(gateway) => match ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0) {
+                    Ok(dest) => {
+                        if let Err(err) = CoreUtils::add_route_v4(&handle, &dest, &gateway).await {
+                            return Err(err);
                         }
                     }
-                    IpAddr::V6(gateway) => {
-                        match ipnet::Ipv6Net::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0) {
-                            Ok(dest) => {
-                                if let Err(err) =
-                                    CoreUtils::add_route_v6(&handle, &dest, &gateway).await
-                                {
-                                    return Err(err);
-                                }
-                            }
-                            Err(err) => {
-                                return Err(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    format!("failed to parse address ::/0: {}", err),
-                                ))
-                            }
-                        }
+                    Err(err) => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("failed to parse address 0.0.0.0/0: {}", err),
+                        ))
                     }
                 },
-                Err(err) => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("failed to parse address {}: {}", gw_ip_add, err),
-                    ))
+                IpAddr::V6(gateway) => {
+                    match ipnet::Ipv6Net::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0) {
+                        Ok(dest) => {
+                            if let Err(err) =
+                                CoreUtils::add_route_v6(&handle, &dest, &gateway).await
+                            {
+                                return Err(err);
+                            }
+                        }
+                        Err(err) => {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!("failed to parse address ::/0: {}", err),
+                            ))
+                        }
+                    }
                 }
             }
         }
