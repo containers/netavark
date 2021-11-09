@@ -235,31 +235,26 @@ impl Core {
     }
 
     pub fn remove_interface_per_podman_network(
-        network_opts: &types::NetworkOptions,
+        per_network_opts: &types::PerNetworkOptions,
+        network: &types::Network,
         netns: &str,
     ) -> Result<(), std::io::Error> {
-        for (net_name, network) in &network_opts.network_info {
-            // get network name
-            let network_name: String = net_name.to_owned();
-            // get PerNetworkOptions for this network
-            let network_per_opts = network_opts.networks.get(&network_name);
-            let container_veth_name: String = network_per_opts.unwrap().interface_name.to_owned();
-            let _subnets = network.subnets.as_ref().unwrap();
+        let container_veth_name: String = per_network_opts.interface_name.to_owned();
+        let _subnets = network.subnets.as_ref().unwrap();
 
-            debug!(
-                "Container veth name being removed: {:?}",
-                container_veth_name
-            );
+        debug!(
+            "Container veth name being removed: {:?}",
+            container_veth_name
+        );
 
-            if let Err(err) = Core::remove_container_veth(&container_veth_name, netns) {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("unable to remove container veth: {:?}", err),
-                ));
-            }
-
-            debug!("Container veth removed: {:?}", container_veth_name);
+        if let Err(err) = Core::remove_container_veth(&container_veth_name, netns) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("unable to remove container veth: {:?}", err),
+            ));
         }
+
+        debug!("Container veth removed: {:?}", container_veth_name);
 
         Ok(())
     }

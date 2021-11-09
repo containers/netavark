@@ -75,6 +75,7 @@ impl Setup {
                     response.insert(net_name, status_block);
                     // Setup basic firewall rules for each network.
                     firewall_driver.setup_network(network)?;
+                    // TODO: Set up port forwarding. How? What network do we point to?
                 }
                 // unknown driver
                 _ => {
@@ -87,7 +88,6 @@ impl Setup {
             }
         }
 
-        // TODO: Set up port forwarding. How? What network do we point to?
         debug!("{:#?}", response);
         let response_json = serde_json::to_string(&response)?;
         println!("{}", response_json);
