@@ -532,7 +532,6 @@ dependencies = [
  "rtnetlink",
  "serde",
  "serde-value",
- "serde_derive",
  "serde_json",
  "simple-error",
  "sysctl",
