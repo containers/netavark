@@ -26,7 +26,7 @@ simple-error = "0.2.3"
 sysctl = "0.4.3"
 url = "2.1.0"
 zbus = "1.9.1"
-rtnetlink = "0.8.1"
+rtnetlink = { git = "https://github.com/little-dude/netlink", branch = "master" }
 futures = "0.3.17"
 nix = "0.23.0"
 rand = "0.8.3"
