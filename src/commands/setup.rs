@@ -1,6 +1,7 @@
 //! Configures the given network namespace with provided specs
 use crate::error::NetavarkError;
 use crate::firewall;
+use crate::firewall::iptables::MAX_HASH_SIZE;
 use crate::network;
 use crate::network::types;
 use clap::{self, Clap};
@@ -62,7 +63,7 @@ impl Setup {
         let mut response: HashMap<String, types::StatusBlock> = HashMap::new();
 
         // Perform per-network setup
-        for (net_name, network) in network_options.network_info {
+        for (net_name, network) in network_options.network_info.iter() {
             debug!(
                 "Setting up network {} with driver {}",
                 net_name, network.driver
@@ -71,7 +72,7 @@ impl Setup {
             match network.driver.as_str() {
                 "bridge" => {
                     let per_network_opts =
-                        network_options.networks.get(&net_name).ok_or_else(|| {
+                        network_options.networks.get(net_name).ok_or_else(|| {
                             std::io::Error::new(
                                 std::io::ErrorKind::Other,
                                 format!("network options for network {} not found", net_name),
@@ -80,13 +81,58 @@ impl Setup {
                     //Configure Bridge and veth_pairs
                     let status_block = network::core::Core::bridge_per_podman_network(
                         per_network_opts,
-                        &network,
+                        network,
                         &self.network_namespace_path,
                     )?;
-                    response.insert(net_name, status_block);
-                    // Setup basic firewall rules for each network.
-                    firewall_driver.setup_network(network)?;
-                    // TODO: Set up port forwarding. How? What network do we point to?
+                    response.insert(net_name.to_owned(), status_block);
+
+                    let id_network_hash = network::core_utils::CoreUtils::create_network_hash(
+                        net_name,
+                        MAX_HASH_SIZE,
+                    );
+
+                    firewall_driver.setup_network(network.clone(), id_network_hash.clone())?;
+                    let port_bindings = network_options.port_mappings.clone();
+                    match port_bindings {
+                        None => {}
+                        Some(i) => {
+                            // Need to enable sysctl localnet so that traffic can pass
+                            // through localhost to containers
+                            let network_interface = &network.network_interface;
+                            match network_interface {
+                                None => {}
+                                Some(i) => {
+                                    let localnet_path =
+                                        format!("net.ipv4.conf.{}.route_localnet", i);
+                                    let sysctl_localnet = get_sysctl_value(localnet_path.as_str())?;
+                                    if sysctl_localnet != *"1" {
+                                        set_sysctl_value(localnet_path.as_str(), "1")?;
+                                    }
+                                }
+                            }
+                            let container_ips =
+                                &per_network_opts.static_ips.as_ref().ok_or_else(|| {
+                                    std::io::Error::new(
+                                        std::io::ErrorKind::Other,
+                                        "no container ip provided",
+                                    )
+                                })?;
+                            let networks = &network.subnets.as_ref().ok_or_else(|| {
+                                std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    "no network address provided",
+                                )
+                            })?;
+                            firewall_driver.setup_port_forward(
+                                &network_options.container_id,
+                                i,
+                                container_ips[0],
+                                networks[0].subnet,
+                                net_name,
+                                &id_network_hash.as_str()[0..MAX_HASH_SIZE],
+                            )?;
+                        }
+                    }
                 }
                 // unknown driver
                 _ => {

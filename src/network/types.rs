@@ -4,8 +4,8 @@ use ipnet::IpNet;
 use std::collections::HashMap;
 use std::net::IpAddr;
 
-/// Network describes the Network attributes.
-#[derive(Debug, Serialize, Deserialize)]
+// Network describes the Network attributes.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Network {
     /// Set up dns for this network
     #[serde(rename = "dns_enabled")]
@@ -101,7 +101,7 @@ pub struct PerNetworkOptions {
 }
 
 // PortMapping is one or more ports that will be mapped into the container.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PortMapping {
     /// ContainerPort is the port number that will be exposed from the
     /// container.
@@ -180,7 +180,7 @@ pub struct NetAddress {
 }
 
 /// Subnet for a network.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Subnet {
     /// Subnet for this Network in CIDR form.
     #[serde(rename = "gateway")]
@@ -196,7 +196,7 @@ pub struct Subnet {
 }
 
 // LeaseRange contains the range where IP are leased.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LeaseRange {
     /// EndIP last IP in the subnet which should be used to assign ips.
     #[serde(rename = "end_ip")]

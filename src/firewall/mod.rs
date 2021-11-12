@@ -1,7 +1,9 @@
 use crate::network::types;
+use ipnet::IpNet;
 use log::{debug, info};
 use std::env;
 use std::error::Error;
+use std::net::IpAddr;
 use zbus::Connection;
 
 pub mod firewalld;
@@ -11,7 +13,11 @@ pub mod iptables;
 // and port mappings.
 pub trait FirewallDriver {
     // Set up firewall rules for the given network,
-    fn setup_network(&self, net: types::Network) -> Result<(), Box<dyn Error>>;
+    fn setup_network(
+        &self,
+        net: types::Network,
+        network_hash_name: String,
+    ) -> Result<(), Box<dyn Error>>;
     // Tear down firewall rules for the given network.
     fn teardown_network(&self, net: types::Network) -> Result<(), Box<dyn Error>>;
 
@@ -20,7 +26,10 @@ pub trait FirewallDriver {
         &self,
         container_id: &str,
         port_mappings: Vec<types::PortMapping>,
-        container_ip: &str,
+        container_ip: IpAddr,
+        network: IpNet,
+        network_name: &str,
+        id_network_hash: &str,
     ) -> Result<(), Box<dyn Error>>;
     // Tear down port-forwarding firewall rules for a single container.
     fn teardown_port_forward(

@@ -8,6 +8,7 @@ use rtnetlink::packet::constants::*;
 use rtnetlink::packet::rtnl::link::nlas::Nla;
 use rtnetlink::packet::NetlinkPayload;
 use rtnetlink::packet::RouteMessage;
+use sha2::{Digest, Sha512};
 use std::fmt::Write;
 use std::fs::File;
 use std::io::Error;
@@ -876,5 +877,14 @@ impl CoreUtils {
         }
 
         Ok(())
+    }
+
+    pub fn create_network_hash(network_name: &str, length: usize) -> String {
+        let mut hasher = Sha512::new();
+        hasher.update(network_name.as_bytes());
+        let result = hasher.finalize();
+        let hash_string = format!("{:X}", result);
+        let response = &hash_string[0..length];
+        response.to_string()
     }
 }
