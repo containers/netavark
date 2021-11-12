@@ -2,6 +2,7 @@ use futures::stream::TryStreamExt;
 use futures::StreamExt;
 use libc;
 use nix::sched;
+use rand::Rng;
 use rtnetlink;
 use rtnetlink::packet::constants::*;
 use rtnetlink::packet::rtnl::link::nlas::Nla;
@@ -290,6 +291,232 @@ impl CoreUtils {
                 format!("failed to get veth interface {} up: {}", ifname, err),
             )),
         }
+    }
+
+    /* renames macvlan interface inside configured namespace and turns up the interface*/
+    /* for netavark this will be called inside container namespace. */
+    #[tokio::main]
+    async fn rename_macvlan_internal(
+        macvlan_tmp_ifname: &str,
+        macvlan_ifname: &str,
+    ) -> Result<(), std::io::Error> {
+        /* Note: most likely this is called in a seperate thread so create a new connection, rather than
+         * sharing from parent stack */
+        /* Reason: rtnetlink handle does not implements copy so we cant share it across stack and
+         * copying manually is more expesive than creating a new handle */
+        let (_connection, handle, _) = match rtnetlink::new_connection() {
+            Ok((conn, handle, messages)) => (conn, handle, messages),
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to connect: {}", err),
+                ))
+            }
+        };
+
+        tokio::spawn(_connection);
+        let mut links = handle
+            .link()
+            .get()
+            .set_name_filter(macvlan_tmp_ifname.to_string())
+            .execute();
+        match links.try_next().await {
+            Ok(Some(link)) => {
+                match handle
+                    .link()
+                    .set(link.header.index)
+                    .name(macvlan_ifname.to_string())
+                    .execute()
+                    .await
+                {
+                    Ok(_) => (),
+                    Err(err) => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!(
+                                "failed to rename macvlan {} to {}: {}",
+                                &macvlan_tmp_ifname, &macvlan_ifname, err
+                            ),
+                        ))
+                    }
+                }
+            }
+            Ok(None) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("macvlan interface {} not found", &macvlan_tmp_ifname),
+                ))
+            }
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to get interface {}: {}", &macvlan_tmp_ifname, err),
+                ))
+            }
+        }
+
+        // NOTE: I dont think we need to turn up the interface cause its already up.
+        // But turn up macvlan interface up again if its needed. Although i doubt.
+
+        Ok(())
+    }
+
+    /* generates macvlan and links with master interface link on the most */
+    /* moves macvlan to given network namespaces */
+    /* master interface must be up*/
+    /* by default macvlan mode is bridge*/
+    #[tokio::main]
+    pub async fn configure_macvlan_async(
+        master_ifname: &str,
+        macvlan_ifname: &str,
+        macvlan_mode: u32,
+        ips: Vec<ipnet::IpNet>,
+        netns_path: &str,
+    ) -> Result<(), Error> {
+        let (_connection, handle, _) = match rtnetlink::new_connection() {
+            Ok((conn, handle, messages)) => (conn, handle, messages),
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to connect: {}", err),
+                ))
+            }
+        };
+
+        tokio::spawn(_connection);
+
+        //generate a random name on host to prevent collision.
+        //check https://github.com/containernetworking/plugins/blob/master/plugins/main/macvlan/macvlan.go#L176
+        let macvlan_tmp_name = format!("macvlan{:x}", rand::thread_rng().gen::<u32>());
+
+        let mut links = handle
+            .link()
+            .get()
+            .set_name_filter(master_ifname.to_string())
+            .execute();
+        match links.try_next().await {
+            Ok(Some(link)) => {
+                if let Err(err) = handle
+                    .link()
+                    .add()
+                    .macvlan(macvlan_tmp_name.to_owned(), link.header.index, macvlan_mode)
+                    .execute()
+                    .await
+                {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!(
+                            "failed to create a macvlan interface {}: {}",
+                            &macvlan_tmp_name, err
+                        ),
+                    ));
+                }
+            }
+            Ok(None) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("master interface {} not found", &master_ifname),
+                ))
+            }
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to get interface {}: {}", &master_ifname, err),
+                ))
+            }
+        }
+
+        //assign ip to mac_vlan interface
+        for ip_net in ips.into_iter() {
+            if let Err(err) = CoreUtils::add_ip_address(&handle, &macvlan_tmp_name, &ip_net).await {
+                return Err(err);
+            }
+        }
+
+        // change network namespace of macvlan interface
+        match File::open(netns_path) {
+            Ok(netns_file) => {
+                let netns_fd = netns_file.as_raw_fd();
+                let mut links = handle
+                    .link()
+                    .get()
+                    .set_name_filter(macvlan_tmp_name.to_string())
+                    .execute();
+                match links.try_next().await {
+                    Ok(Some(link)) => {
+                        match handle
+                            .link()
+                            .set(link.header.index)
+                            .setns_by_fd(netns_fd)
+                            .execute()
+                            .await
+                        {
+                            Ok(_) => (),
+                            Err(err) => {
+                                return Err(std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    format!(
+                                        "failed to set macvlan {} to netns: {}",
+                                        &macvlan_tmp_name, err
+                                    ),
+                                ))
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("macvlan interface {} not found", &macvlan_tmp_name),
+                        ))
+                    }
+                    Err(err) => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("failed to get interface {}: {}", &macvlan_tmp_name, err),
+                        ))
+                    }
+                }
+
+                let macvlan_tmp_ifname: String = macvlan_tmp_name.to_owned();
+                let macvlan_ifname_clone: String = macvlan_ifname.to_owned();
+                // we have to also swtich to network namespace. rename macvlan interface and turn
+                // up interface
+                let thread_handle = thread::spawn(move || -> Result<(), Error> {
+                    if let Err(err) = sched::setns(netns_fd, sched::CloneFlags::CLONE_NEWNET) {
+                        panic!(
+                            "{}",
+                            format!(
+                                "failed to setns on container network namespace fd={}: {}",
+                                netns_fd, err
+                            )
+                        )
+                    }
+
+                    if let Err(err) = CoreUtils::rename_macvlan_internal(
+                        &macvlan_tmp_ifname,
+                        &macvlan_ifname_clone,
+                    ) {
+                        return Err(err);
+                    }
+
+                    Ok(())
+                });
+                if let Err(err) = thread_handle.join().unwrap() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("from container namespace: {:?}", err),
+                    ));
+                }
+            }
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to open the netns file: {}", err),
+                ))
+            }
+        }
+
+        Ok(())
     }
 
     #[tokio::main]
