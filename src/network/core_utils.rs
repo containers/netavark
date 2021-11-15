@@ -504,7 +504,7 @@ impl CoreUtils {
                 if let Err(err) = thread_handle.join().unwrap() {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        format!("from container namespace: {:?}", err),
+                        format!("from container namespace: {}", err),
                     ));
                 }
             }
@@ -749,7 +749,7 @@ impl CoreUtils {
                 if let Err(err) = thread_handle.join().unwrap() {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        format!("from container namespace: {:?}", err),
+                        format!("from container namespace: {}", err),
                     ));
                 }
             }

@@ -108,7 +108,7 @@ impl Core {
             Err(err) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("failed configure bridge and veth interface: {:?}", err),
+                    format!("failed configure bridge and veth interface: {}", err),
                 ))
             }
         };
@@ -141,7 +141,7 @@ impl Core {
             Err(err) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("Error while configuring network interface {}:", err),
+                    format!("failed while configuring network interface {}:", err),
                 ))
             }
         };
@@ -161,11 +161,11 @@ impl Core {
                 // otherwise cleanup would become mess
                 // try removing leaking interfaces from host
                 if let Err(er) = core_utils::CoreUtils::remove_interface(&host_veth_name) {
-                    warn!("Failed while cleaning up interfaces: {}", er);
+                    warn!("failed while cleaning up interfaces: {}", er);
                 }
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("Error while configuring network interface {}:", err),
+                    format!("failed while configuring network interface {}:", err),
                 ));
             }
         };
@@ -250,7 +250,7 @@ impl Core {
         if let Err(err) = Core::remove_container_veth(&container_veth_name, netns) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("unable to remove container veth: {:?}", err),
+                format!("unable to remove container veth: {}", err),
             ));
         }
 
