@@ -5,5 +5,6 @@ extern crate serde_json;
 extern crate simple_error;
 
 pub mod commands;
+pub mod error;
 pub mod firewall;
 pub mod network;
