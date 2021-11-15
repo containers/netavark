@@ -1,3 +1,4 @@
+use crate::error::NetavarkError;
 use crate::{firewall, network};
 use clap::{self, Clap};
 use log::debug;
@@ -24,7 +25,12 @@ impl Teardown {
         debug!("{:?}", "Tearing down..");
         let network_options = match network::types::NetworkOptions::load(&input_file) {
             Ok(opts) => opts,
-            Err(e) => panic!("{}", e),
+            Err(e) => {
+                return Err(Box::new(NetavarkError {
+                    error: format!("{}", e),
+                    errno: 1,
+                }));
+            }
         };
 
         let _firewall_driver = match firewall::get_supported_firewall_driver() {
