@@ -232,6 +232,173 @@ impl Core {
         }
     }
 
+    pub fn macvlan_per_podman_network(
+        per_network_opts: &types::PerNetworkOptions,
+        network: &types::Network,
+        netns: &str,
+    ) -> Result<types::StatusBlock, std::io::Error> {
+        //  StatusBlock response
+        let mut response = types::StatusBlock {
+            dns_search_domains: Some(Vec::new()),
+            dns_server_ips: Some(Vec::new()),
+            interfaces: Some(HashMap::new()),
+        };
+        // Does config have a macvlan mode ? I think not
+        // Important !! Hardcode MACVLAN_MODE to bridge
+        let macvlan_mode: u32 = 4u32;
+        // get master interface name
+        let master_ifname: String = network.network_interface.as_ref().unwrap().to_owned();
+        // static ip vector
+        let mut address_vector = Vec::new();
+        // network addresses for response
+        let mut response_net_addresses: Vec<NetAddress> = Vec::new();
+        // interfaces map, but we only ever expect one, for response
+        let mut interfaces: HashMap<String, types::NetInterface> = HashMap::new();
+
+        let container_macvlan_name: String = per_network_opts.interface_name.to_owned();
+        let static_ips: &Vec<IpAddr> = per_network_opts.static_ips.as_ref().unwrap();
+
+        // prepare a vector of static ips with appropriate cidr
+        // we only need static ips so do not process gateway,
+        for (idx, subnet) in network.subnets.iter().flatten().enumerate() {
+            let subnet_mask_cidr = subnet.subnet.prefix_len();
+
+            // Build up response information
+            let container_address: ipnet::IpNet =
+                match format!("{}/{}", static_ips[idx].to_string(), subnet_mask_cidr).parse() {
+                    Ok(i) => i,
+                    Err(e) => {
+                        return Err(Error::new(std::io::ErrorKind::Other, e));
+                    }
+                };
+            // Add the IP to the address_vector
+            address_vector.push(container_address);
+            response_net_addresses.push(types::NetAddress {
+                gateway: subnet.gateway, // I dont think we need this in response vector for macvlan ? But let it be for now.
+                subnet: container_address,
+            });
+        }
+        debug!("Container macvlan name: {:?}", container_macvlan_name);
+        debug!("Master interface name: {:?}", master_ifname);
+        debug!("IP address for macvlan: {:?}", address_vector);
+
+        // create macvlan
+        let container_macvlan_mac = match Core::add_macvlan(
+            &master_ifname,
+            &container_macvlan_name,
+            macvlan_mode,
+            address_vector,
+            netns,
+        ) {
+            Ok(addr) => addr,
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed configure macvlan: {}", err),
+                ))
+            }
+        };
+        debug!("Container macvlan mac: {:?}", container_macvlan_mac);
+        let interface = types::NetInterface {
+            mac_address: container_macvlan_mac,
+            networks: Option::from(response_net_addresses),
+        };
+        // Add interface to interfaces (part of StatusBlock)
+        interfaces.insert(container_macvlan_name, interface);
+        let _ = response.interfaces.insert(interfaces);
+        Ok(response)
+    }
+
+    pub fn add_macvlan(
+        master_ifname: &str,
+        container_macvlan: &str,
+        macvlan_mode: u32,
+        netns_ipaddr: Vec<ipnet::IpNet>,
+        netns: &str,
+    ) -> Result<String, std::io::Error> {
+        let _ = match core_utils::CoreUtils::configure_macvlan_async(
+            master_ifname,
+            container_macvlan,
+            macvlan_mode,
+            netns,
+        ) {
+            Ok(_) => (),
+            Err(err) => {
+                // it seems something went wrong
+                // we must not leave dangling interfaces
+                // otherwise cleanup would become mess
+                // try removing leaking interfaces from host
+                if let Err(er) = core_utils::CoreUtils::remove_interface(container_macvlan) {
+                    warn!("failed while cleaning up interfaces: {}", er);
+                }
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed while configuring macvlan {}:", err),
+                ));
+            }
+        };
+
+        match File::open(&netns) {
+            Ok(netns_file) => {
+                let netns_fd = netns_file.as_raw_fd();
+                //clone values before spwaning thread in new namespace
+                let container_macvlan_clone: String = container_macvlan.to_owned();
+                // So complicated cloning for threads ?
+                // TODO: simplify this later
+                let _gw_ipaddr_empty = Vec::new(); // we are not using this for macvlan but arg is needed.
+                let mut netns_ipaddr_clone = Vec::new();
+                for ip in &netns_ipaddr {
+                    netns_ipaddr_clone.push(*ip)
+                }
+                let handle = thread::spawn(move || -> Result<String, Error> {
+                    if let Err(err) = sched::setns(netns_fd, sched::CloneFlags::CLONE_NEWNET) {
+                        panic!("failed to setns to fd={}: {}", netns_fd, err);
+                    }
+
+                    if let Err(err) = core_utils::CoreUtils::configure_netns_interface_async(
+                        &container_macvlan_clone,
+                        netns_ipaddr_clone,
+                        _gw_ipaddr_empty,
+                    ) {
+                        return Err(err);
+                    }
+                    debug!(
+                        "Configured static up address for {}",
+                        container_macvlan_clone
+                    );
+
+                    if let Err(er) = core_utils::CoreUtils::turn_up_interface("lo") {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("failed while turning up `lo` in container namespace {}", er),
+                        ));
+                    }
+
+                    //return MAC address to status block could use this
+                    match core_utils::CoreUtils::get_interface_address(&container_macvlan_clone) {
+                        Ok(addr) => Ok(addr),
+                        Err(err) => Err(err),
+                    }
+                });
+                match handle.join() {
+                    Ok(interface_address) => interface_address,
+                    Err(err) => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("failed to join: {:?}", err),
+                        ))
+                    }
+                }
+            }
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to open the netns file: {}", err),
+                ))
+            }
+        }
+    }
+
     pub fn remove_interface_per_podman_network(
         per_network_opts: &types::PerNetworkOptions,
         network: &types::Network,

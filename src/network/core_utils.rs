@@ -464,7 +464,6 @@ impl CoreUtils {
         master_ifname: &str,
         macvlan_ifname: &str,
         macvlan_mode: u32,
-        ips: Vec<ipnet::IpNet>,
         netns_path: &str,
     ) -> Result<(), Error> {
         let (_connection, handle, _) = match rtnetlink::new_connection() {
@@ -517,13 +516,6 @@ impl CoreUtils {
                     std::io::ErrorKind::Other,
                     format!("failed to get interface {}: {}", &master_ifname, err),
                 ))
-            }
-        }
-
-        //assign ip to mac_vlan interface
-        for ip_net in ips.into_iter() {
-            if let Err(err) = CoreUtils::add_ip_address(&handle, &macvlan_tmp_name, &ip_net).await {
-                return Err(err);
             }
         }
 
