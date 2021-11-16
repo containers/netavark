@@ -24,8 +24,6 @@ impl Core {
     ) -> Result<types::StatusBlock, std::io::Error> {
         //  StatusBlock response
         let mut response = types::StatusBlock {
-            dns_search_domains: Some(Vec::new()),
-            dns_server_ips: Some(Vec::new()),
             interfaces: Some(HashMap::new()),
         };
         // get bridge name
@@ -89,7 +87,7 @@ impl Core {
             address_vector.push(container_address);
             response_net_addresses.push(types::NetAddress {
                 gateway: subnet.gateway,
-                subnet: container_address,
+                ipnet: container_address,
             });
         }
         debug!("Container veth name: {:?}", container_veth_name);
@@ -115,7 +113,7 @@ impl Core {
         debug!("Container veth mac: {:?}", container_veth_mac);
         let interface = types::NetInterface {
             mac_address: container_veth_mac,
-            networks: Option::from(response_net_addresses),
+            subnets: Option::from(response_net_addresses),
         };
         // Add interface to interfaces (part of StatusBlock)
         interfaces.insert(container_veth_name, interface);
