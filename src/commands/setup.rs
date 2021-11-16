@@ -28,7 +28,12 @@ impl Setup {
     }
 
     pub fn exec(&self, input_file: String) -> Result<(), Box<dyn Error>> {
-        network::validation::ns_checks(&self.network_namespace_path);
+        match network::validation::ns_checks(&self.network_namespace_path) {
+            Ok(_) => (),
+            Err(e) => {
+                bail!("invalid namespace path: {}", e);
+            }
+        }
 
         debug!("{:?}", "Setting up...");
 
