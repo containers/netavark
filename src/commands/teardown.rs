@@ -20,8 +20,6 @@ impl Teardown {
     }
 
     pub fn exec(&self, input_file: String) -> Result<(), Box<dyn Error>> {
-        network::validation::ns_checks(&self.network_namespace_path);
-
         debug!("{:?}", "Tearing down..");
         let network_options = match network::types::NetworkOptions::load(&input_file) {
             Ok(opts) => opts,

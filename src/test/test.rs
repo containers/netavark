@@ -40,9 +40,6 @@ mod tests {
     // Test commands::setup::ns_checks works correctly
     #[test]
     fn test_ns_checks() {
-        assert_eq!(
-            network::validation::ns_checks("src/test/config/setupopts.test.json"),
-            true
-        );
+        assert!(network::validation::ns_checks("src/test/config/setupopts.test.json").is_ok());
     }
 }
