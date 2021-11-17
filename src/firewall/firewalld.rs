@@ -1,8 +1,10 @@
 use crate::firewall;
 use crate::network::types;
+use ipnet::IpNet;
 use log::debug;
 use std::collections::HashMap;
 use std::error::Error;
+use std::net::IpAddr;
 use std::vec::Vec;
 use zbus::Connection;
 use zvariant::{Array, Value};
@@ -20,7 +22,11 @@ pub fn new(conn: Connection) -> Result<Box<dyn firewall::FirewallDriver>, Box<dy
 }
 
 impl firewall::FirewallDriver for FirewallD {
-    fn setup_network(&self, net: types::Network) -> Result<(), Box<dyn Error>> {
+    fn setup_network(
+        &self,
+        net: types::Network,
+        _network_hash: String,
+    ) -> Result<(), Box<dyn Error>> {
         let mut need_reload = false;
 
         need_reload |= match create_zone_if_not_exist(&self.conn, ZONENAME) {
@@ -63,7 +69,10 @@ impl firewall::FirewallDriver for FirewallD {
         &self,
         _container_id: &str,
         _port_mappings: Vec<types::PortMapping>,
-        _container_ip: &str,
+        _container_ip: IpAddr,
+        _network: IpNet,
+        _network_name: &str,
+        _id_network_hash: &str,
     ) -> Result<(), Box<dyn Error>> {
         todo!();
     }
