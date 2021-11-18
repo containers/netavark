@@ -4,6 +4,8 @@ use std::fmt;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NetavarkError {
     pub error: String,
+    // Do not serialize this field we already get the exit code when the program exits so there is no need to include it.
+    #[serde(skip_serializing)]
     pub errno: i32,
 }
 
