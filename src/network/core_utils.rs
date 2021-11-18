@@ -34,6 +34,99 @@ impl CoreUtils {
         final_slice.join(":")
     }
 
+    //count interfaces on bridge
+    #[tokio::main]
+    #[allow(irrefutable_let_patterns)]
+    pub async fn bridge_count_connected_interfaces(
+        ifname: &str,
+    ) -> Result<Vec<u32>, std::io::Error> {
+        let mut connected_veth: Vec<u32> = Vec::new();
+        let (_connection, handle, _) = match rtnetlink::new_connection() {
+            Ok((conn, handle, messages)) => (conn, handle, messages),
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to connect: {}", err),
+                ))
+            }
+        };
+
+        tokio::spawn(_connection);
+
+        let mut master_id: u32 = 0;
+        let mut master_index: u32 = 0;
+
+        let mut links = handle
+            .link()
+            .get()
+            .set_name_filter(ifname.to_string())
+            .set_filter_mask(AF_BRIDGE as u8, RTEXT_FILTER_BRVLAN)
+            .execute();
+        while let msg = links.try_next().await {
+            match msg {
+                Ok(Some(msg)) => {
+                    for nla in msg.nlas.into_iter() {
+                        if let Nla::Master(data) = nla {
+                            master_id = data;
+                            master_index = msg.header.index;
+                            continue;
+                        }
+                    }
+                }
+                Err(err) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!(
+                            "Unable to resolve physical address for interface {}: {}",
+                            ifname.to_string(),
+                            err
+                        ),
+                    ));
+                }
+                _ => {
+                    break;
+                }
+            }
+        }
+
+        let mut links = handle
+            .link()
+            .get()
+            .set_filter_mask(AF_BRIDGE as u8, RTEXT_FILTER_BRVLAN)
+            .execute();
+        while let msg = links.try_next().await {
+            match msg {
+                Ok(Some(msg)) => {
+                    for nla in msg.nlas.into_iter() {
+                        if let Nla::Master(data) = nla {
+                            if data == master_id {
+                                if msg.header.index == master_index {
+                                    continue;
+                                }
+                                connected_veth.push(msg.header.index);
+                            }
+                            continue;
+                        }
+                    }
+                }
+                Err(err) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!(
+                            "failed while querying interfaces connected to bridge: {}",
+                            err
+                        ),
+                    ));
+                }
+                _ => {
+                    break;
+                }
+            }
+        }
+
+        Ok(connected_veth)
+    }
+
     #[tokio::main]
     pub async fn get_interface_address(link_name: &str) -> Result<String, std::io::Error> {
         let (_connection, handle, _) = match rtnetlink::new_connection() {
