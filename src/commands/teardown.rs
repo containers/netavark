@@ -1,4 +1,5 @@
 use crate::error::NetavarkError;
+use crate::firewall::iptables::MAX_HASH_SIZE;
 use crate::{firewall, network};
 use clap::{self, Clap};
 use log::debug;
@@ -31,7 +32,7 @@ impl Teardown {
             }
         };
 
-        let _firewall_driver = match firewall::get_supported_firewall_driver() {
+        let firewall_driver = match firewall::get_supported_firewall_driver() {
             Ok(driver) => driver,
             Err(e) => panic!("{}", e.to_string()),
         };
@@ -58,7 +59,27 @@ impl Teardown {
                         &self.network_namespace_path,
                     )?;
                     // Teardown basic firewall port forwarding
-                    // firewall_driver.teardown_port_forward(network)?;
+
+                    let id_network_hash = network::core_utils::CoreUtils::create_network_hash(
+                        &net_name,
+                        MAX_HASH_SIZE,
+                    );
+
+                    let port_bindings = network_options.port_mappings.clone();
+                    match port_bindings {
+                        None => {}
+                        Some(i) => {
+                            firewall_driver.teardown_port_forward(
+                                network.clone(),
+                                &network_options.container_id,
+                                i,
+                                &net_name,
+                                &id_network_hash,
+                                per_network_opts,
+                                // &id_network_hash.as_str()[0..MAX_HASH_SIZE],
+                            )?;
+                        }
+                    }
 
                     // TODO teardown firewall if no interfaces connected to bridge!
                 }

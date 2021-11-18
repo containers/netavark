@@ -1,11 +1,11 @@
 use crate::firewall;
+use crate::network::core_utils::CoreUtils;
 use crate::network::types;
-use ipnet::IpNet;
+use crate::network::types::{Network, PerNetworkOptions};
 use iptables;
 use iptables::IPTables;
 use log::debug;
 use std::error::Error;
-use std::net::IpAddr;
 
 const HEXMARK: &str = "0x2000";
 pub(crate) const MAX_HASH_SIZE: usize = 13;
@@ -109,13 +109,31 @@ impl firewall::FirewallDriver for IptablesDriver {
 
     fn setup_port_forward(
         &self,
+        network: Network,
         container_id: &str,
         port_mappings: Vec<types::PortMapping>,
-        container_ip: IpAddr,
-        network: IpNet,
         network_name: &str,
         id_network_hash: &str,
+        options: &PerNetworkOptions,
     ) -> Result<(), Box<dyn Error>> {
+        // Need to enable sysctl localnet so that traffic can pass
+        // through localhost to containers
+        let network_interface = network.network_interface;
+        match network_interface {
+            None => {}
+            Some(i) => {
+                let localnet_path = format!("net.ipv4.conf.{}.route_localnet", i);
+                CoreUtils::apply_sysctl_value(localnet_path.as_str(), "1")?;
+            }
+        }
+        let container_ips = options.static_ips.as_ref().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::Other, "no container ip provided")
+        })?;
+        let container_ip = container_ips[0];
+        let networks = &network.subnets.as_ref().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::Other, "no network address provided")
+        })?;
+        let container_network_address = networks[0].subnet;
         // Set up all chains
         let network_dn_chain_name = CONTAINER_DN_CHAIN.to_owned() + id_network_hash;
         let network_chain_name = CONTAINER_CHAIN.to_owned() + id_network_hash;
@@ -167,6 +185,7 @@ impl firewall::FirewallDriver for IptablesDriver {
             POSTROUTING_JUMP,
             &format!("-j {} ", NETAVARK_HOSTPORT_MASK_CHAIN),
         )?;
+
         append_unique(
             &self.conn,
             NAT,
@@ -193,7 +212,7 @@ impl firewall::FirewallDriver for IptablesDriver {
             let setmark_network_rule = format!(
                 "-j {} -s {} -p tcp --dport {}",
                 HOSTPORT_SETMARK_CHAIN,
-                network.to_string(),
+                container_network_address.to_string(),
                 i.host_port.to_string()
             );
             append_unique(
@@ -233,11 +252,99 @@ impl firewall::FirewallDriver for IptablesDriver {
 
     fn teardown_port_forward(
         &self,
-        _container_id: &str,
-        _port_mappings: Vec<types::PortMapping>,
-        _container_ip: &str,
+        network: Network,
+        container_id: &str,
+        port_mappings: Vec<types::PortMapping>,
+        network_name: &str,
+        id_network_hash: &str,
+        options: &PerNetworkOptions,
     ) -> Result<(), Box<dyn Error>> {
-        todo!();
+        let container_ips = options.static_ips.as_ref().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::Other, "no container ip provided")
+        })?;
+        let networks = &network.subnets.as_ref().ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::Other, "no network address provided")
+        })?;
+        let container_network_address = networks[0].subnet;
+        let network_dn_chain_name = CONTAINER_DN_CHAIN.to_owned() + id_network_hash;
+        let comment_dn_network_cid = format!(
+            "-m comment --comment 'dnat name: {} id: {}'",
+            network_name, container_id
+        );
+        let network_chain_name = CONTAINER_CHAIN.to_owned() + id_network_hash;
+        let container_ip = container_ips[0];
+        // First delete any container specific rules
+        // POSTROUTING
+        let comment_network_cid = format!(
+            "-m comment --comment 'name: {} id: {}'",
+            network_name, container_id
+        );
+        remove_if_rule_exists(
+            &self.conn,
+            NAT,
+            POSTROUTING_JUMP,
+            &format!(
+                "-j {} -s {} {}",
+                network_chain_name,
+                container_ip.to_string(),
+                comment_network_cid
+            ),
+        )?;
+
+        // Iterate on ports
+        for i in port_mappings {
+            // hostport dnat
+            let hostport_dnat_rule = format!(
+                "-j {} -p tcp -m multiport --destination-ports {} {}",
+                network_dn_chain_name,
+                i.host_port.to_string(),
+                comment_dn_network_cid
+            );
+            remove_if_rule_exists(&self.conn, NAT, HOSTPORT_DNAT_CHAIN, &hostport_dnat_rule)?;
+            // dn container (the actual port usages)
+            let setmark_network_rule = format!(
+                "-j {} -s {} -p tcp --dport {}",
+                HOSTPORT_SETMARK_CHAIN,
+                container_network_address.to_string(),
+                i.host_port.to_string()
+            );
+            remove_if_rule_exists(
+                &self.conn,
+                NAT,
+                &network_dn_chain_name,
+                &setmark_network_rule,
+            )?;
+            let setmark_localhost_rule = format!(
+                "-j {} -s 127.0.0.1 -p tcp --dport {}",
+                HOSTPORT_SETMARK_CHAIN,
+                i.host_port.to_string()
+            );
+            remove_if_rule_exists(
+                &self.conn,
+                NAT,
+                &network_dn_chain_name,
+                &setmark_localhost_rule,
+            )?;
+            let container_dest_rule = format!(
+                "-j {} -p tcp --to-destination {}:{} --destination-port {}",
+                DNAT_JUMP,
+                container_ip.to_string(),
+                i.container_port.to_string(),
+                i.host_port.to_string()
+            );
+            remove_if_rule_exists(
+                &self.conn,
+                NAT,
+                &network_dn_chain_name,
+                &container_dest_rule,
+            )?;
+        }
+
+        // TODO Once we have a function to detect if this is the last container
+        // on the network, we can rip down the additional iptables rules that are
+        // network based.
+
+        Result::Ok(())
     }
 }
 // append a rule to chain if it does not exist
@@ -285,6 +392,21 @@ fn chain_exists(driver: &IPTables, table: &str, chain: &str) -> Result<bool, Box
     serde::__private::Result::Ok(false)
 }
 
+fn remove_if_rule_exists(
+    driver: &IPTables,
+    table: &str,
+    chain: &str,
+    rule: &str,
+) -> Result<(), Box<dyn Error>> {
+    // If the rule is not present, do not error
+    let exists = driver.exists(table, chain, rule)?;
+    if !exists {
+        debug_rule_no_exists(table, chain, rule.to_string());
+        return Ok(());
+    }
+    driver.delete(table, chain, rule)
+}
+
 fn debug_chain_create(table: &str, chain: &str) {
     debug!("chain {} created on table {}", chain, table);
 }
@@ -303,6 +425,12 @@ fn debug_rule_create(table: &str, chain: &str, rule: String) {
 fn debug_rule_exists(table: &str, chain: &str, rule: String) {
     debug!(
         "rule {} exists on table {} and chain {}",
+        rule, table, chain
+    );
+}
+fn debug_rule_no_exists(table: &str, chain: &str, rule: String) {
+    debug!(
+        "no rule {} exists on table {} and chain {}",
         rule, table, chain
     );
 }

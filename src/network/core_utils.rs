@@ -1,6 +1,7 @@
 use futures::stream::TryStreamExt;
 use futures::StreamExt;
 use libc;
+use log::debug;
 use nix::sched;
 use rand::Rng;
 use rtnetlink;
@@ -18,6 +19,7 @@ use std::net::Ipv6Addr;
 use std::os::unix::prelude::*;
 use std::process;
 use std::thread;
+use sysctl::{Sysctl, SysctlError};
 
 pub struct CoreUtils {
     pub networkns: String,
@@ -979,5 +981,19 @@ impl CoreUtils {
         let hash_string = format!("{:X}", result);
         let response = &hash_string[0..length];
         response.to_string()
+    }
+
+    // get a sysctl value by the value's namespace
+    pub fn lookup_sysctl_value(ns_value: &str) -> Result<String, SysctlError> {
+        debug!("Getting sysctl value for {}", ns_value);
+        let ctl = sysctl::Ctl::new(ns_value)?;
+        ctl.value_string()
+    }
+
+    // set a sysctl value by value's namespace
+    pub fn apply_sysctl_value(ns_value: &str, val: &str) -> Result<String, SysctlError> {
+        debug!("Setting sysctl value for {} to {}", ns_value, val);
+        let ctl = sysctl::Ctl::new(ns_value)?;
+        ctl.set_value_string(val)
     }
 }

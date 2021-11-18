@@ -1,9 +1,8 @@
 use crate::network::types;
-use ipnet::IpNet;
+use crate::network::types::{Network, PerNetworkOptions};
 use log::{debug, info};
 use std::env;
 use std::error::Error;
-use std::net::IpAddr;
 use zbus::Connection;
 
 pub mod firewalld;
@@ -24,19 +23,22 @@ pub trait FirewallDriver {
     // Set up port-forwarding firewall rules for a given container.
     fn setup_port_forward(
         &self,
+        network: Network,
         container_id: &str,
         port_mappings: Vec<types::PortMapping>,
-        container_ip: IpAddr,
-        network: IpNet,
         network_name: &str,
         id_network_hash: &str,
+        options: &PerNetworkOptions,
     ) -> Result<(), Box<dyn Error>>;
     // Tear down port-forwarding firewall rules for a single container.
     fn teardown_port_forward(
         &self,
+        network: Network,
         container_id: &str,
         port_mappings: Vec<types::PortMapping>,
-        container_ip: &str,
+        network_name: &str,
+        id_network_hash: &str,
+        options: &PerNetworkOptions,
     ) -> Result<(), Box<dyn Error>>;
 }
 
