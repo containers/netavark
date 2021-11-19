@@ -25,7 +25,7 @@ enum SubCommand {
 }
 
 fn main() {
-    env_logger::init();
+    env_logger::builder().format_timestamp(None).init();
     let opts = Opts::parse();
 
     let file = opts.file.unwrap_or_else(|| String::from("/dev/stdin"));
