@@ -1,11 +1,12 @@
 //! Configures the given network namespace with provided specs
-use crate::error::NetavarkError;
+use crate::error::{NetavarkError, NetavarkErrorCode};
 use crate::firewall;
 use crate::firewall::iptables::MAX_HASH_SIZE;
 use crate::network;
 use crate::network::core_utils::CoreUtils;
 use crate::network::internal_types::{SetupNetwork, SetupPortForward};
 use crate::network::{core_utils, types};
+use anyhow::anyhow;
 use clap::{self, Clap};
 use log::debug;
 use std::collections::HashMap;
@@ -69,10 +70,9 @@ impl Setup {
                 "bridge" => {
                     let per_network_opts =
                         network_options.networks.get(net_name).ok_or_else(|| {
-                            std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                format!("network options for network {} not found", net_name),
-                            )
+                            anyhow!(NetavarkErrorCode::ErrNoNetworkOptions {
+                                network_name: net_name.to_string()
+                            })
                         })?;
                     //Configure Bridge and veth_pairs
                     let status_block = network::core::Core::bridge_per_podman_network(
@@ -108,10 +108,9 @@ impl Setup {
                 "macvlan" => {
                     let per_network_opts =
                         network_options.networks.get(net_name).ok_or_else(|| {
-                            std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                format!("network options for network {} not found", net_name),
-                            )
+                            anyhow!(NetavarkErrorCode::ErrNoNetworkOptions {
+                                network_name: net_name.to_string()
+                            })
                         })?;
                     //Configure Bridge and veth_pairs
                     let status_block = network::core::Core::macvlan_per_podman_network(
@@ -123,10 +122,9 @@ impl Setup {
                 }
                 // unknown driver
                 _ => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("unknown network driver {}", network.driver),
-                    )
+                    return Err(NetavarkErrorCode::ErrUnknownNetworkDriver {
+                        expected: network.driver.to_string(),
+                    }
                     .into());
                 }
             }

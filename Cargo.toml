@@ -35,3 +35,4 @@ tokio = { version = "1.14.0", features = ["full"] }
 zvariant = "2.10.0"
 sha2 = "0.9.8"
 netlink-packet-route = "0.8.0"
+thiserror = "1.0.30"

@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::fmt;
+use std::{fmt, io};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NetavarkError {
@@ -26,3 +26,24 @@ impl fmt::Display for NetavarkError {
 }
 
 impl Error for NetavarkError {}
+
+#[derive(thiserror::Error, Debug)]
+pub enum NetavarkErrorCode {
+    #[error("network options for network {network_name:?} not found")]
+    ErrNoNetworkOptions { network_name: String },
+
+    #[error("failed to load network options: {e}")]
+    ErrFailNetworkOptions { e: anyhow::Error },
+
+    #[error("no container ip provided:")]
+    ErrNoContainerIP,
+
+    #[error("no network address provided:")]
+    ErrNoNetworkAddress,
+
+    #[error("unknown network driver: {expected:?}")]
+    ErrUnknownNetworkDriver { expected: String },
+
+    #[error("invalid namespace path: {e}")]
+    ErrInvalidNamespacePath { e: io::Error },
+}

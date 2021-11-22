@@ -1,8 +1,9 @@
-use crate::error::NetavarkError;
+use crate::error::{NetavarkError, NetavarkErrorCode};
 use crate::firewall::iptables::MAX_HASH_SIZE;
 use crate::network::core_utils::CoreUtils;
 use crate::network::internal_types::{TearDownNetwork, TeardownPortForward};
 use crate::{firewall, network};
+use anyhow::anyhow;
 use clap::{self, Clap};
 use log::debug;
 use std::error::Error;
@@ -41,7 +42,7 @@ impl Teardown {
 
         for (net_name, network) in network_options.network_info {
             debug!(
-                "Setting up network {} with driver {}",
+                "Tearing down network {} with driver {}",
                 net_name, network.driver
             );
             let interface_name: String = match network.network_interface.clone() {
@@ -55,10 +56,9 @@ impl Teardown {
                 "bridge" => {
                     let per_network_opts =
                         network_options.networks.get(&net_name).ok_or_else(|| {
-                            std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                format!("network options for network {} not found", net_name),
-                            )
+                            anyhow!(NetavarkErrorCode::ErrNoNetworkOptions {
+                                network_name: net_name.to_string(),
+                            })
                         })?;
                     //Remove container interfaces
                     network::core::Core::remove_interface_per_podman_network(
@@ -102,10 +102,9 @@ impl Teardown {
                 "macvlan" => {
                     let per_network_opts =
                         network_options.networks.get(&net_name).ok_or_else(|| {
-                            std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                format!("network options for network {} not found", net_name),
-                            )
+                            anyhow!(NetavarkErrorCode::ErrNoNetworkOptions {
+                                network_name: net_name.to_string(),
+                            })
                         })?;
                     //Remove container interfaces
                     network::core::Core::remove_interface_per_podman_network(
@@ -116,10 +115,9 @@ impl Teardown {
                 }
                 // unknown driver
                 _ => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("unknown network driver {}", network.driver),
-                    )
+                    return Err(NetavarkErrorCode::ErrUnknownNetworkDriver {
+                        expected: network.driver,
+                    }
                     .into());
                 }
             }

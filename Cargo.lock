@@ -569,6 +569,7 @@ dependencies = [
  "sha2",
  "simple-error",
  "sysctl",
+ "thiserror",
  "tokio",
  "url",
  "zbus",
