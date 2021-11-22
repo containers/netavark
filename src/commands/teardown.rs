@@ -62,6 +62,21 @@ impl Teardown {
 
                     // TODO teardown firewall if no interfaces connected to bridge!
                 }
+                "macvlan" => {
+                    let per_network_opts =
+                        network_options.networks.get(&net_name).ok_or_else(|| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!("network options for network {} not found", net_name),
+                            )
+                        })?;
+                    //Remove container interfaces
+                    network::core::Core::remove_interface_per_podman_network(
+                        per_network_opts,
+                        &network,
+                        &self.network_namespace_path,
+                    )?;
+                }
                 // unknown driver
                 _ => {
                     return Err(std::io::Error::new(
