@@ -1,10 +1,9 @@
 use crate::firewall;
 use crate::network::types;
-use ipnet::IpNet;
+use crate::network::types::{Network, PerNetworkOptions, TeardownPortForward};
 use log::debug;
 use std::collections::HashMap;
 use std::error::Error;
-use std::net::IpAddr;
 use std::vec::Vec;
 use zbus::Connection;
 use zvariant::{Array, Value};
@@ -61,27 +60,29 @@ impl firewall::FirewallDriver for FirewallD {
         Ok(())
     }
 
-    fn teardown_network(&self, _net: types::Network) -> Result<(), Box<dyn Error>> {
+    fn teardown_network(
+        &self,
+        _net: types::Network,
+        _complete_teardown: bool,
+    ) -> Result<(), Box<dyn Error>> {
         todo!();
     }
 
     fn setup_port_forward(
         &self,
+        _network: Network,
         _container_id: &str,
         _port_mappings: Vec<types::PortMapping>,
-        _container_ip: IpAddr,
-        _network: IpNet,
         _network_name: &str,
         _id_network_hash: &str,
+        _options: &PerNetworkOptions,
     ) -> Result<(), Box<dyn Error>> {
         todo!();
     }
 
     fn teardown_port_forward(
         &self,
-        _container_id: &str,
-        _port_mappings: Vec<types::PortMapping>,
-        _container_ip: &str,
+        _teardown_pf: TeardownPortForward,
     ) -> Result<(), Box<dyn Error>> {
         todo!();
     }

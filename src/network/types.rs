@@ -1,5 +1,6 @@
 // Crate contains the types which are accepted by netavark.
 
+use crate::network::types;
 use ipnet::IpNet;
 use std::collections::HashMap;
 use std::net::IpAddr;
@@ -75,7 +76,7 @@ pub struct NetworkOptions {
 }
 
 // PerNetworkOptions are options which should be set on a per network basis
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PerNetworkOptions {
     /// Aliases contains a list of names which the dns server should resolve
     /// to this container. Should only be set when DNSEnabled is true on the Network.
@@ -205,4 +206,22 @@ pub struct LeaseRange {
     /// StartIP first IP in the subnet which should be used to assign ips.
     #[serde(rename = "start_ip")]
     pub start_ip: Option<String>,
+}
+//  Teardown contains options for tearing down behind a container
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TeardownPortForward {
+    // network object
+    pub network: Network,
+    // container id
+    pub container_id: String,
+    // portmappings
+    pub port_mappings: Vec<types::PortMapping>,
+    // name of network
+    pub network_name: String,
+    // network id
+    pub id_network_hash: String,
+    // pernetwork options
+    pub options: PerNetworkOptions,
+    // remove network related information
+    pub complete_teardown: bool,
 }

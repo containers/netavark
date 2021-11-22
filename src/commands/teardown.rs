@@ -1,4 +1,7 @@
 use crate::error::NetavarkError;
+use crate::firewall::iptables::MAX_HASH_SIZE;
+use crate::network::core_utils::CoreUtils;
+use crate::network::types::TeardownPortForward;
 use crate::{firewall, network};
 use clap::{self, Clap};
 use log::debug;
@@ -31,7 +34,7 @@ impl Teardown {
             }
         };
 
-        let _firewall_driver = match firewall::get_supported_firewall_driver() {
+        let firewall_driver = match firewall::get_supported_firewall_driver() {
             Ok(driver) => driver,
             Err(e) => panic!("{}", e.to_string()),
         };
@@ -41,6 +44,12 @@ impl Teardown {
                 "Setting up network {} with driver {}",
                 net_name, network.driver
             );
+            let interface_name: String = match network.network_interface.clone() {
+                None => "".to_string(),
+                Some(name) => name,
+            };
+            let count = CoreUtils::bridge_count_connected_interfaces(&interface_name)?;
+            let complete_teardown = count.len() == 1;
 
             match network.driver.as_str() {
                 "bridge" => {
@@ -58,9 +67,33 @@ impl Teardown {
                         &self.network_namespace_path,
                     )?;
                     // Teardown basic firewall port forwarding
-                    // firewall_driver.teardown_port_forward(network)?;
 
-                    // TODO teardown firewall if no interfaces connected to bridge!
+                    let id_network_hash = network::core_utils::CoreUtils::create_network_hash(
+                        &net_name,
+                        MAX_HASH_SIZE,
+                    );
+
+                    let port_bindings = network_options.port_mappings.clone();
+                    match port_bindings {
+                        None => {}
+                        Some(i) => {
+                            let td = TeardownPortForward {
+                                network: network.clone(),
+                                container_id: network_options.container_id.clone(),
+                                port_mappings: i,
+                                network_name: net_name,
+                                id_network_hash,
+                                options: (*per_network_opts).clone(),
+                                complete_teardown,
+                            };
+                            firewall_driver.teardown_port_forward(td)?;
+                        }
+                    }
+                    if complete_teardown {
+                        firewall_driver.teardown_network(network, complete_teardown)?;
+                        // Teardown the interface now
+                        network::core_utils::CoreUtils::remove_interface(&interface_name)?;
+                    }
                 }
                 // unknown driver
                 _ => {
