@@ -136,7 +136,7 @@ impl Setup {
                 }
                 "macvlan" => {
                     let per_network_opts =
-                        network_options.networks.get(&net_name).ok_or_else(|| {
+                        network_options.networks.get(net_name).ok_or_else(|| {
                             std::io::Error::new(
                                 std::io::ErrorKind::Other,
                                 format!("network options for network {} not found", net_name),
@@ -145,13 +145,10 @@ impl Setup {
                     //Configure Bridge and veth_pairs
                     let status_block = network::core::Core::macvlan_per_podman_network(
                         per_network_opts,
-                        &network,
+                        network,
                         &self.network_namespace_path,
                     )?;
-                    response.insert(net_name, status_block);
-                    // Setup basic firewall rules for each network.
-                    firewall_driver.setup_network(network)?;
-                    // TODO: Set up port forwarding. How? What network do we point to?
+                    response.insert(net_name.to_owned(), status_block);
                 }
                 // unknown driver
                 _ => {

@@ -34,6 +34,51 @@ impl CoreUtils {
         final_slice.join(":")
     }
 
+    #[tokio::main]
+    pub async fn get_default_route_interface() -> Result<String, std::io::Error> {
+        let (_connection, handle, _) = match rtnetlink::new_connection() {
+            Ok((conn, handle, messages)) => (conn, handle, messages),
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to connect: {}", err),
+                ))
+            }
+        };
+        tokio::spawn(_connection);
+
+        let mut routes = handle.route().get(rtnetlink::IpVersion::V4).execute();
+        loop {
+            match routes.try_next().await {
+                Ok(Some(route)) => {
+                    for nla in route.nlas.into_iter() {
+                        if let netlink_packet_route::route::Nla::Oif(interface_id) = nla {
+                            let mut links = handle.link().get().match_index(interface_id).execute();
+                            match links.try_next().await {
+                                Ok(Some(msg)) => {
+                                    for nla in msg.nlas.into_iter() {
+                                        if let Nla::IfName(name) = nla {
+                                            return Ok(name);
+                                        }
+                                    }
+                                }
+                                Err(_) => continue,
+                                Ok(None) => continue,
+                            };
+                        }
+                    }
+                }
+                Err(_) => continue,
+                Ok(None) => break,
+            }
+        }
+
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "no interfaces found for default route".to_string(),
+        ))
+    }
+
     //count interfaces on bridge
     #[tokio::main]
     #[allow(irrefutable_let_patterns)]

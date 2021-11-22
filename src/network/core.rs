@@ -238,16 +238,46 @@ impl Core {
         netns: &str,
     ) -> Result<types::StatusBlock, std::io::Error> {
         //  StatusBlock response
+        //  StatusBlock response
         let mut response = types::StatusBlock {
-            dns_search_domains: Some(Vec::new()),
-            dns_server_ips: Some(Vec::new()),
             interfaces: Some(HashMap::new()),
         };
         // Does config have a macvlan mode ? I think not
         // Important !! Hardcode MACVLAN_MODE to bridge
         let macvlan_mode: u32 = 4u32;
         // get master interface name
-        let master_ifname: String = network.network_interface.as_ref().unwrap().to_owned();
+        let mut master_ifname: String = match network.network_interface.as_ref() {
+            None => {
+                if let Ok(ifname) = core_utils::CoreUtils::get_default_route_interface() {
+                    ifname
+                } else {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "unable to find any valid master interface for macvlan".to_string(),
+                    ));
+                }
+            }
+            Some(interface) => interface.to_owned(),
+        };
+
+        // user could provide empty value as well so handle that
+        if master_ifname.is_empty() {
+            if let Ok(ifname) = core_utils::CoreUtils::get_default_route_interface() {
+                if ifname.is_empty() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "unable to find any valid master interface for macvlan".to_string(),
+                    ));
+                }
+                master_ifname = ifname;
+            } else {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "unable to find any valid master interface for macvlan".to_string(),
+                ));
+            }
+        }
+
         // static ip vector
         let mut address_vector = Vec::new();
         // network addresses for response
@@ -274,8 +304,8 @@ impl Core {
             // Add the IP to the address_vector
             address_vector.push(container_address);
             response_net_addresses.push(types::NetAddress {
-                gateway: subnet.gateway, // I dont think we need this in response vector for macvlan ? But let it be for now.
-                subnet: container_address,
+                gateway: subnet.gateway,
+                ipnet: container_address,
             });
         }
         debug!("Container macvlan name: {:?}", container_macvlan_name);
@@ -301,7 +331,7 @@ impl Core {
         debug!("Container macvlan mac: {:?}", container_macvlan_mac);
         let interface = types::NetInterface {
             mac_address: container_macvlan_mac,
-            networks: Option::from(response_net_addresses),
+            subnets: Option::from(response_net_addresses),
         };
         // Add interface to interfaces (part of StatusBlock)
         interfaces.insert(container_macvlan_name, interface);
