@@ -1,6 +1,6 @@
 use crate::firewall;
 use crate::network::types;
-use crate::network::types::{Network, PerNetworkOptions};
+use crate::network::types::{Network, PerNetworkOptions, TeardownPortForward};
 use log::debug;
 use std::collections::HashMap;
 use std::error::Error;
@@ -60,7 +60,11 @@ impl firewall::FirewallDriver for FirewallD {
         Ok(())
     }
 
-    fn teardown_network(&self, _net: types::Network) -> Result<(), Box<dyn Error>> {
+    fn teardown_network(
+        &self,
+        _net: types::Network,
+        _complete_teardown: bool,
+    ) -> Result<(), Box<dyn Error>> {
         todo!();
     }
 
@@ -78,12 +82,7 @@ impl firewall::FirewallDriver for FirewallD {
 
     fn teardown_port_forward(
         &self,
-        _network: Network,
-        _container_id: &str,
-        _port_mappings: Vec<types::PortMapping>,
-        _network_name: &str,
-        _id_network_hash: &str,
-        _options: &PerNetworkOptions,
+        _teardown_pf: TeardownPortForward,
     ) -> Result<(), Box<dyn Error>> {
         todo!();
     }

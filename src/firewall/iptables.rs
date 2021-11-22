@@ -1,7 +1,7 @@
 use crate::firewall;
 use crate::network::core_utils::CoreUtils;
 use crate::network::types;
-use crate::network::types::{Network, PerNetworkOptions};
+use crate::network::types::{Network, PerNetworkOptions, TeardownPortForward};
 use iptables;
 use iptables::IPTables;
 use log::debug;
@@ -102,9 +102,63 @@ impl firewall::FirewallDriver for IptablesDriver {
         }
         Ok(())
     }
+    // teardown_network should only be called in the case of
+    // a complete teardown.
+    fn teardown_network(
+        &self,
+        net: types::Network,
+        complete_teardown: bool,
+    ) -> Result<(), Box<dyn Error>> {
+        // Remove network specific general NAT rules
+        if let Some(subnet) = net.subnets {
+            for network in subnet {
+                let allow_incoming_rule = format!(
+                    "-d {} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+                    network.subnet.to_string()
+                );
 
-    fn teardown_network(&self, _net: types::Network) -> Result<(), Box<dyn Error>> {
-        todo!();
+                append_unique(
+                    &self.conn,
+                    FILTER_JUMP,
+                    PRIV_CHAIN_NAME,
+                    &allow_incoming_rule,
+                )?;
+
+                // Create outgoing traffic rule
+                // CNI did this by IP address, this is implemented per subnet
+                let allow_outgoing_rule = format!("-s {} -j ACCEPT", network.subnet.to_string());
+                append_unique(
+                    &self.conn,
+                    FILTER_JUMP,
+                    PRIV_CHAIN_NAME,
+                    &allow_outgoing_rule,
+                )?;
+                if complete_teardown {
+                    let allow_incoming_rule = format!(
+                        "-d {} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+                        network.subnet.to_string()
+                    );
+
+                    remove_if_rule_exists(
+                        &self.conn,
+                        FILTER_JUMP,
+                        PRIV_CHAIN_NAME,
+                        &allow_incoming_rule,
+                    )?;
+
+                    // CNI did this by IP address, this is implemented per subnet
+                    let allow_outgoing_rule =
+                        format!("-s {} -j ACCEPT", network.subnet.to_string());
+                    remove_if_rule_exists(
+                        &self.conn,
+                        FILTER_JUMP,
+                        PRIV_CHAIN_NAME,
+                        &allow_outgoing_rule,
+                    )?;
+                }
+            }
+        }
+        Result::Ok(())
     }
 
     fn setup_port_forward(
@@ -250,34 +304,26 @@ impl firewall::FirewallDriver for IptablesDriver {
         Result::Ok(())
     }
 
-    fn teardown_port_forward(
-        &self,
-        network: Network,
-        container_id: &str,
-        port_mappings: Vec<types::PortMapping>,
-        network_name: &str,
-        id_network_hash: &str,
-        options: &PerNetworkOptions,
-    ) -> Result<(), Box<dyn Error>> {
-        let container_ips = options.static_ips.as_ref().ok_or_else(|| {
+    fn teardown_port_forward(&self, tear: TeardownPortForward) -> Result<(), Box<dyn Error>> {
+        let container_ips = tear.options.static_ips.as_ref().ok_or_else(|| {
             std::io::Error::new(std::io::ErrorKind::Other, "no container ip provided")
         })?;
-        let networks = &network.subnets.as_ref().ok_or_else(|| {
+        let networks = tear.network.subnets.as_ref().ok_or_else(|| {
             std::io::Error::new(std::io::ErrorKind::Other, "no network address provided")
         })?;
         let container_network_address = networks[0].subnet;
-        let network_dn_chain_name = CONTAINER_DN_CHAIN.to_owned() + id_network_hash;
+        let network_dn_chain_name = CONTAINER_DN_CHAIN.to_owned() + tear.id_network_hash.as_ref();
         let comment_dn_network_cid = format!(
             "-m comment --comment 'dnat name: {} id: {}'",
-            network_name, container_id
+            tear.network_name, tear.container_id
         );
-        let network_chain_name = CONTAINER_CHAIN.to_owned() + id_network_hash;
+        let network_chain_name = CONTAINER_CHAIN.to_owned() + tear.id_network_hash.as_ref();
         let container_ip = container_ips[0];
         // First delete any container specific rules
         // POSTROUTING
         let comment_network_cid = format!(
             "-m comment --comment 'name: {} id: {}'",
-            network_name, container_id
+            tear.network_name, tear.container_id
         );
         remove_if_rule_exists(
             &self.conn,
@@ -292,7 +338,7 @@ impl firewall::FirewallDriver for IptablesDriver {
         )?;
 
         // Iterate on ports
-        for i in port_mappings {
+        for i in tear.port_mappings {
             // hostport dnat
             let hostport_dnat_rule = format!(
                 "-j {} -p tcp -m multiport --destination-ports {} {}",
@@ -339,11 +385,13 @@ impl firewall::FirewallDriver for IptablesDriver {
                 &container_dest_rule,
             )?;
         }
-
-        // TODO Once we have a function to detect if this is the last container
-        // on the network, we can rip down the additional iptables rules that are
-        // network based.
-
+        // If last container on the network, then teardown network based rules
+        if tear.complete_teardown {
+            // Remove the entire NETAVARK-<HASH> chain
+            remove_chain_and_rules(&self.conn, NAT, &network_chain_name)?;
+            // Remove the entire NETAVARK-DN-<HASH> chain
+            remove_chain_and_rules(&self.conn, NAT, &network_dn_chain_name)?;
+        }
         Result::Ok(())
     }
 }
@@ -390,6 +438,21 @@ fn chain_exists(driver: &IPTables, table: &str, chain: &str) -> Result<bool, Box
         return serde::__private::Result::Ok(true);
     }
     serde::__private::Result::Ok(false)
+}
+
+fn remove_chain_and_rules(
+    driver: &IPTables,
+    table: &str,
+    chain: &str,
+) -> Result<(), Box<dyn Error>> {
+    let exists = chain_exists(driver, table, chain)?;
+    // If the chain is not there, we cannot delete the rules.  This
+    // should not be fatal
+    if !exists {
+        return Result::Ok(());
+    }
+    driver.flush_chain(table, chain)?;
+    driver.delete_chain(table, chain)
 }
 
 fn remove_if_rule_exists(
