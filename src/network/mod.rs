@@ -4,6 +4,7 @@ use anyhow::Result;
 use std::fs::File;
 pub mod core;
 pub mod core_utils;
+pub mod internal_types;
 
 impl types::NetworkOptions {
     pub fn load(path: &str) -> Result<types::NetworkOptions> {

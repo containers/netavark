@@ -1,7 +1,8 @@
 use crate::firewall;
 use crate::network::core_utils::CoreUtils;
-use crate::network::types;
-use crate::network::types::{Network, PerNetworkOptions, TeardownPortForward};
+use crate::network::internal_types::{
+    SetupNetwork, SetupPortForward, TearDownNetwork, TeardownPortForward,
+};
 use iptables;
 use iptables::IPTables;
 use log::debug;
@@ -42,14 +43,11 @@ pub fn new() -> Result<Box<dyn firewall::FirewallDriver>, Box<dyn Error>> {
 }
 
 impl firewall::FirewallDriver for IptablesDriver {
-    fn setup_network(
-        &self,
-        net: types::Network,
-        network_hash_name: String,
-    ) -> Result<(), Box<dyn Error>> {
-        if let Some(subnet) = net.subnets {
+    fn setup_network(&self, network_setup: SetupNetwork) -> Result<(), Box<dyn Error>> {
+        if let Some(subnet) = network_setup.net.subnets {
             for network in subnet {
-                let prefixed_network_hash_name = format!("{}-{}", "NETAVARK", network_hash_name);
+                let prefixed_network_hash_name =
+                    format!("{}-{}", "NETAVARK", network_setup.network_hash_name);
                 add_chain_unique(&self.conn, NAT, &prefixed_network_hash_name)?;
 
                 // declare the rule
@@ -102,15 +100,12 @@ impl firewall::FirewallDriver for IptablesDriver {
         }
         Ok(())
     }
+
     // teardown_network should only be called in the case of
     // a complete teardown.
-    fn teardown_network(
-        &self,
-        net: types::Network,
-        complete_teardown: bool,
-    ) -> Result<(), Box<dyn Error>> {
+    fn teardown_network(&self, tear: TearDownNetwork) -> Result<(), Box<dyn Error>> {
         // Remove network specific general NAT rules
-        if let Some(subnet) = net.subnets {
+        if let Some(subnet) = tear.net.subnets {
             for network in subnet {
                 let allow_incoming_rule = format!(
                     "-d {} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
@@ -133,7 +128,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                     PRIV_CHAIN_NAME,
                     &allow_outgoing_rule,
                 )?;
-                if complete_teardown {
+                if tear.complete_teardown {
                     let allow_incoming_rule = format!(
                         "-d {} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
                         network.subnet.to_string()
@@ -158,21 +153,14 @@ impl firewall::FirewallDriver for IptablesDriver {
                 }
             }
         }
+
         Result::Ok(())
     }
 
-    fn setup_port_forward(
-        &self,
-        network: Network,
-        container_id: &str,
-        port_mappings: Vec<types::PortMapping>,
-        network_name: &str,
-        id_network_hash: &str,
-        options: &PerNetworkOptions,
-    ) -> Result<(), Box<dyn Error>> {
+    fn setup_port_forward(&self, setup_portfw: SetupPortForward) -> Result<(), Box<dyn Error>> {
         // Need to enable sysctl localnet so that traffic can pass
         // through localhost to containers
-        let network_interface = network.network_interface;
+        let network_interface = setup_portfw.net.network_interface;
         match network_interface {
             None => {}
             Some(i) => {
@@ -180,25 +168,25 @@ impl firewall::FirewallDriver for IptablesDriver {
                 CoreUtils::apply_sysctl_value(localnet_path.as_str(), "1")?;
             }
         }
-        let container_ips = options.static_ips.as_ref().ok_or_else(|| {
+        let container_ips = setup_portfw.options.static_ips.as_ref().ok_or_else(|| {
             std::io::Error::new(std::io::ErrorKind::Other, "no container ip provided")
         })?;
         let container_ip = container_ips[0];
-        let networks = &network.subnets.as_ref().ok_or_else(|| {
+        let networks = setup_portfw.net.subnets.as_ref().ok_or_else(|| {
             std::io::Error::new(std::io::ErrorKind::Other, "no network address provided")
         })?;
         let container_network_address = networks[0].subnet;
         // Set up all chains
-        let network_dn_chain_name = CONTAINER_DN_CHAIN.to_owned() + id_network_hash;
-        let network_chain_name = CONTAINER_CHAIN.to_owned() + id_network_hash;
+        let network_dn_chain_name = CONTAINER_DN_CHAIN.to_owned() + &setup_portfw.network_hash_name;
+        let network_chain_name = CONTAINER_CHAIN.to_owned() + &setup_portfw.network_hash_name;
 
         let comment_network_cid = format!(
             "-m comment --comment 'name: {} id: {}'",
-            network_name, container_id
+            setup_portfw.network_name, setup_portfw.container_id
         );
         let comment_dn_network_cid = format!(
             "-m comment --comment 'dnat name: {} id: {}'",
-            network_name, container_id
+            setup_portfw.network_name, setup_portfw.container_id
         );
         // Make sure chains exist or create them
         add_chain_unique(&self.conn, NAT, HOSTPORT_DNAT_CHAIN)?;
@@ -253,7 +241,7 @@ impl firewall::FirewallDriver for IptablesDriver {
         )?;
 
         // FOR EACH PORT
-        for i in port_mappings {
+        for i in setup_portfw.port_mappings {
             // hostport dnat
             let hostport_dnat_rule = format!(
                 "-j {} -p tcp -m multiport --destination-ports {} {}",

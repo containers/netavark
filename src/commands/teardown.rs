@@ -1,7 +1,7 @@
 use crate::error::NetavarkError;
 use crate::firewall::iptables::MAX_HASH_SIZE;
 use crate::network::core_utils::CoreUtils;
-use crate::network::types::TeardownPortForward;
+use crate::network::internal_types::{TearDownNetwork, TeardownPortForward};
 use crate::{firewall, network};
 use clap::{self, Clap};
 use log::debug;
@@ -90,7 +90,11 @@ impl Teardown {
                         }
                     }
                     if complete_teardown {
-                        firewall_driver.teardown_network(network, complete_teardown)?;
+                        let ctd = TearDownNetwork {
+                            net: network,
+                            complete_teardown,
+                        };
+                        firewall_driver.teardown_network(ctd)?;
                         // Teardown the interface now
                         network::core_utils::CoreUtils::remove_interface(&interface_name)?;
                     }
