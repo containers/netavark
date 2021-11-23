@@ -4,6 +4,7 @@ use crate::firewall;
 use crate::firewall::iptables::MAX_HASH_SIZE;
 use crate::network;
 use crate::network::core_utils::CoreUtils;
+use crate::network::internal_types::{SetupNetwork, SetupPortForward};
 use crate::network::{core_utils, types};
 use clap::{self, Clap};
 use log::debug;
@@ -82,21 +83,25 @@ impl Setup {
                     response.insert(net_name.to_owned(), status_block);
 
                     let id_network_hash = CoreUtils::create_network_hash(net_name, MAX_HASH_SIZE);
-                    firewall_driver.setup_network(network.clone(), id_network_hash.clone())?;
+                    let sn = SetupNetwork {
+                        net: (*network).clone(),
+                        network_hash_name: id_network_hash.clone(),
+                    };
+                    firewall_driver.setup_network(sn)?;
 
                     let port_bindings = network_options.port_mappings.clone();
                     match port_bindings {
                         None => {}
                         Some(i) => {
-                            firewall_driver.setup_port_forward(
-                                network.clone(),
-                                &network_options.container_id,
-                                i,
-                                net_name,
-                                &id_network_hash,
-                                per_network_opts,
-                                // &id_network_hash.as_str()[0..MAX_HASH_SIZE],
-                            )?;
+                            let spf = SetupPortForward {
+                                net: (*network).clone(),
+                                container_id: network_options.container_id.clone(),
+                                port_mappings: i,
+                                network_name: (*net_name).clone(),
+                                network_hash_name: id_network_hash,
+                                options: (*per_network_opts).clone(),
+                            };
+                            firewall_driver.setup_port_forward(spf)?;
                         }
                     }
                 }

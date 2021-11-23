@@ -1,6 +1,6 @@
 use crate::firewall;
-use crate::network::types;
-use crate::network::types::{Network, PerNetworkOptions, TeardownPortForward};
+use crate::network::internal_types::{SetupPortForward, TearDownNetwork, TeardownPortForward};
+use crate::network::{internal_types, types};
 use log::debug;
 use std::collections::HashMap;
 use std::error::Error;
@@ -23,8 +23,7 @@ pub fn new(conn: Connection) -> Result<Box<dyn firewall::FirewallDriver>, Box<dy
 impl firewall::FirewallDriver for FirewallD {
     fn setup_network(
         &self,
-        net: types::Network,
-        _network_hash: String,
+        network_setup: internal_types::SetupNetwork,
     ) -> Result<(), Box<dyn Error>> {
         let mut need_reload = false;
 
@@ -50,7 +49,7 @@ impl firewall::FirewallDriver for FirewallD {
 
         // MUST come after the reload; otherwise the zone we made might not be
         // in the running config.
-        if let Some(nets) = net.subnets {
+        if let Some(nets) = network_setup.net.subnets {
             match add_source_subnets_to_zone(&self.conn, ZONENAME, nets) {
                 Ok(_) => {}
                 Err(e) => bail!("Error adding source subnets to zone {}: {}", ZONENAME, e),
@@ -60,23 +59,11 @@ impl firewall::FirewallDriver for FirewallD {
         Ok(())
     }
 
-    fn teardown_network(
-        &self,
-        _net: types::Network,
-        _complete_teardown: bool,
-    ) -> Result<(), Box<dyn Error>> {
+    fn teardown_network(&self, _tear: TearDownNetwork) -> Result<(), Box<dyn Error>> {
         todo!();
     }
 
-    fn setup_port_forward(
-        &self,
-        _network: Network,
-        _container_id: &str,
-        _port_mappings: Vec<types::PortMapping>,
-        _network_name: &str,
-        _id_network_hash: &str,
-        _options: &PerNetworkOptions,
-    ) -> Result<(), Box<dyn Error>> {
+    fn setup_port_forward(&self, _setup_portfw: SetupPortForward) -> Result<(), Box<dyn Error>> {
         todo!();
     }
 
