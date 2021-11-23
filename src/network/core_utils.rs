@@ -1,3 +1,4 @@
+use crate::network::constants;
 use futures::stream::TryStreamExt;
 use futures::StreamExt;
 use libc;
@@ -32,6 +33,23 @@ impl CoreUtils {
             final_slice.push(a);
         }
         final_slice.join(":")
+    }
+
+    pub fn get_macvlan_mode_from_string(mode: &str) -> Result<u32, std::io::Error> {
+        // Replace to constant from library once this gets merged.
+        // TODO: use actual constants after https://github.com/little-dude/netlink/pull/200
+        match mode {
+            "bridge" => Ok(constants::MACVLAN_MODE_BRIDGE),
+            "private" => Ok(constants::MACVLAN_MODE_PRIVATE),
+            "vepa" => Ok(constants::MACVLAN_MODE_VEPA),
+            "passthru" => Ok(constants::MACVLAN_MODE_PASSTHRU),
+            "source" => Ok(constants::MACVLAN_MODE_SOURCE),
+            // default to bridge
+            _ => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "invalid macvlan mode".to_string(),
+            )),
+        }
     }
 
     #[tokio::main]

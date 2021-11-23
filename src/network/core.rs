@@ -1,5 +1,5 @@
 use crate::network::types::NetAddress;
-use crate::network::{core_utils, types};
+use crate::network::{constants, core_utils, types};
 use ipnet;
 use log::debug;
 use log::warn;
@@ -242,9 +242,21 @@ impl Core {
         let mut response = types::StatusBlock {
             interfaces: Some(HashMap::new()),
         };
-        // Does config have a macvlan mode ? I think not
-        // Important !! Hardcode MACVLAN_MODE to bridge
-        let macvlan_mode: u32 = 4u32;
+        // Default MACVLAN_MODE to bridge or get from driver options
+        let mut macvlan_mode: u32 = constants::MACVLAN_MODE_BRIDGE;
+        if let Some(options_map) = network.options.as_ref() {
+            if let Some(mode) = options_map.get("mode") {
+                match core_utils::CoreUtils::get_macvlan_mode_from_string(mode) {
+                    Ok(mode) => {
+                        macvlan_mode = mode;
+                    }
+                    Err(err) => {
+                        return Err(err);
+                    }
+                }
+            }
+        }
+
         // get master interface name
         let mut master_ifname: String = match network.network_interface.as_ref() {
             None => {
