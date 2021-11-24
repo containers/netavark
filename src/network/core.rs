@@ -110,7 +110,7 @@ impl Core {
             Err(err) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("failed configure bridge and veth interface: {}", err),
+                    format!("failed to configure bridge and veth interface: {}", err),
                 ))
             }
         };

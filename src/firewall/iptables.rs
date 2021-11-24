@@ -30,15 +30,23 @@ const DNAT_JUMP: &str = "DNAT";
 const MASQ_JUMP: &str = "MASQUERADE";
 const ACCEPT_JUMP: &str = "ACCEPT";
 
+const MULTICAST_NET_V4: &str = "224.0.0.0/4";
+const MULTICAST_NET_V6: &str = "ff00::/8";
+
 // Iptables driver - uses direct iptables commands via the iptables crate.
 pub struct IptablesDriver {
     conn: IPTables,
+    conn6: IPTables,
 }
 
 pub fn new() -> Result<Box<dyn firewall::FirewallDriver>, Box<dyn Error>> {
     // create an iptables connection
     let ipt = iptables::new(false)?;
-    let driver = IptablesDriver { conn: ipt };
+    let ipt6 = iptables::new(true)?;
+    let driver = IptablesDriver {
+        conn: ipt,
+        conn6: ipt6,
+    };
     Ok(Box::new(driver))
 }
 
@@ -46,9 +54,15 @@ impl firewall::FirewallDriver for IptablesDriver {
     fn setup_network(&self, network_setup: SetupNetwork) -> Result<(), Box<dyn Error>> {
         if let Some(subnet) = network_setup.net.subnets {
             for network in subnet {
+                let is_ipv6 = network.subnet.network().is_ipv6();
+                let mut conn = &self.conn;
+                if is_ipv6 {
+                    conn = &self.conn6;
+                }
+
                 let prefixed_network_hash_name =
                     format!("{}-{}", "NETAVARK", network_setup.network_hash_name);
-                add_chain_unique(&self.conn, NAT, &prefixed_network_hash_name)?;
+                add_chain_unique(conn, NAT, &prefixed_network_hash_name)?;
 
                 let nat_chain_rule = format!(
                     "-s {} -j {}",
@@ -56,54 +70,51 @@ impl firewall::FirewallDriver for IptablesDriver {
                     prefixed_network_hash_name
                 )
                 .to_string();
-                append_unique(&self.conn, NAT, POSTROUTING_JUMP, &nat_chain_rule)?;
+                append_unique(conn, NAT, POSTROUTING_JUMP, &nat_chain_rule)?;
 
                 // declare the rule
                 let nat_rule =
                     format!("-d {} -j {}", network.subnet.to_string(), ACCEPT_JUMP).to_string();
-                append_unique(&self.conn, NAT, &prefixed_network_hash_name, &nat_rule)?;
+
+                append_unique(conn, NAT, &prefixed_network_hash_name, &nat_rule)?;
 
                 //  Add first rule for the network
-                let masq_rule = "! -d 224.0.0.0/4 -j MASQUERADE".to_string();
-                append_unique(&self.conn, NAT, &prefixed_network_hash_name, &masq_rule)?;
-
-                //  Add private chain name if it does not exist
-                add_chain_unique(&self.conn, FILTER_JUMP, PRIV_CHAIN_NAME)?;
-
-                //  Create netavark firewall rule
-                let netavark_fw = format!(
-                    "-m comment --comment 'netavark firewall plugin rules' -j {}",
-                    PRIV_CHAIN_NAME
-                );
-                // Insert the rule into the first position
-                if !self.conn.exists(FILTER_JUMP, "FORWARD", &netavark_fw)? {
-                    self.conn
-                        .insert(FILTER_JUMP, "FORWARD", &netavark_fw, 1)
-                        .map(|_| debug_rule_create(FILTER_JUMP, "FORWARD", netavark_fw))?;
+                let mut multicast_dest = MULTICAST_NET_V4;
+                if is_ipv6 {
+                    multicast_dest = MULTICAST_NET_V6;
                 }
-                // Create incoming traffic rule
-                // CNI did this by IP address, this is implemented per subnet
-                let allow_incoming_rule = format!(
-                    "-d {} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
-                    network.subnet.to_string()
-                );
+                let masq_rule = format!("! -d {} -j MASQUERADE", multicast_dest).to_string();
+                append_unique(conn, NAT, &prefixed_network_hash_name, &masq_rule)?;
 
-                append_unique(
-                    &self.conn,
-                    FILTER_JUMP,
-                    PRIV_CHAIN_NAME,
-                    &allow_incoming_rule,
-                )?;
+                if !is_ipv6 {
+                    //  Add private chain name if it does not exist
+                    add_chain_unique(conn, FILTER_JUMP, PRIV_CHAIN_NAME)?;
 
-                // Create outgoing traffic rule
-                // CNI did this by IP address, this is implemented per subnet
-                let allow_outgoing_rule = format!("-s {} -j ACCEPT", network.subnet.to_string());
-                append_unique(
-                    &self.conn,
-                    FILTER_JUMP,
-                    PRIV_CHAIN_NAME,
-                    &allow_outgoing_rule,
-                )?;
+                    //  Create netavark firewall rule
+                    let netavark_fw = format!(
+                        "-m comment --comment 'netavark firewall plugin rules' -j {}",
+                        PRIV_CHAIN_NAME
+                    );
+                    // Insert the rule into the first position
+                    if !conn.exists(FILTER_JUMP, "FORWARD", &netavark_fw)? {
+                        conn.insert(FILTER_JUMP, "FORWARD", &netavark_fw, 1)
+                            .map(|_| debug_rule_create(FILTER_JUMP, "FORWARD", netavark_fw))?;
+                    }
+                    // Create incoming traffic rule
+                    // CNI did this by IP address, this is implemented per subnet
+                    let allow_incoming_rule = format!(
+                        "-d {} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+                        network.subnet.to_string()
+                    );
+
+                    append_unique(conn, FILTER_JUMP, PRIV_CHAIN_NAME, &allow_incoming_rule)?;
+
+                    // Create outgoing traffic rule
+                    // CNI did this by IP address, this is implemented per subnet
+                    let allow_outgoing_rule =
+                        format!("-s {} -j ACCEPT", network.subnet.to_string());
+                    append_unique(conn, FILTER_JUMP, PRIV_CHAIN_NAME, &allow_outgoing_rule)?;
+                }
             }
         }
         Ok(())
@@ -115,35 +126,24 @@ impl firewall::FirewallDriver for IptablesDriver {
         // Remove network specific general NAT rules
         if let Some(subnet) = tear.net.subnets {
             for network in subnet {
-                let allow_incoming_rule = format!(
-                    "-d {} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
-                    network.subnet.to_string()
-                );
+                let is_ipv6 = network.subnet.network().is_ipv6();
+                let mut conn = &self.conn;
+                if is_ipv6 {
+                    conn = &self.conn6;
+                }
 
-                append_unique(
-                    &self.conn,
-                    FILTER_JUMP,
-                    PRIV_CHAIN_NAME,
-                    &allow_incoming_rule,
-                )?;
-
-                // Create outgoing traffic rule
+                // Remove outgoing traffic rule
                 // CNI did this by IP address, this is implemented per subnet
                 let allow_outgoing_rule = format!("-s {} -j ACCEPT", network.subnet.to_string());
-                append_unique(
-                    &self.conn,
-                    FILTER_JUMP,
-                    PRIV_CHAIN_NAME,
-                    &allow_outgoing_rule,
-                )?;
-                if tear.complete_teardown {
+                append_unique(conn, FILTER_JUMP, PRIV_CHAIN_NAME, &allow_outgoing_rule)?;
+                if tear.complete_teardown && !is_ipv6 {
                     let allow_incoming_rule = format!(
                         "-d {} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
                         network.subnet.to_string()
                     );
 
                     remove_if_rule_exists(
-                        &self.conn,
+                        conn,
                         FILTER_JUMP,
                         PRIV_CHAIN_NAME,
                         &allow_incoming_rule,
@@ -153,7 +153,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                     let allow_outgoing_rule =
                         format!("-s {} -j ACCEPT", network.subnet.to_string());
                     remove_if_rule_exists(
-                        &self.conn,
+                        conn,
                         FILTER_JUMP,
                         PRIV_CHAIN_NAME,
                         &allow_outgoing_rule,
@@ -168,6 +168,11 @@ impl firewall::FirewallDriver for IptablesDriver {
     fn setup_port_forward(&self, setup_portfw: SetupPortForward) -> Result<(), Box<dyn Error>> {
         // Need to enable sysctl localnet so that traffic can pass
         // through localhost to containers
+        let is_ipv6 = setup_portfw.container_ip.is_ipv6();
+        let mut conn = &self.conn;
+        if is_ipv6 {
+            conn = &self.conn6;
+        }
         let network_interface = setup_portfw.net.network_interface;
         match network_interface {
             None => {}
@@ -176,14 +181,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                 CoreUtils::apply_sysctl_value(localnet_path.as_str(), "1")?;
             }
         }
-        let container_ips = setup_portfw.options.static_ips.as_ref().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::Other, "no container ip provided")
-        })?;
-        let container_ip = container_ips[0];
-        let networks = setup_portfw.net.subnets.as_ref().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::Other, "no network address provided")
-        })?;
-        let container_network_address = networks[0].subnet;
+        let container_network_address = setup_portfw.network_address.subnet;
         // Set up all chains
         let network_dn_chain_name = CONTAINER_DN_CHAIN.to_owned() + &setup_portfw.network_hash_name;
         let network_chain_name = CONTAINER_CHAIN.to_owned() + &setup_portfw.network_hash_name;
@@ -197,59 +195,54 @@ impl firewall::FirewallDriver for IptablesDriver {
             setup_portfw.network_name, setup_portfw.container_id
         );
         // Make sure chains exist or create them
-        add_chain_unique(&self.conn, NAT, HOSTPORT_DNAT_CHAIN)?;
-        add_chain_unique(&self.conn, NAT, HOSTPORT_SETMARK_CHAIN)?;
-        add_chain_unique(&self.conn, NAT, NETAVARK_HOSTPORT_MASK_CHAIN)?;
-        add_chain_unique(&self.conn, NAT, &network_dn_chain_name)?;
+        add_chain_unique(conn, NAT, HOSTPORT_DNAT_CHAIN)?;
+        add_chain_unique(conn, NAT, HOSTPORT_SETMARK_CHAIN)?;
+        add_chain_unique(conn, NAT, NETAVARK_HOSTPORT_MASK_CHAIN)?;
+        add_chain_unique(conn, NAT, &network_dn_chain_name)?;
 
         // Setup one-off rules that have nothing to do with ports
         // PREROUTING
         let prerouting_rule = format!("-j {} -m addrtype --dst-type LOCAL", HOSTPORT_DNAT_CHAIN);
-        append_unique(&self.conn, NAT, PREROUTING_CHAIN, &prerouting_rule)?;
+        append_unique(conn, NAT, PREROUTING_CHAIN, &prerouting_rule)?;
 
         // OUTPUT
         let portmap_output_rule =
             format!("-j {} -m addrtype --dst-type LOCAL", HOSTPORT_DNAT_CHAIN);
-        append_unique(&self.conn, NAT, OUTPUT_CHAIN, &portmap_output_rule)?;
+        append_unique(conn, NAT, OUTPUT_CHAIN, &portmap_output_rule)?;
 
         //  SETMARK-CHAIN
         let setmark_rule = format!("-j {}  --set-xmark {}/{}", MARK_JUMP, HEXMARK, HEXMARK);
-        append_unique(&self.conn, NAT, HOSTPORT_SETMARK_CHAIN, &setmark_rule)?;
+        append_unique(conn, NAT, HOSTPORT_SETMARK_CHAIN, &setmark_rule)?;
 
         //  HOSTPORT-MASQ
         let hostport_masq_rule = format!(
             "-j {} -m comment --comment 'netavark portfw masq mark' -m mark --mark {}/{}",
             MASQ_JUMP, HEXMARK, HEXMARK
         );
-        append_unique(
-            &self.conn,
-            NAT,
-            NETAVARK_HOSTPORT_MASK_CHAIN,
-            &hostport_masq_rule,
-        )?;
+        append_unique(conn, NAT, NETAVARK_HOSTPORT_MASK_CHAIN, &hostport_masq_rule)?;
 
         // POSTROUTING
         append_unique(
-            &self.conn,
+            conn,
             NAT,
             POSTROUTING_JUMP,
             &format!("-j {} ", NETAVARK_HOSTPORT_MASK_CHAIN),
         )?;
 
         append_unique(
-            &self.conn,
+            conn,
             NAT,
             POSTROUTING_JUMP,
             &format!(
                 "-j {} -s {} {}",
                 network_chain_name,
-                container_ip.to_string(),
+                setup_portfw.container_ip.to_string(),
                 comment_network_cid
             ),
         )?;
 
         // FOR EACH PORT
-        for i in setup_portfw.port_mappings {
+        for i in setup_portfw.port_mappings.clone() {
             // hostport dnat
             let hostport_dnat_rule = format!(
                 "-j {} -p tcp -m multiport --destination-ports {} {}",
@@ -257,7 +250,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                 i.host_port.to_string(),
                 comment_dn_network_cid
             );
-            append_unique(&self.conn, NAT, HOSTPORT_DNAT_CHAIN, &hostport_dnat_rule)?;
+            append_unique(conn, NAT, HOSTPORT_DNAT_CHAIN, &hostport_dnat_rule)?;
             // dn container (the actual port usages)
             let setmark_network_rule = format!(
                 "-j {} -s {} -p tcp --dport {}",
@@ -265,45 +258,40 @@ impl firewall::FirewallDriver for IptablesDriver {
                 container_network_address.to_string(),
                 i.host_port.to_string()
             );
-            append_unique(
-                &self.conn,
-                NAT,
-                &network_dn_chain_name,
-                &setmark_network_rule,
-            )?;
-            let setmark_localhost_rule = format!(
-                "-j {} -s 127.0.0.1 -p tcp --dport {}",
-                HOSTPORT_SETMARK_CHAIN,
-                i.host_port.to_string()
-            );
-            append_unique(
-                &self.conn,
-                NAT,
-                &network_dn_chain_name,
-                &setmark_localhost_rule,
-            )?;
+            append_unique(conn, NAT, &network_dn_chain_name, &setmark_network_rule)?;
+            if !is_ipv6 {
+                let setmark_localhost_rule = format!(
+                    "-j {} -s 127.0.0.1 -p tcp --dport {}",
+                    HOSTPORT_SETMARK_CHAIN,
+                    i.host_port.to_string()
+                );
+                append_unique(conn, NAT, &network_dn_chain_name, &setmark_localhost_rule)?;
+            }
+            let mut container_ip_value = setup_portfw.container_ip.to_string();
+            if is_ipv6 {
+                container_ip_value = format!("[{}]", container_ip_value)
+            }
             let container_dest_rule = format!(
                 "-j {} -p tcp --to-destination {}:{} --destination-port {}",
                 DNAT_JUMP,
-                container_ip.to_string(),
+                container_ip_value,
                 i.container_port.to_string(),
                 i.host_port.to_string()
             );
-            append_unique(
-                &self.conn,
-                NAT,
-                &network_dn_chain_name,
-                &container_dest_rule,
-            )?;
+            append_unique(conn, NAT, &network_dn_chain_name, &container_dest_rule)?;
         }
 
         Result::Ok(())
     }
 
     fn teardown_port_forward(&self, tear: TeardownPortForward) -> Result<(), Box<dyn Error>> {
-        let container_ips = tear.options.static_ips.as_ref().ok_or_else(|| {
-            std::io::Error::new(std::io::ErrorKind::Other, "no container ip provided")
-        })?;
+        let mut localhost_ip = "127.0.0.1";
+        let is_ipv6 = tear.container_ip.is_ipv6();
+        let mut conn = &self.conn;
+        if is_ipv6 {
+            conn = &self.conn6;
+            localhost_ip = "::1";
+        }
         let networks = tear.network.subnets.as_ref().ok_or_else(|| {
             std::io::Error::new(std::io::ErrorKind::Other, "no network address provided")
         })?;
@@ -314,7 +302,6 @@ impl firewall::FirewallDriver for IptablesDriver {
             tear.network_name, tear.container_id
         );
         let network_chain_name = CONTAINER_CHAIN.to_owned() + tear.id_network_hash.as_ref();
-        let container_ip = container_ips[0];
         // First delete any container specific rules
         // POSTROUTING
         let comment_network_cid = format!(
@@ -322,17 +309,16 @@ impl firewall::FirewallDriver for IptablesDriver {
             tear.network_name, tear.container_id
         );
         remove_if_rule_exists(
-            &self.conn,
+            conn,
             NAT,
             POSTROUTING_JUMP,
             &format!(
                 "-j {} -s {} {}",
                 network_chain_name,
-                container_ip.to_string(),
+                tear.container_ip.to_string(),
                 comment_network_cid
             ),
         )?;
-
         // Iterate on ports
         for i in tear.port_mappings {
             // hostport dnat
@@ -342,7 +328,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                 i.host_port.to_string(),
                 comment_dn_network_cid
             );
-            remove_if_rule_exists(&self.conn, NAT, HOSTPORT_DNAT_CHAIN, &hostport_dnat_rule)?;
+            remove_if_rule_exists(conn, NAT, HOSTPORT_DNAT_CHAIN, &hostport_dnat_rule)?;
             // dn container (the actual port usages)
             let setmark_network_rule = format!(
                 "-j {} -s {} -p tcp --dport {}",
@@ -350,43 +336,39 @@ impl firewall::FirewallDriver for IptablesDriver {
                 container_network_address.to_string(),
                 i.host_port.to_string()
             );
-            remove_if_rule_exists(
-                &self.conn,
-                NAT,
-                &network_dn_chain_name,
-                &setmark_network_rule,
-            )?;
+            remove_if_rule_exists(conn, NAT, &network_dn_chain_name, &setmark_network_rule)?;
             let setmark_localhost_rule = format!(
-                "-j {} -s 127.0.0.1 -p tcp --dport {}",
+                "-j {} -s {} -p tcp --dport {}",
                 HOSTPORT_SETMARK_CHAIN,
+                localhost_ip,
                 i.host_port.to_string()
             );
-            remove_if_rule_exists(
-                &self.conn,
-                NAT,
-                &network_dn_chain_name,
-                &setmark_localhost_rule,
-            )?;
+            remove_if_rule_exists(conn, NAT, &network_dn_chain_name, &setmark_localhost_rule)?;
             let container_dest_rule = format!(
                 "-j {} -p tcp --to-destination {}:{} --destination-port {}",
                 DNAT_JUMP,
-                container_ip.to_string(),
+                tear.container_ip.to_string(),
                 i.container_port.to_string(),
                 i.host_port.to_string()
             );
-            remove_if_rule_exists(
-                &self.conn,
-                NAT,
-                &network_dn_chain_name,
-                &container_dest_rule,
-            )?;
+            remove_if_rule_exists(conn, NAT, &network_dn_chain_name, &container_dest_rule)?;
         }
         // If last container on the network, then teardown network based rules
         if tear.complete_teardown {
+            let prefixed_network_hash_name = format!("{}-{}", "NETAVARK", tear.id_network_hash);
+            // Remove the network nat rule from POSTROUTING so chains
+            // can be deleted
+            let nat_chain_rule = format!(
+                "-s {} -j {}",
+                tear.network_address.subnet.to_string(),
+                prefixed_network_hash_name
+            );
+
+            remove_if_rule_exists(conn, NAT, POSTROUTING_JUMP, &nat_chain_rule)?;
             // Remove the entire NETAVARK-<HASH> chain
-            remove_chain_and_rules(&self.conn, NAT, &network_chain_name)?;
+            remove_chain_and_rules(conn, NAT, &network_chain_name)?;
             // Remove the entire NETAVARK-DN-<HASH> chain
-            remove_chain_and_rules(&self.conn, NAT, &network_dn_chain_name)?;
+            remove_chain_and_rules(conn, NAT, &network_dn_chain_name)?;
         }
         Result::Ok(())
     }
