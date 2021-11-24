@@ -32,7 +32,7 @@ _dnf_opts="--exclude=kernel --setopt=keepcache=True --setopt=check_config_file_a
 retry dnf $_dnf_opts update -y
 
 warntodo "Installing Rust toolchain"
-retry dnf $_dnf_opts install -y rust clippy rustfmt cargo
+retry dnf $_dnf_opts install -y rust clippy rustfmt cargo dbus-daemon firewalld
 
 # Oddly this is necessary to catch some corner-cases.
 warntodo "Upgrading packages"

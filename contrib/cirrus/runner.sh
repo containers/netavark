@@ -28,6 +28,11 @@ _run_unit() {
     make test
 }
 
+_run_integration() {
+    # TODO: No Makefile target for these at the time of this commit
+    bats ./test/
+}
+
 show_env_vars
 
 msg "************************************************************"
