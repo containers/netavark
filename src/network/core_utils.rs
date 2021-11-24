@@ -1,3 +1,4 @@
+use crate::network::constants;
 use futures::stream::TryStreamExt;
 use futures::StreamExt;
 use libc;
@@ -34,6 +35,68 @@ impl CoreUtils {
             final_slice.push(a);
         }
         final_slice.join(":")
+    }
+
+    pub fn get_macvlan_mode_from_string(mode: &str) -> Result<u32, std::io::Error> {
+        // Replace to constant from library once this gets merged.
+        // TODO: use actual constants after https://github.com/little-dude/netlink/pull/200
+        match mode {
+            "bridge" => Ok(constants::MACVLAN_MODE_BRIDGE),
+            "private" => Ok(constants::MACVLAN_MODE_PRIVATE),
+            "vepa" => Ok(constants::MACVLAN_MODE_VEPA),
+            "passthru" => Ok(constants::MACVLAN_MODE_PASSTHRU),
+            "source" => Ok(constants::MACVLAN_MODE_SOURCE),
+            // default to bridge
+            _ => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "invalid macvlan mode".to_string(),
+            )),
+        }
+    }
+
+    #[tokio::main]
+    pub async fn get_default_route_interface() -> Result<String, std::io::Error> {
+        let (_connection, handle, _) = match rtnetlink::new_connection() {
+            Ok((conn, handle, messages)) => (conn, handle, messages),
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to connect: {}", err),
+                ))
+            }
+        };
+        tokio::spawn(_connection);
+
+        let mut routes = handle.route().get(rtnetlink::IpVersion::V4).execute();
+        loop {
+            match routes.try_next().await {
+                Ok(Some(route)) => {
+                    for nla in route.nlas.into_iter() {
+                        if let netlink_packet_route::route::Nla::Oif(interface_id) = nla {
+                            let mut links = handle.link().get().match_index(interface_id).execute();
+                            match links.try_next().await {
+                                Ok(Some(msg)) => {
+                                    for nla in msg.nlas.into_iter() {
+                                        if let Nla::IfName(name) = nla {
+                                            return Ok(name);
+                                        }
+                                    }
+                                }
+                                Err(_) => continue,
+                                Ok(None) => continue,
+                            };
+                        }
+                    }
+                }
+                Err(_) => continue,
+                Ok(None) => break,
+            }
+        }
+
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "no interfaces found for default route".to_string(),
+        ))
     }
 
     //count interfaces on bridge
@@ -466,7 +529,6 @@ impl CoreUtils {
         master_ifname: &str,
         macvlan_ifname: &str,
         macvlan_mode: u32,
-        ips: Vec<ipnet::IpNet>,
         netns_path: &str,
     ) -> Result<(), Error> {
         let (_connection, handle, _) = match rtnetlink::new_connection() {
@@ -519,13 +581,6 @@ impl CoreUtils {
                     std::io::ErrorKind::Other,
                     format!("failed to get interface {}: {}", &master_ifname, err),
                 ))
-            }
-        }
-
-        //assign ip to mac_vlan interface
-        for ip_net in ips.into_iter() {
-            if let Err(err) = CoreUtils::add_ip_address(&handle, &macvlan_tmp_name, &ip_net).await {
-                return Err(err);
             }
         }
 

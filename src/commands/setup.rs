@@ -105,6 +105,22 @@ impl Setup {
                         }
                     }
                 }
+                "macvlan" => {
+                    let per_network_opts =
+                        network_options.networks.get(net_name).ok_or_else(|| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!("network options for network {} not found", net_name),
+                            )
+                        })?;
+                    //Configure Bridge and veth_pairs
+                    let status_block = network::core::Core::macvlan_per_podman_network(
+                        per_network_opts,
+                        network,
+                        &self.network_namespace_path,
+                    )?;
+                    response.insert(net_name.to_owned(), status_block);
+                }
                 // unknown driver
                 _ => {
                     return Err(std::io::Error::new(
