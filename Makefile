@@ -43,6 +43,7 @@ uninstall:
 	rm -f $(DESTDIR)/$(LIBEXECPODMAN)/netavark
 	rm -f $(PREFIX)/share/man/man1/netavark*.1
 
+.PHONY: test
 test:
 	cargo test
 
