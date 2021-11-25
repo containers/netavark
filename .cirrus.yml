@@ -1,26 +1,153 @@
 ---
 
-test_task:
-  alias: "build_and_test"
-  name: "Build and Test"
-  container:
-    image: quay.io/libpod/netavark-devel
-  install_script: make all
-  test_script: make test
+# Format Ref: https://cirrus-ci.org/guide/writing-tasks/
 
-test_task:
-  alias: "validate_test"
-  name: "Validate Code"
-  container:
-    image: quay.io/libpod/netavark-devel
-  test_script: make validate
+# Main collection of env. vars to set for all tasks and scripts.
+env:
+    # Actual|intended branch for this run
+    DEST_BRANCH: "main"
+    # The default is 'sh' if unspecified
+    CIRRUS_SHELL: "/bin/bash"
+    # Location where source repo. will be cloned
+    CIRRUS_WORKING_DIR: "/var/tmp/netavark"
+    # Rust package cache also lives here
+    CARGO_HOME: "/usr/local/cargo"
+    # Save a little typing (path relative to $CIRRUS_WORKING_DIR)
+    SCRIPT_BASE: "./contrib/cirrus"
+    FEDORA_NAME: "fedora-35"
+    IMAGE_SUFFIX: "c6226133906620416"
+    FEDORA_CACHE_IMAGE_NAME: "fedora-${IMAGE_SUFFIX}"
+
+
+gcp_credentials: ENCRYPTED[d6efdb7d6d4c61e3831df2193ca6348bb02f26cd931695f69d41930b1965f7dab72a838ca0902f6ed8cde66c7deddae2]
+
+
+# Default VM to use unless set or modified by task
+gce_instance:
+    image_project: "libpod-218412"
+    zone: "us-central1-c"
+    cpu: 2
+    memory: "4Gb"
+    disk: 200  # GB, do not set <200 per gcloud warning re: I/O performance
+    image_name: "${FEDORA_CACHE_IMAGE_NAME}"
+
+
+build_task:
+  alias: "build"
+  pkg_cache: &pkg_cache # TODO: Remove when packages included in static VM images
+    # This cache is intended to avoid constantly re-downloading repo. metadata
+    # (~150mb) and necessary RPMs (~300mb) every time CI runs.  It will likely
+    # flap often, as the metadata and package DBs change on access.  This is
+    # okay, as the cache still provides a benefit vs constantly hitting the
+    # RPM repos.  Use of this cache depends on dnf arguments passed in setup.sh
+    folder: "/var/cache/dnf"
+    # This is significant, Cirrus-CI will automatically store separate
+    # caches for branches & PRs.  We use the branch-name here mainly to
+    # distinguish PR-level caches in order to properly support backport-PRs
+    # to release branches.  Otherwise all PRs & branches will share caches
+    # with other PRs and branches (for a given $DEST_BRANCH value).
+    fingerprint_key: "pkg_${DEST_BRANCH}"
+    reupload_on_changes: true  # required since fingerprint_key is defined
+  cargo_cache: &cargo_cache
+    # Populating this cache requires both setup.sh and `make all` to run
+    # an actual build.  It takes about 10-minutes when starting from scratch,
+    # so caching this folder is important.
+    folder: "$CARGO_HOME"
+    # This cache is only about 100mb, but involves compiling.  Make it
+    # available across all PR's and Branches (separately) based on the
+    # $DEST_BRANCH value.
+    fingerprint_key: "cargo_${DEST_BRANCH}"
+    reupload_on_changes: true
+  bin_cache: &bin_cache
+    # This isn't very significant, it simply prevents rebuilding the
+    # binaries for every subsequent task - Saving about 3-5 minutes.
+    folder: "$CIRRUS_WORKING_DIR/bin"
+    # This is likely to change frequently, keep cache limited to ONLY this
+    # specific CI run (a.k.a. "build").
+    fingerprint_key: "bin_${CIRRUS_BUILD_ID}" # Cache only within the same build
+    reupload_on_changes: true
+  setup_script: &setup "$SCRIPT_BASE/setup.sh"
+  upload_caches: [ "pkg" ]  # Upload now, in case of main_script failure
+  main_script: &main "$SCRIPT_BASE/runner.sh $CIRRUS_TASK_NAME"
+  upload_caches: [ "cargo", "bin" ]
+
+
+validate_task:
+  alias: "validate"
+  depends_on:
+    - "build"
+  # From this point forward, all cache's become read-only - meaning
+  # any changes made in this task aren't re-uploaded to the cache.
+  # This avoids some flapping between tasks, along with the upload time.
+  pkg_cache: &ro_pkg_cache # TODO: Remove when packages included in static VM images
+    <<: *pkg_cache
+    reupload_on_changes: false
+  cargo_cache: &ro_cargo_cache
+    <<: *cargo_cache
+    reupload_on_changes: false
+  bin_cache: &ro_bin_cache
+    <<: *bin_cache
+    reupload_on_changes: false
+  setup_script: *setup
+  main_script: *main
+
+
+unit_task:
+  alias: "unit"
+  depends_on:
+    - "validate"
+  pkg_cache: *ro_pkg_cache # TODO: Remove when packages included in static VM images
+  cargo_cache: *ro_cargo_cache
+  bin_cache: *ro_bin_cache
+  setup_script: *setup
+  main_script: *main
+
+
+# integration_task:
+#   alias: "integration"
+#   depends_on:
+#     - "unit"
+#   pkg_cache: *ro_pkg_cache # TODO: Remove when packages included in static VM images
+#   cargo_cache: *ro_cargo_cache
+#   bin_cache: *ro_bin_cache
+#   setup_script: *setup
+#   main_script: *main
+
+
+# This task is critical.  It updates the "last-used by" timestamp stored
+# in metadata for all VM images.  This mechanism functions in tandem with
+# an out-of-band pruning operation to remove disused VM images.
+meta_task:
+    alias: meta
+    name: "VM img. keepalive"
+    container:
+        cpu: 2
+        memory: 2
+        image: quay.io/libpod/imgts:$IMAGE_SUFFIX
+    env:
+        # Space-separated list of images used by this repository state
+        IMGNAMES: "${FEDORA_CACHE_IMAGE_NAME}"
+        BUILDID: "${CIRRUS_BUILD_ID}"
+        REPOREF: "${CIRRUS_REPO_NAME}"
+        GCPJSON: ENCRYPTED[e7e6e13b98eb34f480a12412a048e3fb78a02239c229659e136b7a27e2ab25a5bbb61ab6016e322cb6f777fa2c9f9520]
+        GCPNAME: ENCRYPTED[f3fc6da8fe283ef506d7b18467a81153ea8e18b1d3cd76e79dcd6f566f20fdd3651522432d3d232f4d69eeb1502d1f6b]
+        GCPPROJECT: libpod-218412
+    clone_script: &noop /bin/true  # source not needed
+    script: /usr/local/bin/entrypoint.sh
+
 
 success_task:
   name: "Total success"
+  alias: success
   depends_on:
-    - "build_and_test"
-    - "validate_test"
-  clone_script: /bin/true
-  script: /bin/true
-  container: 
-    image: docker.io/library/alpine
+    - "build"
+    - "validate"
+    - "unit"
+    # - "integration"
+    - "meta"
+  container:
+    image: quay.io/libpod/alpine:latest
+  env:
+    CIRRUS_SHELL: "/bin/sh"
+  clone_script: *noop
+  script: *noop
