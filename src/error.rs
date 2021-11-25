@@ -9,9 +9,19 @@ pub struct NetavarkError {
     pub errno: i32,
 }
 
+impl NetavarkError {
+    pub fn print_json(&self) {
+        println!(
+            "{}",
+            serde_json::to_string(&self)
+                .unwrap_or(format!("Failed to serialize error message: {}", self.error))
+        )
+    }
+}
+
 impl fmt::Display for NetavarkError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", serde_json::to_string(&self).unwrap())
+        write!(f, "{}", self.error)
     }
 }
 

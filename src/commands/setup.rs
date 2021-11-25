@@ -41,7 +41,7 @@ impl Setup {
             Ok(opts) => opts,
             Err(e) => {
                 return Err(Box::new(NetavarkError {
-                    error: format!("{}", e),
+                    error: format!("failed to load network options: {}", e),
                     errno: 1,
                 }));
             }

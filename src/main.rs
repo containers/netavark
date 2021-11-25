@@ -29,26 +29,20 @@ fn main() {
     let opts = Opts::parse();
 
     let file = opts.file.unwrap_or_else(|| String::from("/dev/stdin"));
-    match opts.subcmd {
-        SubCommand::Setup(setup) => {
-            if let Err(err) = setup.exec(file) {
-                let er = netavark::error::NetavarkError {
-                    error: format!("{}", err),
-                    errno: 1,
-                };
-                println!("{}", er.to_string());
-                std::process::exit(er.errno);
-            }
-        }
-        SubCommand::Teardown(teardown) => {
-            if let Err(err) = teardown.exec(file) {
-                let er = netavark::error::NetavarkError {
-                    error: format!("{}", err),
-                    errno: 1,
-                };
-                println!("{}", er.to_string());
-                std::process::exit(er.errno);
-            }
+    let result = match opts.subcmd {
+        SubCommand::Setup(setup) => setup.exec(file),
+        SubCommand::Teardown(teardown) => teardown.exec(file),
+    };
+
+    match result {
+        Ok(_) => {}
+        Err(err) => {
+            let er = netavark::error::NetavarkError {
+                error: format!("{}", err),
+                errno: 1,
+            };
+            er.print_json();
+            std::process::exit(er.errno);
         }
     }
 }
