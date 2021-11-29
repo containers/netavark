@@ -50,6 +50,14 @@ impl firewall::FirewallDriver for IptablesDriver {
                     format!("{}-{}", "NETAVARK", network_setup.network_hash_name);
                 add_chain_unique(&self.conn, NAT, &prefixed_network_hash_name)?;
 
+                let nat_chain_rule = format!(
+                    "-s {} -j {}",
+                    network.subnet.to_string(),
+                    prefixed_network_hash_name
+                )
+                .to_string();
+                append_unique(&self.conn, NAT, POSTROUTING_JUMP, &nat_chain_rule)?;
+
                 // declare the rule
                 let nat_rule =
                     format!("-d {} -j {}", network.subnet.to_string(), ACCEPT_JUMP).to_string();
