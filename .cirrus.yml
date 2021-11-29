@@ -23,7 +23,7 @@ gcp_credentials: ENCRYPTED[d6efdb7d6d4c61e3831df2193ca6348bb02f26cd931695f69d419
 
 
 # Default VM to use unless set or modified by task
-gce_instance:
+gce_instance:  &standard_vm
     image_project: "libpod-218412"
     zone: "us-central1-c"
     cpu: 2
@@ -34,6 +34,11 @@ gce_instance:
 
 build_task:
   alias: "build"
+  # Compiling is very CPU intensive, make it chooch quicker for this task only
+  gce_instance:
+    <<: *standard_vm
+    cpu: 8
+    memory: "8Gb"
   pkg_cache: &pkg_cache # TODO: Remove when packages included in static VM images
     # This cache is intended to avoid constantly re-downloading repo. metadata
     # (~150mb) and necessary RPMs (~300mb) every time CI runs.  It will likely
