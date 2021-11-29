@@ -95,11 +95,15 @@ impl Core {
         debug!("IP address for veth vector: {:?}", address_vector);
         debug!("Gateway ip address vector: {:?}", gw_ipaddr_vector);
 
+        // get random name for host veth
+        let host_veth_name = format!("veth{:x}", rand::thread_rng().gen::<u32>());
+
         let container_veth_mac = match Core::add_bridge_and_veth(
             &bridge_name,
             address_vector,
             gw_ipaddr_vector,
             &container_veth_name,
+            &host_veth_name,
             netns,
         ) {
             Ok(addr) => addr,
@@ -126,6 +130,7 @@ impl Core {
         netns_ipaddr: Vec<ipnet::IpNet>,
         gw_ipaddr: Vec<ipnet::IpNet>,
         container_veth_name: &str,
+        host_veth_name: &str,
         netns: &str,
     ) -> Result<String, std::io::Error> {
         //copy subnet masks and gateway ips since we are going to use it later
@@ -144,10 +149,8 @@ impl Core {
             }
         };
 
-        let host_veth_name = format!("veth{:x}", rand::thread_rng().gen::<u32>());
-
         let _ = match core_utils::CoreUtils::configure_veth_async(
-            &host_veth_name,
+            host_veth_name,
             container_veth_name,
             br_name,
             netns,
@@ -158,7 +161,7 @@ impl Core {
                 // we must not leave dangling interfaces
                 // otherwise cleanup would become mess
                 // try removing leaking interfaces from host
-                if let Err(er) = core_utils::CoreUtils::remove_interface(&host_veth_name) {
+                if let Err(er) = core_utils::CoreUtils::remove_interface(host_veth_name) {
                     warn!("failed while cleaning up interfaces: {}", er);
                 }
                 return Err(std::io::Error::new(
