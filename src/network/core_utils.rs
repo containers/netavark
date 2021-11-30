@@ -707,6 +707,23 @@ impl CoreUtils {
                         format!("failed to create a bridge interface {}: {}", &ifname, err),
                     ));
                 }
+                // TODO, this should only be done for IPv6
+                // but there is not an easy way to detect that now
+                let br_accept_dad =
+                    format!("/proc/sys/net/ipv6/conf/{}/accept_dad", ifname.to_string());
+                let br_accept_ra = format!("net/ipv6/conf/{}/accept_ra", ifname.to_string());
+                if let Err(e) = CoreUtils::apply_sysctl_value(&br_accept_dad, "0") {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("{}", e),
+                    ));
+                }
+                if let Err(e) = CoreUtils::apply_sysctl_value(&br_accept_ra, "0") {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("{}", e),
+                    ));
+                }
             }
             Err(err) => {
                 return Err(std::io::Error::new(
@@ -715,7 +732,18 @@ impl CoreUtils {
                 ))
             }
         }
-
+        // TODO, this should only be done for IPv6
+        // but there is not an easy way to detect that now
+        let k = format!("net/ipv6/conf/{}/accept_ra", ifname);
+        match CoreUtils::apply_sysctl_value(&k, "0") {
+            Ok(_) => {}
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("{}", err),
+                ))
+            }
+        }
         for ip_net in ips.into_iter() {
             if let Err(err) = CoreUtils::add_ip_address(&handle, ifname, &ip_net).await {
                 return Err(err);
@@ -911,7 +939,16 @@ impl CoreUtils {
                 ))
             }
         }
-
+        let k = format!("/proc/sys/net/ipv6/conf/{}/accept_dad", &host_veth);
+        match CoreUtils::apply_sysctl_value(&k, "0") {
+            Ok(_) => {}
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("{}", err),
+                ))
+            }
+        }
         // ip link set <veth_name> master <bridge>
         let mut links = handle
             .link()

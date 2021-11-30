@@ -1,5 +1,6 @@
 use crate::network::types;
-use crate::network::types::{Network, PerNetworkOptions};
+use crate::network::types::{Network, Subnet};
+use std::net::IpAddr;
 
 //  Teardown contains options for tearing down behind a container
 #[derive(Clone, Debug)]
@@ -14,10 +15,12 @@ pub struct TeardownPortForward {
     pub network_name: String,
     // network id
     pub id_network_hash: String,
-    // pernetwork options
-    pub options: PerNetworkOptions,
+    // ip address of container
+    pub container_ip: IpAddr,
     // remove network related information
     pub complete_teardown: bool,
+    // container ip
+    pub network_address: Subnet,
 }
 
 //  SetupNetwork contains options for setting up a container
@@ -49,6 +52,8 @@ pub struct SetupPortForward {
     pub network_name: String,
     // hash id for the network
     pub network_hash_name: String,
-    // per network options
-    pub options: PerNetworkOptions,
+    // ip addresses of the container
+    pub container_ip: IpAddr,
+    // network address (subnet)
+    pub network_address: Subnet,
 }
