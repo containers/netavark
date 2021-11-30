@@ -355,6 +355,7 @@ impl firewall::FirewallDriver for IptablesDriver {
         }
         // If last container on the network, then teardown network based rules
         if tear.complete_teardown {
+            debug!("performing complete teardown");
             let prefixed_network_hash_name = format!("{}-{}", "NETAVARK", tear.id_network_hash);
             // Remove the network nat rule from POSTROUTING so chains
             // can be deleted
@@ -388,9 +389,18 @@ fn append_unique(
         return Ok(());
     }
     debug_rule_exists(table, chain, rule.to_string());
-    driver
+    if let Err(e) = driver
         .append(table, chain, rule)
         .map(|_| debug_rule_create(table, chain, rule.to_string()))
+    {
+        bail!(
+            "unable to append rule '{}' to table '{}': {}",
+            rule,
+            table,
+            e
+        )
+    }
+    Result::Ok(())
 }
 
 // add a chain if it does not exist, else do nothing
@@ -445,7 +455,15 @@ fn remove_if_rule_exists(
         debug_rule_no_exists(table, chain, rule.to_string());
         return Ok(());
     }
-    driver.delete(table, chain, rule)
+    if let Err(e) = driver.delete(table, chain, rule) {
+        bail!(
+            "failed to remove rule '{}' from table '{}': {}",
+            rule,
+            chain,
+            e
+        )
+    }
+    Result::Ok(())
 }
 
 fn debug_chain_create(table: &str, chain: &str) {
