@@ -245,24 +245,27 @@ impl firewall::FirewallDriver for IptablesDriver {
         for i in setup_portfw.port_mappings.clone() {
             // hostport dnat
             let hostport_dnat_rule = format!(
-                "-j {} -p tcp -m multiport --destination-ports {} {}",
+                "-j {} -p {} -m multiport --destination-ports {} {}",
                 network_dn_chain_name,
+                i.protocol,
                 i.host_port.to_string(),
                 comment_dn_network_cid
             );
             append_unique(conn, NAT, HOSTPORT_DNAT_CHAIN, &hostport_dnat_rule)?;
             // dn container (the actual port usages)
             let setmark_network_rule = format!(
-                "-j {} -s {} -p tcp --dport {}",
+                "-j {} -s {} -p {} --dport {}",
                 HOSTPORT_SETMARK_CHAIN,
                 container_network_address.to_string(),
+                i.protocol,
                 i.host_port.to_string()
             );
             append_unique(conn, NAT, &network_dn_chain_name, &setmark_network_rule)?;
             if !is_ipv6 {
                 let setmark_localhost_rule = format!(
-                    "-j {} -s 127.0.0.1 -p tcp --dport {}",
+                    "-j {} -s 127.0.0.1 -p {} --dport {}",
                     HOSTPORT_SETMARK_CHAIN,
+                    i.protocol,
                     i.host_port.to_string()
                 );
                 append_unique(conn, NAT, &network_dn_chain_name, &setmark_localhost_rule)?;
@@ -272,8 +275,9 @@ impl firewall::FirewallDriver for IptablesDriver {
                 container_ip_value = format!("[{}]", container_ip_value)
             }
             let container_dest_rule = format!(
-                "-j {} -p tcp --to-destination {}:{} --destination-port {}",
+                "-j {} -p {} --to-destination {}:{} --destination-port {}",
                 DNAT_JUMP,
+                i.protocol,
                 container_ip_value,
                 i.container_port.to_string(),
                 i.host_port.to_string()
@@ -323,30 +327,34 @@ impl firewall::FirewallDriver for IptablesDriver {
         for i in tear.port_mappings {
             // hostport dnat
             let hostport_dnat_rule = format!(
-                "-j {} -p tcp -m multiport --destination-ports {} {}",
+                "-j {} -p {} -m multiport --destination-ports {} {}",
                 network_dn_chain_name,
+                i.protocol,
                 i.host_port.to_string(),
                 comment_dn_network_cid
             );
             remove_if_rule_exists(conn, NAT, HOSTPORT_DNAT_CHAIN, &hostport_dnat_rule)?;
             // dn container (the actual port usages)
             let setmark_network_rule = format!(
-                "-j {} -s {} -p tcp --dport {}",
+                "-j {} -s {} -p {} --dport {}",
                 HOSTPORT_SETMARK_CHAIN,
                 container_network_address.to_string(),
+                i.protocol,
                 i.host_port.to_string()
             );
             remove_if_rule_exists(conn, NAT, &network_dn_chain_name, &setmark_network_rule)?;
             let setmark_localhost_rule = format!(
-                "-j {} -s {} -p tcp --dport {}",
+                "-j {} -s {} -p {} --dport {}",
                 HOSTPORT_SETMARK_CHAIN,
                 localhost_ip,
+                i.protocol,
                 i.host_port.to_string()
             );
             remove_if_rule_exists(conn, NAT, &network_dn_chain_name, &setmark_localhost_rule)?;
             let container_dest_rule = format!(
-                "-j {} -p tcp --to-destination {}:{} --destination-port {}",
+                "-j {} -p {} --to-destination {}:{} --destination-port {}",
                 DNAT_JUMP,
+                i.protocol,
                 tear.container_ip.to_string(),
                 i.container_port.to_string(),
                 i.host_port.to_string()
