@@ -36,6 +36,23 @@ impl Core {
         let mut response_net_addresses: Vec<NetAddress> = Vec::new();
         // interfaces map, but we only ever expect one, for response
         let mut interfaces: HashMap<String, types::NetInterface> = HashMap::new();
+        // mtu to configure, 0 means it was not set do nothing.
+        let mut mtu_config: u32 = 0;
+        if let Some(options_map) = network.options.as_ref() {
+            if let Some(mtu) = options_map.get("mtu") {
+                match mtu.parse() {
+                    Ok(mtu) => {
+                        mtu_config = mtu;
+                    }
+                    Err(err) => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("unable to parse mtu: {}", err),
+                        ))
+                    }
+                }
+            }
+        }
 
         let container_veth_name: String = per_network_opts.interface_name.to_owned();
         let static_ips: &Vec<IpAddr> = per_network_opts.static_ips.as_ref().unwrap();
@@ -105,6 +122,7 @@ impl Core {
             &container_veth_name,
             &host_veth_name,
             netns,
+            mtu_config,
         ) {
             Ok(addr) => addr,
             Err(err) => {
@@ -132,6 +150,7 @@ impl Core {
         container_veth_name: &str,
         host_veth_name: &str,
         netns: &str,
+        mtu_config: u32,
     ) -> Result<String, std::io::Error> {
         //copy subnet masks and gateway ips since we are going to use it later
         let mut gw_ipaddr_clone = Vec::new();
@@ -139,7 +158,8 @@ impl Core {
             gw_ipaddr_clone.push(*gw_ip)
         }
         //call configure bridge
-        let _ = match core_utils::CoreUtils::configure_bridge_async(br_name, gw_ipaddr) {
+        let _ = match core_utils::CoreUtils::configure_bridge_async(br_name, gw_ipaddr, mtu_config)
+        {
             Ok(_) => (),
             Err(err) => {
                 return Err(std::io::Error::new(
@@ -154,6 +174,7 @@ impl Core {
             container_veth_name,
             br_name,
             netns,
+            mtu_config,
         ) {
             Ok(_) => (),
             Err(err) => {
