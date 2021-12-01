@@ -25,12 +25,11 @@ _run_validate() {
 }
 
 _run_unit() {
-    make test
+    make unit
 }
 
 _run_integration() {
-    # TODO: No Makefile target for these at the time of this commit
-    bats ./test/
+    make integration
 }
 
 show_env_vars
