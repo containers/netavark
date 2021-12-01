@@ -452,6 +452,41 @@ impl CoreUtils {
         }
     }
 
+    async fn set_link_mtu(
+        handle: &rtnetlink::Handle,
+        ifname: &str,
+        mtu: u32,
+    ) -> Result<(), std::io::Error> {
+        let mut links = handle
+            .link()
+            .get()
+            .set_name_filter(ifname.to_string())
+            .execute();
+        match links.try_next().await {
+            Ok(Some(link)) => match handle
+                .link()
+                .set(link.header.index)
+                .mtu(mtu)
+                .execute()
+                .await
+            {
+                Ok(_) => Ok(()),
+                Err(err) => Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to set {} up: {}", ifname, err),
+                )),
+            },
+            Ok(None) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("interface {} not found", ifname),
+            )),
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("failed to get veth interface {} up: {}", ifname, err),
+            )),
+        }
+    }
+
     /* renames macvlan interface inside configured namespace and turns up the interface*/
     /* for netavark this will be called inside container namespace. */
     #[tokio::main]
@@ -671,7 +706,11 @@ impl CoreUtils {
     }
 
     #[tokio::main]
-    pub async fn configure_bridge_async(ifname: &str, ips: Vec<ipnet::IpNet>) -> Result<(), Error> {
+    pub async fn configure_bridge_async(
+        ifname: &str,
+        ips: Vec<ipnet::IpNet>,
+        mtu: u32,
+    ) -> Result<(), Error> {
         let (_connection, handle, _) = match rtnetlink::new_connection() {
             Ok((conn, handle, messages)) => (conn, handle, messages),
             Err(err) => {
@@ -750,6 +789,12 @@ impl CoreUtils {
             }
         }
 
+        if mtu != 0 {
+            if let Err(err) = CoreUtils::set_link_mtu(&handle, ifname, mtu).await {
+                return Err(err);
+            }
+        }
+
         // make the bridge interface up
         if let Err(err) = CoreUtils::set_link_up(&handle, ifname).await {
             return Err(err);
@@ -765,6 +810,7 @@ impl CoreUtils {
         host_pid: u32,
         host_veth: &str,
         container_veth: &str,
+        mtu: u32,
     ) -> Result<(), std::io::Error> {
         /* Note: most likely this is called in a seperate thread so create a new connection, rather than
          * sharing from parent stack */
@@ -811,6 +857,16 @@ impl CoreUtils {
                     err
                 ),
             ));
+        }
+
+        // set mtu for container and host veth
+        if mtu != 0 {
+            if let Err(err) = CoreUtils::set_link_mtu(&handle, host_veth, mtu).await {
+                return Err(err);
+            }
+            if let Err(err) = CoreUtils::set_link_mtu(&handle, container_veth, mtu).await {
+                return Err(err);
+            }
         }
 
         // ip link set <ifname> netns <namespace> up
@@ -863,6 +919,7 @@ impl CoreUtils {
         container_veth: &str,
         br_if: &str,
         netns_path: &str,
+        mtu: u32,
     ) -> Result<(), Error> {
         let (_connection, handle, _) = match rtnetlink::new_connection() {
             Ok((conn, handle, messages)) => (conn, handle, messages),
@@ -917,9 +974,12 @@ impl CoreUtils {
                         )
                     }
 
-                    if let Err(err) =
-                        CoreUtils::generate_veth_pair_internal(netavark_pid, &hst_veth, &ctr_veth)
-                    {
+                    if let Err(err) = CoreUtils::generate_veth_pair_internal(
+                        netavark_pid,
+                        &hst_veth,
+                        &ctr_veth,
+                        mtu,
+                    ) {
                         return Err(err);
                     }
 
