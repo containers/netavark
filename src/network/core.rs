@@ -53,6 +53,8 @@ impl Core {
                 }
             }
         }
+        // is ipv6 enabled, we need to propogate this to lower stack
+        let ipv6_enabled = network.ipv6_enabled;
 
         let container_veth_name: String = per_network_opts.interface_name.to_owned();
         let static_ips: &Vec<IpAddr> = per_network_opts.static_ips.as_ref().unwrap();
@@ -123,6 +125,7 @@ impl Core {
             &host_veth_name,
             netns,
             mtu_config,
+            ipv6_enabled,
         ) {
             Ok(addr) => addr,
             Err(err) => {
@@ -143,6 +146,7 @@ impl Core {
         Ok(response)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn add_bridge_and_veth(
         br_name: &str,
         netns_ipaddr: Vec<ipnet::IpNet>,
@@ -151,6 +155,7 @@ impl Core {
         host_veth_name: &str,
         netns: &str,
         mtu_config: u32,
+        ipv6_enabled: bool,
     ) -> Result<String, std::io::Error> {
         //copy subnet masks and gateway ips since we are going to use it later
         let mut gw_ipaddr_clone = Vec::new();
@@ -158,8 +163,12 @@ impl Core {
             gw_ipaddr_clone.push(*gw_ip)
         }
         //call configure bridge
-        let _ = match core_utils::CoreUtils::configure_bridge_async(br_name, gw_ipaddr, mtu_config)
-        {
+        let _ = match core_utils::CoreUtils::configure_bridge_async(
+            br_name,
+            gw_ipaddr,
+            mtu_config,
+            ipv6_enabled,
+        ) {
             Ok(_) => (),
             Err(err) => {
                 return Err(std::io::Error::new(
@@ -175,6 +184,7 @@ impl Core {
             br_name,
             netns,
             mtu_config,
+            ipv6_enabled,
         ) {
             Ok(_) => (),
             Err(err) => {

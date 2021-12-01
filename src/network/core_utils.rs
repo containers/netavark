@@ -710,6 +710,7 @@ impl CoreUtils {
         ifname: &str,
         ips: Vec<ipnet::IpNet>,
         mtu: u32,
+        ipv6_enabled: bool,
     ) -> Result<(), Error> {
         let (_connection, handle, _) = match rtnetlink::new_connection() {
             Ok((conn, handle, messages)) => (conn, handle, messages),
@@ -746,22 +747,25 @@ impl CoreUtils {
                         format!("failed to create a bridge interface {}: {}", &ifname, err),
                     ));
                 }
-                // TODO, this should only be done for IPv6
-                // but there is not an easy way to detect that now
-                let br_accept_dad =
-                    format!("/proc/sys/net/ipv6/conf/{}/accept_dad", ifname.to_string());
-                let br_accept_ra = format!("net/ipv6/conf/{}/accept_ra", ifname.to_string());
-                if let Err(e) = CoreUtils::apply_sysctl_value(&br_accept_dad, "0") {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("{}", e),
-                    ));
-                }
-                if let Err(e) = CoreUtils::apply_sysctl_value(&br_accept_ra, "0") {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("{}", e),
-                    ));
+
+                if ipv6_enabled {
+                    // Disable duplicate address detection if ipv6 enabled
+                    // Do not accept Router Advertisements if ipv6 is enabled
+                    let br_accept_dad =
+                        format!("/proc/sys/net/ipv6/conf/{}/accept_dad", ifname.to_string());
+                    let br_accept_ra = format!("net/ipv6/conf/{}/accept_ra", ifname.to_string());
+                    if let Err(e) = CoreUtils::apply_sysctl_value(&br_accept_dad, "0") {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("{}", e),
+                        ));
+                    }
+                    if let Err(e) = CoreUtils::apply_sysctl_value(&br_accept_ra, "0") {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("{}", e),
+                        ));
+                    }
                 }
             }
             Err(err) => {
@@ -771,16 +775,17 @@ impl CoreUtils {
                 ))
             }
         }
-        // TODO, this should only be done for IPv6
-        // but there is not an easy way to detect that now
-        let k = format!("net/ipv6/conf/{}/accept_ra", ifname);
-        match CoreUtils::apply_sysctl_value(&k, "0") {
-            Ok(_) => {}
-            Err(err) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("{}", err),
-                ))
+        if ipv6_enabled {
+            // Do not accept Router Advertisements if ipv6 is enabled
+            let k = format!("net/ipv6/conf/{}/accept_ra", ifname);
+            match CoreUtils::apply_sysctl_value(&k, "0") {
+                Ok(_) => {}
+                Err(err) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("{}", err),
+                    ))
+                }
             }
         }
         for ip_net in ips.into_iter() {
@@ -920,6 +925,7 @@ impl CoreUtils {
         br_if: &str,
         netns_path: &str,
         mtu: u32,
+        ipv6_enabled: bool,
     ) -> Result<(), Error> {
         let (_connection, handle, _) = match rtnetlink::new_connection() {
             Ok((conn, handle, messages)) => (conn, handle, messages),
@@ -999,14 +1005,17 @@ impl CoreUtils {
                 ))
             }
         }
-        let k = format!("/proc/sys/net/ipv6/conf/{}/accept_dad", &host_veth);
-        match CoreUtils::apply_sysctl_value(&k, "0") {
-            Ok(_) => {}
-            Err(err) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("{}", err),
-                ))
+        if ipv6_enabled {
+            // Disable duplicate address detection on host veth if ipv6 enabled
+            let k = format!("/proc/sys/net/ipv6/conf/{}/accept_dad", &host_veth);
+            match CoreUtils::apply_sysctl_value(&k, "0") {
+                Ok(_) => {}
+                Err(err) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("{}", err),
+                    ))
+                }
             }
         }
         // ip link set <veth_name> master <bridge>
