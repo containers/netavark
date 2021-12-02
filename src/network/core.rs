@@ -53,11 +53,19 @@ impl Core {
                 }
             }
         }
-        // is ipv6 enabled, we need to propogate this to lower stack
-        let ipv6_enabled = network.ipv6_enabled;
 
         let container_veth_name: String = per_network_opts.interface_name.to_owned();
         let static_ips: &Vec<IpAddr> = per_network_opts.static_ips.as_ref().unwrap();
+
+        // is ipv6 enabled, we need to propogate this to lower stack
+        let mut ipv6_enabled = network.ipv6_enabled;
+        // for dual-stack network.ipv6_enabled could be false do explicit check
+        for ip in static_ips.iter() {
+            if ip.is_ipv6() {
+                ipv6_enabled = true;
+                break;
+            }
+        }
 
         //we have the bridge name but we must iterate for all the available gateways
         for (idx, subnet) in network.subnets.iter().flatten().enumerate() {
