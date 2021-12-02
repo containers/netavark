@@ -21,7 +21,7 @@ function setup() {
     # do not use run_in_host_netns because we want to run this in background
     # use --nopid (we cannot change the pid file location), --nofork do not run as daemon so we can kill it by pid
     # change --system-config to make sure that we do not write any config files to the host location
-    nsenter -n -t $HOST_NS_PID firewalld --nopid --nofork --system-config "$NETAVARK_TMPDIR" &> "$NETAVARK_TMPDIR/firewalld.log" &
+    nsenter -n -t $HOST_NS_PID firewalld --nopid --nofork --system-config "$NETAVARK_TMPDIR" &>"$NETAVARK_TMPDIR/firewalld.log" &
     FIREWALLD_PID=$!
     echo "firewalld pid: $FIREWALLD_PID"
 
@@ -34,7 +34,7 @@ function setup() {
             break
         fi
         sleep 1
-        timeout=$(( $timeout - 1 ))
+        timeout=$(($timeout - 1))
         if [ $timeout -eq 0 ]; then
             cat "$NETAVARK_TMPDIR/firewalld.log"
             die "failed to start firewalld - timeout"
@@ -57,25 +57,22 @@ function teardown() {
 }
 
 @test "$fw_driver - simple bridge" {
-     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
     result="$output"
     assert_json "$result" 'has("podman")' == "true" "object key exists"
 
-
-    mac=$(jq -r '.podman.interfaces.eth0.mac_address' <<< "$result" )
+    mac=$(jq -r '.podman.interfaces.eth0.mac_address' <<<"$result")
     # check that interface exists
     run_in_container_netns ip -j --details link show eth0
     link_info="$output"
     assert_json "$link_info" ".[].address" == "$mac" "MAC matches container mac"
-    assert_json "$link_info" '.[].flags[] | select(.=="UP")' ==  "UP" "Container interface is up"
+    assert_json "$link_info" '.[].flags[] | select(.=="UP")' == "UP" "Container interface is up"
     assert_json "$link_info" ".[].linkinfo.info_kind" == "veth" "Container interface is a veth device"
-
 
     ipaddr="10.88.0.2/16"
     run_in_container_netns ip addr show eth0
     assert "$output" =~ "$ipaddr" "IP address matches container address"
     assert_json "$result" ".podman.interfaces.eth0.subnets[0].ipnet" == "$ipaddr" "Result contains correct IP address"
-
 
     run_in_host_netns ip -j --details link show podman0
     link_info="$output"
@@ -137,40 +134,49 @@ function teardown() {
 }
 
 @test "$fw_driver - port forwarding ipv4 - tcp" {
+    skip "TODO: pf not yet supported"
     test_port_fw
 }
 
 @test "$fw_driver - port forwarding ipv6 - tcp" {
+    skip "TODO: pf not yet supported"
     test_port_fw ip=6
 }
 
 @test "$fw_driver - port forwarding dualstack - tcp" {
+    skip "TODO: pf not yet supported"
     test_port_fw ip=dual
 }
 
 @test "$fw_driver - port forwarding ipv4 - udp" {
+    skip "TODO: pf not yet supported"
     test_port_fw proto=udp
 }
 
 @test "$fw_driver - port forwarding ipv6 - udp" {
+    skip "TODO: pf not yet supported"
     test_port_fw ip=6 proto=udp
 }
 
 @test "$fw_driver - port forwarding dualstack - udp" {
+    skip "TODO: pf not yet supported"
     test_port_fw ip=dual proto=udp
 }
 
 @test "$fw_driver - port forwarding ipv4 - sctp" {
+    skip "TODO: pf not yet supported"
     setup_sctp_kernel_module
     test_port_fw proto=sctp
 }
 
 @test "$fw_driver - port forwarding ipv6 - sctp" {
+    skip "TODO: pf not yet supported"
     setup_sctp_kernel_module
     test_port_fw ip=6 proto=sctp
 }
 
 @test "$fw_driver - port forwarding dualstack - sctp" {
+    skip "TODO: pf not yet supported"
     setup_sctp_kernel_module
     test_port_fw ip=dual proto=sctp
 }
