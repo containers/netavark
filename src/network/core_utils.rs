@@ -837,7 +837,7 @@ impl CoreUtils {
         if let Err(err) = handle
             .link()
             .add()
-            .veth(host_veth.to_string(), container_veth.to_string())
+            .veth(container_veth.to_string(), host_veth.to_string())
             .execute()
             .await
         {
@@ -872,6 +872,16 @@ impl CoreUtils {
             if let Err(err) = CoreUtils::set_link_mtu(&handle, container_veth, mtu).await {
                 return Err(err);
             }
+        }
+
+        //  Disable dad inside the container too
+        let disable_dad_in_container =
+            format!("/proc/sys/net/ipv6/conf/{}/accept_dad", container_veth);
+        if let Err(e) = CoreUtils::apply_sysctl_value(&disable_dad_in_container, "0") {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("{}", e),
+            ));
         }
 
         // ip link set <ifname> netns <namespace> up
