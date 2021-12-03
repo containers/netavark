@@ -3,14 +3,16 @@
 Name: netavark
 Epoch: 100
 Version: 0
-%define build_timestamp %{lua: print(os.date("%Y%m%d"))}
-Release: %{build_timestamp}
+%define build_datestamp %{lua: print(os.date("%Y%m%d"))}
+%define build_timestamp %{lua: print(os.date("%H%M%S"))}
+Release: %{build_datestamp}.%{build_timestamp}
 Summary: OCI network stack
 License: ASL 2.0
 URL: https://github.com/containers/%{name}
-Source: %{url}/archive/main.tar.gz#/%{name}-%{version}-%{release}.tar.gz
-BuildRequires: rust-packaging
-BuildRequires: go-md2man
+Source: %{url}/archive/main.tar.gz
+BuildRequires: make
+BuildRequires: cargo
+BuildRequires: golang-github-cpuguy83-md2man
 
 ExclusiveArch:  %{rust_arches}
 %if %{__cargo_skip_build}
@@ -44,4 +46,5 @@ popd
 %{_mandir}/man1/%{name}.1*
 
 %changelog
-%autochangelog
+* Fri Dec 03 2021 Lokesh Mandvekar <lsm5@fedoraproject.org> - %{version}-%{release}
+- auto copr build
