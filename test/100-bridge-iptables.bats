@@ -117,19 +117,16 @@ fw_driver=iptables
 }
 
 @test "$fw_driver - port forwarding ipv4 - sctp" {
-    skip "TODO: protocol not yet supported"
     setup_sctp_kernel_module
     test_port_fw proto=sctp
 }
 
 @test "$fw_driver - port forwarding ipv6 - sctp" {
-    skip "TODO: protocol not yet supported"
     setup_sctp_kernel_module
     test_port_fw ip=6 proto=sctp
 }
 
 @test "$fw_driver - port forwarding dualstack - sctp" {
-    skip "TODO: protocol not yet supported"
     setup_sctp_kernel_module
     test_port_fw ip=dual proto=sctp
 }

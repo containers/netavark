@@ -500,9 +500,18 @@ function run_nc_test() {
     local connect_ip=$3
     local host_port=$4
 
+
+    # for some reason we have to attach STDIN to the server only for the sctp proto
+    # otherwise it will just exit for unknown reasons. However we must not add STDIN
+    # to udp and tcp otherwise those tests will fail.
+    local stdin=/dev/null
+    if [[ "$nc_common_args" =~ "--sctp" ]]; then
+        stdin=/dev/zero
+    fi
+
     # start the server in the container
     nsenter -n -t $CONTAINER_NS_PID timeout --foreground -v --kill=10 5 \
-        nc $nc_common_args -l -p $container_port &>"$NETAVARK_TMPDIR/nc-out" &
+        nc $nc_common_args -l -p $container_port &>"$NETAVARK_TMPDIR/nc-out" <$stdin &
 
     data=$(random_string)
     run_in_host_netns nc $nc_common_args $connect_ip $host_port <<<"$data"
