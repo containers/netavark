@@ -44,8 +44,16 @@ uninstall:
 	rm -f $(PREFIX)/share/man/man1/netavark*.1
 
 .PHONY: test
-test:
+test: unit integration
+
+.PHONY: unit
+unit:
 	cargo test
+
+.PHONY: integration
+integration:
+	# needs to be run as root or with podman unshare --rootless-netns
+	bats test/
 
 validate:
 	cargo fmt --all -- --check

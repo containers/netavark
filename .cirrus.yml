@@ -108,15 +108,15 @@ unit_task:
   main_script: *main
 
 
-# integration_task:
-#   alias: "integration"
-#   depends_on:
-#     - "unit"
-#   pkg_cache: *ro_pkg_cache # TODO: Remove when packages included in static VM images
-#   cargo_cache: *ro_cargo_cache
-#   bin_cache: *ro_bin_cache
-#   setup_script: *setup
-#   main_script: *main
+integration_task:
+  alias: "integration"
+  depends_on:
+    - "unit"
+  pkg_cache: *ro_pkg_cache # TODO: Remove when packages included in static VM images
+  cargo_cache: *ro_cargo_cache
+  bin_cache: *ro_bin_cache
+  setup_script: *setup
+  main_script: *main
 
 
 # This task is critical.  It updates the "last-used by" timestamp stored
