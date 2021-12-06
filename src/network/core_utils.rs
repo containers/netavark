@@ -37,6 +37,41 @@ impl CoreUtils {
         final_slice.join(":")
     }
 
+    fn decode_address_from_hex(input: &str) -> Result<Vec<u8>, std::io::Error> {
+        let mut array = [0u8; 6];
+
+        let mut nth = 0;
+        for byte in input.split(|c| c == ':' || c == '-') {
+            if nth == 6 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("invalid mac length for address: {}", input),
+                ));
+            }
+
+            array[nth] = match u8::from_str_radix(byte, 16) {
+                Ok(value) => value,
+                Err(err) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("unable to parse mac address {}: {}", input, err),
+                    ));
+                }
+            };
+
+            nth += 1;
+        }
+
+        if nth != 6 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("invalid mac length for address: {}", input),
+            ));
+        }
+
+        Ok(array.to_vec())
+    }
+
     pub fn get_macvlan_mode_from_string(mode: &str) -> Result<u32, std::io::Error> {
         // Replace to constant from library once this gets merged.
         // TODO: use actual constants after https://github.com/little-dude/netlink/pull/200
@@ -474,6 +509,52 @@ impl CoreUtils {
                 Err(err) => Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!("failed to set {} up: {}", ifname, err),
+                )),
+            },
+            Ok(None) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("interface {} not found", ifname),
+            )),
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("failed to get veth interface {} up: {}", ifname, err),
+            )),
+        }
+    }
+
+    async fn set_link_mac(
+        handle: &rtnetlink::Handle,
+        ifname: &str,
+        mac: &str,
+    ) -> Result<(), std::io::Error> {
+        // convert mac from string to u8
+        let mac_addr = match CoreUtils::decode_address_from_hex(mac) {
+            Ok(addr) => addr,
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed while decoding static mac: {}", err),
+                ))
+            }
+        };
+
+        let mut links = handle
+            .link()
+            .get()
+            .set_name_filter(ifname.to_string())
+            .execute();
+        match links.try_next().await {
+            Ok(Some(link)) => match handle
+                .link()
+                .set(link.header.index)
+                .address(mac_addr)
+                .execute()
+                .await
+            {
+                Ok(_) => Ok(()),
+                Err(err) => Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to set mac address for {} : {}", ifname, err),
                 )),
             },
             Ok(None) => Err(std::io::Error::new(
@@ -1083,6 +1164,7 @@ impl CoreUtils {
         ifname: &str,
         ips: Vec<ipnet::IpNet>,
         gw_ip_addrs: Vec<ipnet::IpNet>,
+        static_mac: &str,
     ) -> Result<(), Error> {
         let (_connection, handle, _) = match rtnetlink::new_connection() {
             Ok((conn, handle, messages)) => (conn, handle, messages),
@@ -1102,6 +1184,13 @@ impl CoreUtils {
         // ip netns exec <namespace> ip addr add <addr>/<mask> dev <ifname>
         for ip_net in ips.into_iter() {
             if let Err(err) = CoreUtils::add_ip_address(&handle, ifname, &ip_net).await {
+                return Err(err);
+            }
+        }
+
+        // set static mac here
+        if !static_mac.is_empty() {
+            if let Err(err) = CoreUtils::set_link_mac(&handle, ifname, static_mac).await {
                 return Err(err);
             }
         }

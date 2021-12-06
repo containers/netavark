@@ -56,6 +56,10 @@ impl Core {
 
         let container_veth_name: String = per_network_opts.interface_name.to_owned();
         let static_ips: &Vec<IpAddr> = per_network_opts.static_ips.as_ref().unwrap();
+        let static_mac: String = match &per_network_opts.static_mac {
+            Some(mac) => mac.to_owned(),
+            None => "".to_string(),
+        };
 
         // is ipv6 enabled, we need to propogate this to lower stack
         let mut ipv6_enabled = network.ipv6_enabled;
@@ -129,6 +133,7 @@ impl Core {
             &bridge_name,
             address_vector,
             gw_ipaddr_vector,
+            &static_mac,
             &container_veth_name,
             &host_veth_name,
             netns,
@@ -159,6 +164,7 @@ impl Core {
         br_name: &str,
         netns_ipaddr: Vec<ipnet::IpNet>,
         gw_ipaddr: Vec<ipnet::IpNet>,
+        static_mac: &str,
         container_veth_name: &str,
         host_veth_name: &str,
         netns: &str,
@@ -219,6 +225,7 @@ impl Core {
                 let netns_fd = netns_file.as_raw_fd();
                 //clone values before spwaning thread in new namespace
                 let container_veth_name_clone: String = container_veth_name.to_owned();
+                let static_mac_clone: String = static_mac.to_owned();
                 // So complicated cloning for threads ?
                 // TODO: simplify this later
                 let mut netns_ipaddr_clone = Vec::new();
@@ -234,6 +241,7 @@ impl Core {
                         &container_veth_name_clone,
                         netns_ipaddr_clone,
                         gw_ipaddr_clone,
+                        &static_mac_clone,
                     ) {
                         return Err(err);
                     }
@@ -443,6 +451,7 @@ impl Core {
                         &container_macvlan_clone,
                         netns_ipaddr_clone,
                         _gw_ipaddr_empty,
+                        &"".to_string(), // do we want static mac support for macvlan ? probably later.
                     ) {
                         return Err(err);
                     }
