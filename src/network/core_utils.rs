@@ -897,6 +897,7 @@ impl CoreUtils {
         host_veth: &str,
         container_veth: &str,
         mtu: u32,
+        ipv6_enabled: bool,
     ) -> Result<(), std::io::Error> {
         /* Note: most likely this is called in a seperate thread so create a new connection, rather than
          * sharing from parent stack */
@@ -955,14 +956,16 @@ impl CoreUtils {
             }
         }
 
-        //  Disable dad inside the container too
-        let disable_dad_in_container =
-            format!("/proc/sys/net/ipv6/conf/{}/accept_dad", container_veth);
-        if let Err(e) = CoreUtils::apply_sysctl_value(&disable_dad_in_container, "0") {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("{}", e),
-            ));
+        if ipv6_enabled {
+            //  Disable dad inside the container too
+            let disable_dad_in_container =
+                format!("/proc/sys/net/ipv6/conf/{}/accept_dad", container_veth);
+            if let Err(e) = CoreUtils::apply_sysctl_value(&disable_dad_in_container, "0") {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("{}", e),
+                ));
+            }
         }
 
         // ip link set <ifname> netns <namespace> up
@@ -1076,6 +1079,7 @@ impl CoreUtils {
                         &hst_veth,
                         &ctr_veth,
                         mtu,
+                        ipv6_enabled,
                     ) {
                         return Err(err);
                     }
