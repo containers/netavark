@@ -1,5 +1,5 @@
 use crate::network::internal_types::{
-    SetupNetwork, SetupPortForward, TearDownNetwork, TeardownPortForward,
+    PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
 };
 use log::{debug, info};
 use std::env;
@@ -8,6 +8,7 @@ use zbus::Connection;
 
 pub mod firewalld;
 pub mod iptables;
+mod varktables;
 
 // Firewall drivers have the ability to set up per-network firewall forwarding
 // and port mappings.
@@ -18,7 +19,7 @@ pub trait FirewallDriver {
     fn teardown_network(&self, tear: TearDownNetwork) -> Result<(), Box<dyn Error>>;
 
     // Set up port-forwarding firewall rules for a given container.
-    fn setup_port_forward(&self, setup_pw: SetupPortForward) -> Result<(), Box<dyn Error>>;
+    fn setup_port_forward(&self, setup_pw: PortForwardConfig) -> Result<(), Box<dyn Error>>;
     // Tear down port-forwarding firewall rules for a single container.
     fn teardown_port_forward(&self, teardown_pf: TeardownPortForward)
         -> Result<(), Box<dyn Error>>;

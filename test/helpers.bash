@@ -483,8 +483,7 @@ EOF
 
     done
 
-    ## FIXME cleanup is broken atm
-    #run_netavark teardown $(get_container_netns_path) <<<"$config"
+    run_netavark teardown $(get_container_netns_path) <<<"$config"
 }
 
 #################

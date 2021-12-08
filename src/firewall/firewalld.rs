@@ -1,5 +1,5 @@
 use crate::firewall;
-use crate::network::internal_types::{SetupPortForward, TearDownNetwork, TeardownPortForward};
+use crate::network::internal_types::{PortForwardConfig, TearDownNetwork, TeardownPortForward};
 use crate::network::{internal_types, types};
 use log::debug;
 use std::collections::HashMap;
@@ -63,7 +63,7 @@ impl firewall::FirewallDriver for FirewallD {
         todo!();
     }
 
-    fn setup_port_forward(&self, _setup_portfw: SetupPortForward) -> Result<(), Box<dyn Error>> {
+    fn setup_port_forward(&self, _setup_portfw: PortForwardConfig) -> Result<(), Box<dyn Error>> {
         todo!();
     }
 
