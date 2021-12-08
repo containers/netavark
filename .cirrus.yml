@@ -11,7 +11,9 @@ env:
     # Location where source repo. will be cloned
     CIRRUS_WORKING_DIR: "/var/tmp/netavark"
     # Rust package cache also lives here
-    CARGO_HOME: "/usr/local/cargo"
+    CARGO_HOME: "/var/cache/cargo"
+    # Rust compiler output lives here (see Makefile)
+    CARGO_TARGET_DIR: "$CIRRUS_WORKING_DIR/targets"
     # Save a little typing (path relative to $CIRRUS_WORKING_DIR)
     SCRIPT_BASE: "./contrib/cirrus"
     FEDORA_NAME: "fedora-35"
@@ -46,35 +48,40 @@ build_task:
     # okay, as the cache still provides a benefit vs constantly hitting the
     # RPM repos.  Use of this cache depends on dnf arguments passed in setup.sh
     folder: "/var/cache/dnf"
-    # This is significant, Cirrus-CI will automatically store separate
-    # caches for branches & PRs.  We use the branch-name here mainly to
-    # distinguish PR-level caches in order to properly support backport-PRs
-    # to release branches.  Otherwise all PRs & branches will share caches
-    # with other PRs and branches (for a given $DEST_BRANCH value).
     fingerprint_key: "pkg_${DEST_BRANCH}"
     reupload_on_changes: true  # required since fingerprint_key is defined
   cargo_cache: &cargo_cache
-    # Populating this cache requires both setup.sh and `make all` to run
-    # an actual build.  It takes about 10-minutes when starting from scratch,
-    # so caching this folder is important.
+    # Populating this cache depends on execution of setup.sh, and runner.sh
+    # to builds of all release, debug, plus unit-tests.
     folder: "$CARGO_HOME"
-    # This cache is only about 100mb, but involves compiling.  Make it
-    # available across all PR's and Branches (separately) based on the
-    # $DEST_BRANCH value.
-    fingerprint_key: "cargo_${DEST_BRANCH}"
+    # Cirrus-CI will automatically store separate caches for branches vs PRs.
+    # We use the branch-name here mainly to distinguish PR-level caches in
+    # order to properly support backport-PRs to release branches.  Otherwise
+    # all PRs & branches will share caches with other PRs and branches
+    # for a given $DEST_BRANCH and vX value.  Adjust vX if cache schema
+    # changes.
+    fingerprint_key: "cargo_v1_${DEST_BRANCH}"
+    # Required to be set explicitly since fingerprint_key is also set
+    reupload_on_changes: true
+  targets_cache: &targets_cache
+    # Similar to cargo_cache, but holds the actual compiled artifacts. This must
+    # be scoped similar to bin_cache to avoid binary pollution across cache
+    # contexts.  For example, two PRs that happen to coincidentally change
+    # and use cache.  Adjust vX if cache schema changes.
+    folder: "$CARGO_TARGET_DIR"
+    fingerprint_key: "targets_v1_${CIRRUS_BUILD_ID}" # Cache only within same build
     reupload_on_changes: true
   bin_cache: &bin_cache
-    # This isn't very significant, it simply prevents rebuilding the
-    # binaries for every subsequent task - Saving about 3-5 minutes.
+    # This simply prevents rebuilding bin/netavark for every subsequent task.
     folder: "$CIRRUS_WORKING_DIR/bin"
-    # This is likely to change frequently, keep cache limited to ONLY this
-    # specific CI run (a.k.a. "build").
-    fingerprint_key: "bin_${CIRRUS_BUILD_ID}" # Cache only within the same build
+    # Avoid binary pollution by scoping this to only this specific build.
+    # Adjust vX if cache schema changes.
+    fingerprint_key: "bin_v1_${CIRRUS_BUILD_ID}" # Cache only within same build
     reupload_on_changes: true
   setup_script: &setup "$SCRIPT_BASE/setup.sh"
   upload_caches: [ "pkg" ]  # Upload now, in case of main_script failure
   main_script: &main "$SCRIPT_BASE/runner.sh $CIRRUS_TASK_NAME"
-  upload_caches: [ "cargo", "bin" ]
+  upload_caches: [ "cargo", "targets", "bin" ]
 
 
 validate_task:
@@ -90,6 +97,9 @@ validate_task:
   cargo_cache: &ro_cargo_cache
     <<: *cargo_cache
     reupload_on_changes: false
+  targets_cache: &ro_targets_cache
+    <<: *targets_cache
+    reupload_on_changes: false
   bin_cache: &ro_bin_cache
     <<: *bin_cache
     reupload_on_changes: false
@@ -103,6 +113,7 @@ unit_task:
     - "validate"
   pkg_cache: *ro_pkg_cache # TODO: Remove when packages included in static VM images
   cargo_cache: *ro_cargo_cache
+  targets_cache: *ro_targets_cache
   bin_cache: *ro_bin_cache
   setup_script: *setup
   main_script: *main
@@ -114,6 +125,7 @@ integration_task:
     - "unit"
   pkg_cache: *ro_pkg_cache # TODO: Remove when packages included in static VM images
   cargo_cache: *ro_cargo_cache
+  targets_cache: *ro_targets_cache
   bin_cache: *ro_bin_cache
   setup_script: *setup
   main_script: *main
@@ -137,7 +149,7 @@ meta_task:
         GCPJSON: ENCRYPTED[e7e6e13b98eb34f480a12412a048e3fb78a02239c229659e136b7a27e2ab25a5bbb61ab6016e322cb6f777fa2c9f9520]
         GCPNAME: ENCRYPTED[f3fc6da8fe283ef506d7b18467a81153ea8e18b1d3cd76e79dcd6f566f20fdd3651522432d3d232f4d69eeb1502d1f6b]
         GCPPROJECT: libpod-218412
-    clone_script: &noop /bin/true  # source not needed
+    clone_script: &noop mkdir -p $CIRRUS_WORKING_DIR  # source not needed
     script: /usr/local/bin/entrypoint.sh
 
 
@@ -148,11 +160,17 @@ success_task:
     - "build"
     - "validate"
     - "unit"
-    # - "integration"
+    - "integration"
     - "meta"
-  container:
-    image: quay.io/libpod/alpine:latest
   env:
     CIRRUS_SHELL: "/bin/sh"
   clone_script: *noop
-  script: *noop
+  bin_cache: *ro_bin_cache
+  # The paths used for uploaded artifacts are relative here and in Cirrus
+  script:
+    - mv bin/* ./
+    - rm -rf bin
+  # Upload tested binary for consumption downstream
+  # https://cirrus-ci.org/guide/writing-tasks/#artifacts-instruction
+  binary_artifacts:
+    path: ./*netavark*

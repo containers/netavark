@@ -17,7 +17,11 @@ _run_noarg() {
 }
 
 _run_build() {
-    make all
+    # Assume we're on a fast VM, compile everything needed by the
+    # rest of CI since subsequent tasks may have limited resources.
+    make all debug=1
+    make build_unit  # reuses some debug binaries
+    make all  # optimized/non-debug binaries
 }
 
 _run_validate() {
