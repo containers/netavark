@@ -17,8 +17,8 @@ env:
     # Save a little typing (path relative to $CIRRUS_WORKING_DIR)
     SCRIPT_BASE: "./contrib/cirrus"
     FEDORA_NAME: "fedora-35"
-    IMAGE_SUFFIX: "c6226133906620416"
-    FEDORA_CACHE_IMAGE_NAME: "fedora-${IMAGE_SUFFIX}"
+    IMAGE_SUFFIX: "c4559025915297792"
+    FEDORA_NETAVARK_IMAGE: "fedora-netavark-${IMAGE_SUFFIX}"
 
 
 gcp_credentials: ENCRYPTED[d6efdb7d6d4c61e3831df2193ca6348bb02f26cd931695f69d41930b1965f7dab72a838ca0902f6ed8cde66c7deddae2]
@@ -31,7 +31,7 @@ gce_instance:  &standard_vm
     cpu: 2
     memory: "4Gb"
     disk: 200  # GB, do not set <200 per gcloud warning re: I/O performance
-    image_name: "${FEDORA_CACHE_IMAGE_NAME}"
+    image_name: "${FEDORA_NETAVARK_IMAGE}"
 
 
 build_task:
@@ -41,15 +41,6 @@ build_task:
     <<: *standard_vm
     cpu: 8
     memory: "8Gb"
-  pkg_cache: &pkg_cache # TODO: Remove when packages included in static VM images
-    # This cache is intended to avoid constantly re-downloading repo. metadata
-    # (~150mb) and necessary RPMs (~300mb) every time CI runs.  It will likely
-    # flap often, as the metadata and package DBs change on access.  This is
-    # okay, as the cache still provides a benefit vs constantly hitting the
-    # RPM repos.  Use of this cache depends on dnf arguments passed in setup.sh
-    folder: "/var/cache/dnf"
-    fingerprint_key: "pkg_${DEST_BRANCH}"
-    reupload_on_changes: true  # required since fingerprint_key is defined
   cargo_cache: &cargo_cache
     # Populating this cache depends on execution of setup.sh, and runner.sh
     # to builds of all release, debug, plus unit-tests.
@@ -79,7 +70,6 @@ build_task:
     fingerprint_key: "bin_v1_${CIRRUS_BUILD_ID}" # Cache only within same build
     reupload_on_changes: true
   setup_script: &setup "$SCRIPT_BASE/setup.sh"
-  upload_caches: [ "pkg" ]  # Upload now, in case of main_script failure
   main_script: &main "$SCRIPT_BASE/runner.sh $CIRRUS_TASK_NAME"
   upload_caches: [ "cargo", "targets", "bin" ]
 
@@ -91,9 +81,6 @@ validate_task:
   # From this point forward, all cache's become read-only - meaning
   # any changes made in this task aren't re-uploaded to the cache.
   # This avoids some flapping between tasks, along with the upload time.
-  pkg_cache: &ro_pkg_cache # TODO: Remove when packages included in static VM images
-    <<: *pkg_cache
-    reupload_on_changes: false
   cargo_cache: &ro_cargo_cache
     <<: *cargo_cache
     reupload_on_changes: false
@@ -110,8 +97,7 @@ validate_task:
 unit_task:
   alias: "unit"
   depends_on:
-    - "validate"
-  pkg_cache: *ro_pkg_cache # TODO: Remove when packages included in static VM images
+    - "build"
   cargo_cache: *ro_cargo_cache
   targets_cache: *ro_targets_cache
   bin_cache: *ro_bin_cache
@@ -123,7 +109,6 @@ integration_task:
   alias: "integration"
   depends_on:
     - "unit"
-  pkg_cache: *ro_pkg_cache # TODO: Remove when packages included in static VM images
   cargo_cache: *ro_cargo_cache
   targets_cache: *ro_targets_cache
   bin_cache: *ro_bin_cache
@@ -143,7 +128,7 @@ meta_task:
         image: quay.io/libpod/imgts:$IMAGE_SUFFIX
     env:
         # Space-separated list of images used by this repository state
-        IMGNAMES: "${FEDORA_CACHE_IMAGE_NAME}"
+        IMGNAMES: "${FEDORA_NETAVARK_IMAGE}"
         BUILDID: "${CIRRUS_BUILD_ID}"
         REPOREF: "${CIRRUS_REPO_NAME}"
         GCPJSON: ENCRYPTED[e7e6e13b98eb34f480a12412a048e3fb78a02239c229659e136b7a27e2ab25a5bbb61ab6016e322cb6f777fa2c9f9520]
