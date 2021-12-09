@@ -90,7 +90,6 @@ impl Core {
         //we have the bridge name but we must iterate for all the available gateways
         for (idx, subnet) in network.subnets.iter().flatten().enumerate() {
             let subnet_mask_cidr = subnet.subnet.prefix_len();
-
             if let Some(gw) = subnet.gateway {
                 let gw_net = match gw {
                     IpAddr::V4(gw4) => match ipnet::Ipv4Net::new(gw4, subnet_mask_cidr) {
