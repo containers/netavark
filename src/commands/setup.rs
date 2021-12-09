@@ -4,7 +4,7 @@ use crate::firewall;
 use crate::firewall::iptables::MAX_HASH_SIZE;
 use crate::network;
 use crate::network::core_utils::CoreUtils;
-use crate::network::internal_types::{SetupNetwork, SetupPortForward};
+use crate::network::internal_types::{PortForwardConfig, SetupNetwork};
 use crate::network::{core_utils, types};
 use clap::{self, Clap};
 use log::debug;
@@ -124,7 +124,7 @@ impl Setup {
                                         "no network address provided",
                                     )
                                 })?;
-                                let spf = SetupPortForward {
+                                let spf = PortForwardConfig {
                                     net: network.clone(),
                                     container_id: network_options.container_id.clone(),
                                     port_mappings: i.clone(),

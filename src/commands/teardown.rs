@@ -1,7 +1,9 @@
 use crate::error::NetavarkError;
 use crate::firewall::iptables::MAX_HASH_SIZE;
 use crate::network::core_utils::CoreUtils;
-use crate::network::internal_types::{TearDownNetwork, TeardownPortForward};
+use crate::network::internal_types::{
+    PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
+};
 use crate::{firewall, network};
 use clap::{self, Clap};
 use log::debug;
@@ -104,23 +106,30 @@ impl Teardown {
                                         "no network address provided",
                                     )
                                 })?;
-                                let td = TeardownPortForward {
-                                    network: network.clone(),
+                                let spf = PortForwardConfig {
+                                    net: network.clone(),
                                     container_id: network_options.container_id.clone(),
                                     port_mappings: i.clone(),
                                     network_name: (*net_name).clone(),
-                                    id_network_hash: id_network_hash.clone(),
+                                    network_hash_name: id_network_hash.clone(),
                                     container_ip: *ip,
-                                    complete_teardown,
                                     network_address: networks[idx].clone(),
+                                };
+                                let td = TeardownPortForward {
+                                    config: spf,
+                                    complete_teardown,
                                 };
                                 firewall_driver.teardown_port_forward(td)?;
                             }
                         }
                     }
                     if complete_teardown {
+                        let su = SetupNetwork {
+                            net: network.clone(),
+                            network_hash_name: id_network_hash,
+                        };
                         let ctd = TearDownNetwork {
-                            net: (*network).clone(),
+                            config: su,
                             complete_teardown,
                         };
                         firewall_driver.teardown_network(ctd)?;

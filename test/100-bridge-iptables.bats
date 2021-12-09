@@ -48,16 +48,11 @@ fw_driver=iptables
 
     # TODO check iptables
     # iptables -L ...
+
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
 }
 
 @test "$fw_driver - ipv6 bridge" {
-
-    ### FIXME set sysctl in netavark
-    run_in_host_netns sh -c "echo 0 > /proc/sys/net/ipv6/conf/default/accept_dad"
-    #run_in_container_netns sh -c "echo 0 > /proc/sys/net/ipv6/conf/default/accept_dad"
-
-    #run_in_host_netns sh -c "echo 0 > /proc/sys/net/ipv6/conf/default/accept_ra"
-
     run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge.json setup $(get_container_netns_path)
     result="$output"
     assert_json "$result" 'has("podman1")' == "true" "object key exists"
@@ -90,6 +85,8 @@ fw_driver=iptables
     assert "$output" =~ "127.0.0.1" "Loopback adapter is up (has address)"
 
     run_in_host_netns ping6 -c 1 fd10:88:a::2
+
+    run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge.json teardown $(get_container_netns_path)
 }
 
 @test "$fw_driver - port forwarding ipv4 - tcp" {
