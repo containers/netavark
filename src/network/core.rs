@@ -27,7 +27,15 @@ impl Core {
             interfaces: Some(HashMap::new()),
         };
         // get bridge name
-        let bridge_name: String = network.network_interface.as_ref().unwrap().to_owned();
+        let bridge_name = match network.network_interface.clone() {
+            None => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "no bridge provided".to_string(),
+                ))
+            }
+            Some(i) => i,
+        };
         // static ip vector
         let mut address_vector = Vec::new();
         // gateway ip vector
@@ -55,7 +63,15 @@ impl Core {
         }
 
         let container_veth_name: String = per_network_opts.interface_name.to_owned();
-        let static_ips: &Vec<IpAddr> = per_network_opts.static_ips.as_ref().unwrap();
+        let static_ips = match per_network_opts.static_ips.as_ref() {
+            None => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "no static ips provided".to_string(),
+                ))
+            }
+            Some(i) => i,
+        };
         let static_mac: String = match &per_network_opts.static_mac {
             Some(mac) => mac.to_owned(),
             None => "".to_string(),
@@ -348,9 +364,17 @@ impl Core {
         let mut interfaces: HashMap<String, types::NetInterface> = HashMap::new();
 
         let container_macvlan_name: String = per_network_opts.interface_name.to_owned();
-        let static_ips: &Vec<IpAddr> = per_network_opts.static_ips.as_ref().unwrap();
+        let static_ips = match per_network_opts.static_ips.as_ref() {
+            None => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "no static ips provided".to_string(),
+                ))
+            }
+            Some(i) => i.clone(),
+        };
 
-        // prepare a vector of static ips with appropriate cidr
+        // prepare a vector of static aps with appropriate cidr
         // we only need static ips so do not process gateway,
         for (idx, subnet) in network.subnets.iter().flatten().enumerate() {
             let subnet_mask_cidr = subnet.subnet.prefix_len();
@@ -494,12 +518,10 @@ impl Core {
 
     pub fn remove_interface_per_podman_network(
         per_network_opts: &types::PerNetworkOptions,
-        network: &types::Network,
+        _network: &types::Network,
         netns: &str,
     ) -> Result<(), std::io::Error> {
         let container_veth_name: String = per_network_opts.interface_name.to_owned();
-        let _subnets = network.subnets.as_ref().unwrap();
-
         debug!(
             "Container veth name being removed: {:?}",
             container_veth_name

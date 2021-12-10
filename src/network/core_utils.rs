@@ -2,7 +2,7 @@ use crate::network::constants;
 use futures::stream::TryStreamExt;
 use futures::StreamExt;
 use libc;
-use log::debug;
+use log::{debug, error};
 use nix::sched;
 use rand::Rng;
 use rtnetlink;
@@ -31,7 +31,12 @@ impl CoreUtils {
         let mut final_slice = Vec::new();
         for &b in bytes {
             let mut a = String::with_capacity(bytes.len() * 2);
-            write!(&mut a, "{:02x}", b).unwrap();
+            match write!(&mut a, "{:02x}", b) {
+                Ok(_) => {}
+                Err(err) => {
+                    error!("failed to encode address to hex: {}", err)
+                }
+            }
             final_slice.push(a);
         }
         final_slice.join(":")
@@ -768,11 +773,14 @@ impl CoreUtils {
 
                     Ok(())
                 });
-                if let Err(err) = thread_handle.join().unwrap() {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("from container namespace: {}", err),
-                    ));
+                match thread_handle.join() {
+                    Ok(_) => {}
+                    Err(err) => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("from container namespace: {:?}", err),
+                        ));
+                    }
                 }
             }
             Err(err) => {
@@ -1086,11 +1094,14 @@ impl CoreUtils {
 
                     Ok(())
                 });
-                if let Err(err) = thread_handle.join().unwrap() {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("from container namespace: {}", err),
-                    ));
+                match thread_handle.join() {
+                    Ok(_) => {}
+                    Err(err) => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("from container namespace: {:?}", err),
+                        ));
+                    }
                 }
             }
             Err(err) => {
