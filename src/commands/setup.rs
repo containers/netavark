@@ -69,6 +69,8 @@ impl Setup {
             if network.ipv6_enabled {
                 core_utils::CoreUtils::apply_sysctl_value(IPV6_FORWARD, "1")?;
             }
+            // If the network is internal, we override the global setting and disabled forwarding
+            // on a per interface instance
             match network.driver.as_str() {
                 "bridge" => {
                     let per_network_opts =
@@ -85,7 +87,25 @@ impl Setup {
                         &self.network_namespace_path,
                     )?;
                     response.insert(net_name.to_owned(), status_block);
-
+                    if network.internal {
+                        match &network.network_interface {
+                            None => {}
+                            Some(i) => {
+                                core_utils::CoreUtils::apply_sysctl_value(
+                                    format!("/proc/sys/net/ipv4/conf/{}/forwarding", i).as_str(),
+                                    "0",
+                                )?;
+                                if network.ipv6_enabled {
+                                    core_utils::CoreUtils::apply_sysctl_value(
+                                        format!("/proc/sys/net/ipv6/conf/{}/forwarding", i)
+                                            .as_str(),
+                                        "0",
+                                    )?;
+                                }
+                            }
+                        };
+                        continue;
+                    }
                     let id_network_hash = CoreUtils::create_network_hash(net_name, MAX_HASH_SIZE);
                     let sn = SetupNetwork {
                         net: network.clone(),
