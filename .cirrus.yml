@@ -93,6 +93,15 @@ validate_task:
   setup_script: *setup
   main_script: *main
 
+verify_vendor_task:
+  alias: "verify_vendor"
+  depends_on:
+    - "build"
+  cargo_cache: *ro_cargo_cache
+  targets_cache: *ro_targets_cache
+  bin_cache: *ro_bin_cache
+  setup_script: *setup
+  main_script: *main
 
 unit_task:
   alias: "unit"
@@ -144,6 +153,7 @@ success_task:
   depends_on:
     - "build"
     - "validate"
+    - "verify_vendor"
     - "unit"
     - "integration"
     - "meta"

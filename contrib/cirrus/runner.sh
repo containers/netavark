@@ -28,6 +28,13 @@ _run_validate() {
     make validate
 }
 
+_run_verify_vendor() {
+    # N/B: current repo. dir. contents produced by _run_build() above.
+    if ! git diff --no-ext-diff --quiet --exit-code; then
+        die "Found uncommited and necessary changes to vendoring, please fix, commit, and re-submit."
+    fi
+}
+
 _run_unit() {
     make unit
 }
