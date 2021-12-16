@@ -34,7 +34,7 @@ else
 endif
 
 .PHONY: all
-all: build docs
+all: vendor build
 
 bin:
 	mkdir -p $@
@@ -88,6 +88,17 @@ integration: $(CARGO_TARGET_DIR)
 validate: $(CARGO_TARGET_DIR)
 	cargo fmt --all -- --check
 	cargo clippy -p netavark -- -D warnings
+
+.PHONY: vendor
+vendor: ## vendor everything into vendor/
+	cargo vendor
+	$(MAKE) vendor-rm-windows ## remove windows library if possible
+
+.PHONY: vendor-rm-windows
+vendor-rm-windows:
+	if [ -d "vendor/winapi" ]; then \
+		rm -fr vendor/winapi*gnu*/lib/*.a; \
+	fi
 
 .PHONY: help
 help:

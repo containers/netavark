@@ -2,3 +2,4 @@ bin/
 targets/
 *.swp
 netavark.1
+vendor/winapi*gnu*/lib/*.a
