@@ -866,8 +866,8 @@ impl CoreUtils {
         }
         if ipv6_enabled {
             // Do not accept Router Advertisements if ipv6 is enabled
-            let k = format!("net/ipv6/conf/{}/accept_ra", ifname);
-            match CoreUtils::apply_sysctl_value(&k, "0") {
+            match CoreUtils::apply_sysctl_value(format!("net/ipv6/conf/{}/accept_ra", ifname), "0")
+            {
                 Ok(_) => {}
                 Err(err) => {
                     return Err(std::io::Error::new(
@@ -1265,8 +1265,13 @@ impl CoreUtils {
         ctl.value_string()
     }
 
-    // set a sysctl value by value's namespace
-    pub fn apply_sysctl_value(ns_value: &str, val: &str) -> Result<String, SysctlError> {
+    /// Set a sysctl value by value's namespace.
+    pub fn apply_sysctl_value(
+        ns_value: impl AsRef<str>,
+        val: impl AsRef<str>,
+    ) -> Result<String, SysctlError> {
+        let ns_value = ns_value.as_ref();
+        let val = val.as_ref();
         debug!("Setting sysctl value for {} to {}", ns_value, val);
         let ctl = sysctl::Ctl::new(ns_value)?;
         ctl.set_value_string(val)

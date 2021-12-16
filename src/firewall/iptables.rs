@@ -106,7 +106,7 @@ impl firewall::FirewallDriver for IptablesDriver {
             None => {}
             Some(i) => {
                 let localnet_path = format!("net.ipv4.conf.{}.route_localnet", i);
-                CoreUtils::apply_sysctl_value(localnet_path.as_str(), "1")?;
+                CoreUtils::apply_sysctl_value(localnet_path, "1")?;
             }
         }
         // let container_network_address = setup_portfw.network_address.subnet;
