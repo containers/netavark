@@ -29,7 +29,7 @@ url = "2.1.0"
 zbus = "1.9.1"
 rtnetlink = { git = "https://github.com/little-dude/netlink", branch = "master" }
 futures = "0.3.18"
-nix = "0.23.0"
+nix = "0.23.1"
 rand = "0.8.3"
 faccess = "0.2.3"
 tokio = { version = "1.15.0", features = ["full"] }

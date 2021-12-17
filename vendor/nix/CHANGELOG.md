@@ -3,6 +3,25 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.23.1] - 2021-12-16
+
+### Added
+### Changed
+
+- Relaxed the bitflags requirement from 1.3.1 to 1.1.  This partially reverts
+  #1492.  From now on, the MSRV is not guaranteed to work with all versions of
+  all dependencies, just with some version of all dependencies.
+  (#[1607](https://github.com/nix-rust/nix/pull/1607))
+
+### Fixed
+
+- Fixed soundness issues in `FdSet::insert`, `FdSet::remove`, and
+  `FdSet::contains` involving file descriptors outside of the range
+  `0..FD_SETSIZE`.
+  (#[1575](https://github.com/nix-rust/nix/pull/1575))
+
+### Removed
+
 ## [0.23.0] - 2021-09-28
 ### Added
 
