@@ -254,7 +254,6 @@ pub fn get_port_forwarding_chains<'a>(
         localhost_ip = "::1";
     }
     let mut chains = Vec::new();
-
     // Set up all chains
     let network_dn_chain_name = CONTAINER_DN_CHAIN.to_owned() + &pfwd.network_hash_name;
 
@@ -360,13 +359,22 @@ pub fn get_port_forwarding_chains<'a>(
 
     for i in pfwd.port_mappings.clone() {
         // hostport dnat
+        let is_range = i.range > 1;
+        let mut host_port = i.host_port.to_string();
+        if is_range {
+            host_port = format!(
+                "{}:{}",
+                i.host_port.to_string(),
+                (i.host_port + (i.range - 1)).to_string()
+            )
+        }
         netavark_hostport_dn_chain.build_rule(VarkRule::new(
             format!(
-                "-j {} -p {} -m multiport --destination-ports {} {}",
-                network_dn_chain_name,
-                i.protocol,
-                i.host_port.to_string(),
-                comment_dn_network_cid
+                // I'm leaving this commented code for now in the case
+                // we need to revert.
+                // "-j {} -p {} -m multiport --destination-ports {} {}",
+                "-j {} -p {} --dport {} {}",
+                network_dn_chain_name, i.protocol, &host_port, comment_dn_network_cid
             ),
             None,
         ));
@@ -377,7 +385,7 @@ pub fn get_port_forwarding_chains<'a>(
                 NETAVARK_HOSTPORT_SETMARK,
                 pfwd.network_address.subnet.to_string(),
                 i.protocol,
-                i.host_port.to_string()
+                &host_port
             ),
             None,
         ));
@@ -385,10 +393,7 @@ pub fn get_port_forwarding_chains<'a>(
         netavark_hashed_dn_chain.build_rule(VarkRule::new(
             format!(
                 "-j {} -s {} -p {} --dport {}",
-                NETAVARK_HOSTPORT_SETMARK,
-                localhost_ip,
-                i.protocol,
-                i.host_port.to_string()
+                NETAVARK_HOSTPORT_SETMARK, localhost_ip, i.protocol, &host_port
             ),
             None,
         ));
@@ -397,14 +402,19 @@ pub fn get_port_forwarding_chains<'a>(
         if is_ipv6 {
             container_ip_value = format!("[{}]", container_ip_value)
         }
+        let mut container_port = i.container_port.to_string();
+        if is_range {
+            container_port = format!(
+                "{}-{}/{}",
+                i.container_port.to_string(),
+                (i.container_port + (i.range - 1)).to_string(),
+                i.host_port.to_string()
+            );
+        }
         netavark_hashed_dn_chain.build_rule(VarkRule::new(
             format!(
                 "-j {} -p {} --to-destination {}:{} --destination-port {}",
-                DNAT,
-                i.protocol,
-                container_ip_value,
-                i.container_port.to_string(),
-                i.host_port.to_string()
+                DNAT, i.protocol, container_ip_value, container_port, &host_port
             ),
             None,
         ));
