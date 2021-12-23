@@ -12,6 +12,24 @@ fw_driver=iptables
     assert "${lines[0]}" "==" "[INFO  netavark::firewall] Using iptables firewall driver" "iptables driver is in use"
 }
 
+@test "$fw_driver - internal network" {
+   run_in_host_netns iptables -t nat -nvL
+   before="$output"
+
+   run_netavark --file ${TESTSDIR}/testfiles/internal.json setup $(get_container_netns_path)
+
+   run_in_host_netns iptables -t nat -nvL
+   after="$output"
+   assert "$before" == "$after" "make sure tables have not changed"
+
+   run_in_container_netns ip route show
+   assert "default" "!~" "$output" "No default route for internal networks"
+
+   run_in_container_netns ping -c 1 10.88.0.1
+
+   run_netavark --file ${TESTSDIR}/testfiles/internal.json teardown $(get_container_netns_path)
+}
+
 @test "$fw_driver - simple bridge" {
     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
     result="$output"
@@ -142,4 +160,12 @@ fw_driver=iptables
 
 @test "$fw_driver - port range forwarding ipv6 - udp" {
     test_port_fw ip=6 proto=udp range=3
+}
+
+@test "$fw_driver - port range forwarding dual - udp" {
+    test_port_fw ip=dual proto=udp range=3
+}
+
+@test "$fw_driver - port range forwarding dual - tcp" {
+    test_port_fw ip=dual proto=tcp range=3
 }
