@@ -161,3 +161,11 @@ fw_driver=iptables
 @test "$fw_driver - port range forwarding ipv6 - udp" {
     test_port_fw ip=6 proto=udp range=3
 }
+
+@test "$fw_driver - port range forwarding dual - udp" {
+    test_port_fw ip=dual proto=udp range=3
+}
+
+@test "$fw_driver - port range forwarding dual - tcp" {
+    test_port_fw ip=dual proto=tcp range=3
+}
