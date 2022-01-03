@@ -3,10 +3,16 @@
 use crate::error::{Error, ErrorCode, Result};
 #[cfg(feature = "float_roundtrip")]
 use crate::lexical;
-use crate::lib::str::FromStr;
-use crate::lib::*;
 use crate::number::Number;
 use crate::read::{self, Fused, Reference};
+use alloc::string::String;
+use alloc::vec::Vec;
+#[cfg(feature = "float_roundtrip")]
+use core::iter;
+use core::iter::FusedIterator;
+use core::marker::PhantomData;
+use core::result;
+use core::str::FromStr;
 use serde::de::{self, Expected, Unexpected};
 use serde::{forward_to_deserialize_any, serde_if_integer128};
 
@@ -87,7 +93,9 @@ impl<'a> Deserializer<read::StrRead<'a>> {
 
 macro_rules! overflow {
     ($a:ident * 10 + $b:ident, $c:expr) => {
-        $a >= $c / 10 && ($a > $c / 10 || $b > $c % 10)
+        match $c {
+            c => $a >= c / 10 && ($a > c / 10 || $b > c % 10),
+        }
     };
 }
 
