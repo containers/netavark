@@ -3,6 +3,11 @@ use futures::stream::TryStreamExt;
 use futures::StreamExt;
 use libc;
 use log::{debug, error};
+use netlink_packet_route::link::nlas::AfSpecBridge;
+use netlink_packet_route::link::nlas::Info;
+use netlink_packet_route::link::nlas::InfoBridge;
+use netlink_packet_route::link::nlas::InfoData;
+use netlink_packet_route::link::nlas::InfoKind;
 use nix::sched;
 use rand::Rng;
 use rtnetlink;
@@ -91,6 +96,84 @@ impl CoreUtils {
                 std::io::ErrorKind::Other,
                 "invalid macvlan mode".to_string(),
             )),
+        }
+    }
+
+    unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
+        ::std::slice::from_raw_parts((p as *const T) as *const u8, ::std::mem::size_of::<T>())
+    }
+
+    #[tokio::main]
+    pub async fn set_bridge_vlan(
+        link_name: &str,
+        vlan_id: u16,
+        flags: u16,
+    ) -> Result<(), std::io::Error> {
+        let (_connection, handle, _) = match rtnetlink::new_connection() {
+            Ok((conn, handle, messages)) => (conn, handle, messages),
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed to connect: {}", err),
+                ))
+            }
+        };
+
+        tokio::spawn(_connection);
+
+        let mut links = handle
+            .link()
+            .get()
+            .set_name_filter(link_name.to_string())
+            .execute();
+        match links.try_next().await {
+            Ok(Some(link)) => {
+                // locally scoped struct since we dont need it anywhere else
+                struct BridgeVlanInfo {
+                    id: u16,
+                    data: u16,
+                }
+
+                let mut request = handle.link().set(link.header.index);
+                request.message_mut().header.interface_family = AF_BRIDGE as u8;
+                request.message_mut().header.flags = 0;
+                let my_struct = BridgeVlanInfo {
+                    id: vlan_id,
+                    data: flags, //accept as arugment
+                };
+                let bytes: &[u8] = unsafe { CoreUtils::any_as_u8_slice(&my_struct) };
+
+                let bridge_flags = AfSpecBridge::Flags(BRIDGE_FLAGS_SELF);
+                let bridge_vlan_info = AfSpecBridge::VlanInfo(bytes.to_vec());
+                request
+                    .message_mut()
+                    .nlas
+                    .push(Nla::AfSpecBridge(vec![bridge_flags, bridge_vlan_info]));
+
+                if let Err(err) = request.execute().await {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!(
+                            "failed to tag link with bridge vlan info {}: {}",
+                            &link_name, err
+                        ),
+                    ));
+                }
+
+                return Ok(());
+            }
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Unable to get link by name {}: {}", link_name, err),
+                ));
+            }
+            Ok(None) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("No link found with name {}", link_name),
+                ))
+            }
         }
     }
 
@@ -800,6 +883,7 @@ impl CoreUtils {
         ips: Vec<ipnet::IpNet>,
         mtu: u32,
         ipv6_enabled: bool,
+        vlan_filtering: bool,
     ) -> Result<(), Error> {
         let (_connection, handle, _) = match rtnetlink::new_connection() {
             Ok((conn, handle, messages)) => (conn, handle, messages),
@@ -824,13 +908,16 @@ impl CoreUtils {
             // I am unable to decipher how I can get get the link mode.
             Ok(Some(_)) => (),
             Ok(None) => {
-                if let Err(err) = handle
-                    .link()
-                    .add()
-                    .bridge(ifname.to_string())
-                    .execute()
-                    .await
-                {
+                let mut request = handle.link().add().bridge(ifname.to_string());
+                if vlan_filtering {
+                    let mut link_info_nlas = vec![Info::Kind(InfoKind::Bridge)];
+                    let data = Some(InfoData::Bridge(vec![InfoBridge::VlanFiltering(1u8)]));
+                    if let Some(data) = data {
+                        link_info_nlas.push(Info::Data(data));
+                    }
+                    request.message_mut().nlas.push(Nla::Info(link_info_nlas));
+                }
+                if let Err(err) = request.execute().await {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         format!("failed to create a bridge interface {}: {}", &ifname, err),

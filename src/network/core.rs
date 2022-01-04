@@ -44,6 +44,9 @@ impl Core {
         let mut response_net_addresses: Vec<NetAddress> = Vec::new();
         // interfaces map, but we only ever expect one, for response
         let mut interfaces: HashMap<String, types::NetInterface> = HashMap::new();
+        // any vlan id specified with bridge for tagging.
+        let mut vlan_id: u16 = 0;
+        let mut vlan_filtering: bool = false;
         // mtu to configure, 0 means it was not set do nothing.
         let mut mtu_config: u32 = 0;
         if let Some(options_map) = network.options.as_ref() {
@@ -56,6 +59,25 @@ impl Core {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::Other,
                             format!("unable to parse mtu: {}", err),
+                        ))
+                    }
+                }
+            }
+        }
+
+        if let Some(options_map) = network.options.as_ref() {
+            if let Some(vlan) = options_map.get("vlan") {
+                match vlan.parse() {
+                    Ok(vlan) => {
+                        vlan_id = vlan;
+                        if vlan_id != 0 {
+                            vlan_filtering = true;
+                        }
+                    }
+                    Err(err) => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("unable to parse vlan_id: {}", err),
                         ))
                     }
                 }
@@ -154,6 +176,7 @@ impl Core {
             netns,
             mtu_config,
             ipv6_enabled,
+            vlan_filtering,
         ) {
             Ok(addr) => addr,
             Err(err) => {
@@ -163,6 +186,22 @@ impl Core {
                 ))
             }
         };
+
+        if vlan_filtering {
+            //Wait for: https://github.com/little-dude/netlink/pull/222
+            //For a l2:
+            //Configure the vlan tag on the veth host side.
+            // flags must not be 100u16 instead use constants from upstream
+            if let Err(er) =
+                core_utils::CoreUtils::set_bridge_vlan(&host_veth_name, vlan_id, 100u16)
+            {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("failed assigning bridge vlan tag {}", er),
+                ));
+            }
+        }
+
         debug!("Container veth mac: {:?}", container_veth_mac);
         let interface = types::NetInterface {
             mac_address: container_veth_mac,
@@ -185,6 +224,7 @@ impl Core {
         netns: &str,
         mtu_config: u32,
         ipv6_enabled: bool,
+        vlan_filtering: bool,
     ) -> Result<String, std::io::Error> {
         //copy subnet masks and gateway ips since we are going to use it later
         let mut gw_ipaddr_clone = Vec::new();
@@ -197,6 +237,7 @@ impl Core {
             gw_ipaddr,
             mtu_config,
             ipv6_enabled,
+            vlan_filtering,
         ) {
             Ok(_) => (),
             Err(err) => {
