@@ -596,3 +596,20 @@ function gateway_from_subnet() {
 function setup_sctp_kernel_module() {
     modprobe sctp || skip "cannot load sctp kernel module"
 }
+
+
+#################################
+#  add_dummy_interface_on_host  #
+#################################
+# create a dummy interface with the given name and subnet
+# the first arg is the name
+# the second arg is the subnet (optional)
+function add_dummy_interface_on_host() {
+    name="$1"
+    ipaddr="$2"
+    run_in_host_netns ip link add "$name" type dummy
+    if [ -n "$ipaddr" ]; then
+        run_in_host_netns ip addr add "$ipaddr" dev "$name"
+    fi
+    run_in_host_netns ip link set "$name" up
+}

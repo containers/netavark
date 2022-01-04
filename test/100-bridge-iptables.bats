@@ -169,3 +169,25 @@ fw_driver=iptables
 @test "$fw_driver - port range forwarding dual - tcp" {
     test_port_fw ip=dual proto=tcp range=3
 }
+
+
+@test "$fw_driver - port forwarding with hostip ipv4 - tcp" {
+    add_dummy_interface_on_host dummy0 "172.16.0.1/24"
+    run_in_host_netns ip addr
+    test_port_fw hostip="172.16.0.1"
+}
+
+@test "$fw_driver - port range forwarding with hostip ipv6 - tcp" {
+    add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
+    test_port_fw ip=6 hostip="fd65:8371:648b:0c06::1"
+}
+
+@test "$fw_driver - port range forwarding with hostip ipv4 - udp" {
+    add_dummy_interface_on_host dummy0 "172.16.0.1/24"
+    test_port_fw proto=udp hostip="172.16.0.1"
+}
+
+@test "$fw_driver - port range forwarding with hostip ipv6 - udp" {
+    add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
+    test_port_fw ip=6 proto=udp hostip="fd65:8371:648b:0c06::1"
+}
