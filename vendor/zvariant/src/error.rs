@@ -26,10 +26,6 @@ pub enum Error {
     /// The provided signature (first argument) was not valid for reading as the requested type.
     /// Details on the expected signatures are in the second argument.
     SignatureMismatch(crate::Signature<'static>, String),
-    /// Only exists to allow `TryFrom<T> for T` conversions. You should never actually be getting
-    /// this error from any API.
-    #[deprecated]
-    Infallible,
 }
 
 assert_impl_all!(Error: Send, Sync, Unpin);
@@ -81,8 +77,6 @@ impl fmt::Display for Error {
                 "Signature mismatch: got `{}`, expected {}",
                 provided, expected,
             ),
-            #[allow(deprecated)]
-            Error::Infallible => write!(f, "Infallible conversion failed"),
         }
     }
 }

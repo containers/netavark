@@ -1,6 +1,3 @@
-// FIXME: Drop this when the deprecated `Basic::ALIGNMENT` is dropped in the next API break.
-#![allow(deprecated)]
-
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use static_assertions::assert_impl_all;
 use std::hash::{Hash, Hasher};
@@ -110,7 +107,6 @@ impl<'a> Str<'a> {
 impl<'a> Basic for Str<'a> {
     const SIGNATURE_CHAR: char = <&str>::SIGNATURE_CHAR;
     const SIGNATURE_STR: &'static str = <&str>::SIGNATURE_STR;
-    const ALIGNMENT: usize = <&str>::ALIGNMENT;
 
     fn alignment(format: EncodingFormat) -> usize {
         <&str>::alignment(format)

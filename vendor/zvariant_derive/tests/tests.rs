@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
-use zvariant::Type;
-use zvariant_derive::{DeserializeDict, SerializeDict, Type, TypeDict};
+use zvariant::{DeserializeDict, SerializeDict, Type, TypeDict};
 
 #[test]
 fn derive_unit_struct() {

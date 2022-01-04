@@ -1,16 +1,36 @@
-use zbus::{self, fdo};
+use async_io::block_on;
+use futures_util::{
+    future::{select, Either},
+    stream::StreamExt,
+};
+use std::{convert::TryInto, future::ready};
+use zbus::{fdo, CacheProperties, SignalContext};
 use zbus_macros::{dbus_interface, dbus_proxy, DBusError};
 
 #[test]
 fn test_proxy() {
     #[dbus_proxy(
-        interface = "org.freedesktop.zbus.Test",
-        default_service = "org.freedesktop.zbus",
-        default_path = "/org/freedesktop/zbus/test"
+        interface = "org.freedesktop.zbus_macros.ProxyParam",
+        default_service = "org.freedesktop.zbus_macros",
+        default_path = "/org/freedesktop/zbus_macros/test"
+    )]
+    trait ProxyParam {
+        #[dbus_proxy(object = "Test")]
+        fn some_method<T>(&self, test: &T);
+    }
+
+    #[dbus_proxy(
+        interface = "org.freedesktop.zbus_macros.Test",
+        default_service = "org.freedesktop.zbus_macros",
+        default_path = "/org/freedesktop/zbus_macros/test"
     )]
     trait Test {
         /// comment for a_test()
         fn a_test(&self, val: &str) -> zbus::Result<u32>;
+
+        /// The generated proxies implement both `zvariant::Type` and `serde::ser::Serialize`
+        /// which is useful to pass in a proxy as a param. It serializes it as an `ObjectPath`.
+        fn some_method<T>(&self, object_path: &T) -> zbus::Result<()>;
 
         #[dbus_proxy(name = "CheckRENAMING")]
         fn check_renaming(&self) -> zbus::Result<Vec<u8>>;
@@ -20,7 +40,48 @@ fn test_proxy() {
 
         #[dbus_proxy(property)]
         fn set_property(&self, val: u16) -> fdo::Result<()>;
+
+        #[dbus_proxy(signal)]
+        fn a_signal<T>(&self, arg: u8, other: T) -> fdo::Result<()>
+        where
+            T: AsRef<str>;
     }
+
+    block_on(async move {
+        let connection = zbus::Connection::session().await.unwrap();
+        let proxy = TestProxy::builder(&connection)
+            .cache_properties(CacheProperties::No)
+            .build()
+            .await
+            .unwrap();
+        fdo::DBusProxy::new(&connection)
+            .await
+            .unwrap()
+            .request_name(
+                "org.freedesktop.zbus_macros".try_into().unwrap(),
+                fdo::RequestNameFlags::DoNotQueue.into(),
+            )
+            .await
+            .unwrap();
+        let mut stream = proxy.receive_a_signal().await.unwrap();
+
+        let left_future = async move {
+            // These calls will never happen so just testing the build mostly.
+            let signal = stream.next().await.unwrap();
+            let args = signal.args::<&str>().unwrap();
+            assert_eq!(*args.arg(), 0u8);
+            assert_eq!(*args.other(), "whatever");
+        };
+        futures_util::pin_mut!(left_future);
+        let right_future = async {
+            ready(()).await;
+        };
+        futures_util::pin_mut!(right_future);
+
+        if let Either::Left((_, _)) = select(left_future, right_future).await {
+            panic!("Shouldn't be receiving our dummy signal: `ASignal`");
+        }
+    });
 }
 
 #[test]
@@ -28,6 +89,7 @@ fn test_derive_error() {
     #[derive(Debug, DBusError)]
     #[dbus_error(prefix = "org.freedesktop.zbus")]
     enum Test {
+        #[dbus_error(zbus_error)]
         ZBus(zbus::Error),
         SomeExcuse,
         #[dbus_error(name = "I.Am.Sorry.Dave")]
@@ -42,15 +104,15 @@ fn test_derive_error() {
 fn test_interface() {
     use zbus::Interface;
 
-    struct Test<'a, T> {
-        something: &'a str,
+    struct Test<T> {
+        something: String,
         generic: T,
     }
 
     #[dbus_interface(name = "org.freedesktop.zbus.Test")]
-    impl<T: 'static> Test<'static, T>
+    impl<T: 'static> Test<T>
     where
-        T: serde::ser::Serialize + zvariant::Type,
+        T: serde::ser::Serialize + zbus::zvariant::Type + Send + Sync,
     {
         /// Testing `no_arg` documentation is reflected in XML.
         fn no_arg(&self) {
@@ -64,7 +126,7 @@ fn test_interface() {
 
         // TODO: naming output arguments after "RFC: Structural Records #2584"
         fn many_output(&self) -> zbus::fdo::Result<(&T, String)> {
-            Ok((&self.generic, self.something.to_string()))
+            Ok((&self.generic, self.something.clone()))
         }
 
         fn pair_output(&self) -> zbus::fdo::Result<((u32, String),)> {
@@ -85,13 +147,13 @@ fn test_interface() {
         }
 
         #[dbus_interface(property)]
-        fn set_my_prop(&self, _val: u16) {
+        fn set_my_prop(&mut self, _val: u16) {
             unimplemented!()
         }
 
         /// Emit a signal.
         #[dbus_interface(signal)]
-        fn signal(&self, arg: u8, other: &str) -> zbus::Result<()>;
+        async fn signal(ctxt: &SignalContext<'_>, arg: u8, other: &str) -> zbus::Result<()>;
     }
 
     const EXPECTED_XML: &str = r#"<interface name="org.freedesktop.zbus.Test">
@@ -130,7 +192,7 @@ fn test_interface() {
 </interface>
 "#;
     let t = Test {
-        something: &"somewhere",
+        something: String::from("somewhere"),
         generic: 42u32,
     };
     let mut xml = String::new();
@@ -140,10 +202,16 @@ fn test_interface() {
     assert_eq!(Test::<u32>::name(), "org.freedesktop.zbus.Test");
 
     if false {
-        // check compilation
-        let c = zbus::Connection::new_session().unwrap();
-        let m = zbus::Message::method(None, None, "/", None, "StrU32", &(42,)).unwrap();
-        let _ = t.call(&c, &m, "StrU32").unwrap();
-        t.signal(23, "ergo sum").unwrap();
+        block_on(async {
+            // check compilation
+            let c = zbus::Connection::session().await.unwrap();
+            let s = c.object_server();
+            let m =
+                zbus::Message::method(None::<()>, None::<()>, "/", None::<()>, "StrU32", &(42,))
+                    .unwrap();
+            let _ = t.call(&s, &c, &m, "StrU32".try_into().unwrap());
+            let ctxt = SignalContext::new(&c, "/does/not/matter").unwrap();
+            block_on(Test::<u32>::signal(&ctxt, 23, "ergo sum")).unwrap();
+        });
     }
 }

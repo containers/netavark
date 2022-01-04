@@ -1,6 +1,3 @@
-// FIXME: Drop this when the deprecated `Basic::ALIGNMENT` is dropped in the next API break.
-#![allow(deprecated)]
-
 use core::{convert::TryFrom, fmt::Debug, str};
 use serde::{
     de::{Deserialize, Deserializer, Visitor},
@@ -126,7 +123,6 @@ impl std::default::Default for ObjectPath<'_> {
 impl<'a> Basic for ObjectPath<'a> {
     const SIGNATURE_CHAR: char = 'o';
     const SIGNATURE_STR: &'static str = "o";
-    const ALIGNMENT: usize = <&str>::ALIGNMENT;
 
     fn alignment(format: EncodingFormat) -> usize {
         match format {
@@ -302,7 +298,7 @@ fn ensure_correct_object_path_str(path: &[u8]) -> Result<()> {
 }
 
 /// Owned [`ObjectPath`](struct.ObjectPath.html)
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, serde::Serialize, zvariant_derive::Type)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, serde::Serialize, Type)]
 pub struct OwnedObjectPath(ObjectPath<'static>);
 
 assert_impl_all!(OwnedObjectPath: Send, Sync, Unpin);

@@ -23,7 +23,7 @@ use std::{convert::TryInto, marker::PhantomData};
 /// [basic types]: trait.Basic.html
 /// [`Vec`]: https://doc.rust-lang.org/std/vec/struct.Vec.html
 /// [`HashMap`]: https://doc.rust-lang.org/std/collections/struct.HashMap.html
-/// [zvariant_derive]: https://docs.rs/zvariant_derive/2.0.0/zvariant_derive/
+/// [zvariant_derive]: https://docs.rs/zvariant_derive/2.10.0/zvariant_derive/
 pub trait Type {
     /// Get the signature for the implementing type.
     ///
@@ -151,9 +151,8 @@ array_type!([T]);
 array_type!(Vec<T>);
 
 #[cfg(feature = "arrayvec")]
-impl<A, T> Type for arrayvec::ArrayVec<A>
+impl<T, const CAP: usize> Type for arrayvec::ArrayVec<T, CAP>
 where
-    A: arrayvec::Array<Item = T>,
     T: Type,
 {
     #[inline]
@@ -163,10 +162,7 @@ where
 }
 
 #[cfg(feature = "arrayvec")]
-impl<A> Type for arrayvec::ArrayString<A>
-where
-    A: arrayvec::Array<Item = u8> + Copy,
-{
+impl<const CAP: usize> Type for arrayvec::ArrayString<CAP> {
     #[inline]
     fn signature() -> Signature<'static> {
         <&str>::signature()
@@ -251,36 +247,22 @@ tuple_impls! {
 // Arrays are serialized as tuples/structs by Serde so we treat them as such too even though
 // it's very strange. Slices and arrayvec::ArrayVec can be used anyway so I guess it's no big
 // deal.
-// TODO: Mention this fact in the module docs.
+impl<T, const N: usize> Type for [T; N]
+where
+    T: Type,
+{
+    #[inline]
+    #[allow(clippy::reversed_empty_ranges)]
+    fn signature() -> Signature<'static> {
+        let mut sig = String::with_capacity(255);
+        sig.push(STRUCT_SIG_START_CHAR);
+        for _ in 0..N {
+            sig.push_str(T::signature().as_str());
+        }
+        sig.push(STRUCT_SIG_END_CHAR);
 
-macro_rules! array_impls {
-    ($($len:tt)+) => {
-        $(
-            impl<T> Type for [T; $len]
-            where
-                T: Type,
-            {
-                #[inline]
-                #[allow(clippy::reversed_empty_ranges)]
-                fn signature() -> Signature<'static> {
-                    let mut sig = String::with_capacity(255);
-                    sig.push(STRUCT_SIG_START_CHAR);
-                    if $len > 0 {
-                        for _ in 0..$len {
-                            sig.push_str(T::signature().as_str());
-                        }
-                    }
-                    sig.push(STRUCT_SIG_END_CHAR);
-
-                    Signature::from_string_unchecked(sig)
-                }
-            }
-        )+
+        Signature::from_string_unchecked(sig)
     }
-}
-
-array_impls! {
-    0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -324,7 +306,7 @@ where
 #[cfg(feature = "enumflags2")]
 impl<F> Type for enumflags2::BitFlags<F>
 where
-    F: Type + enumflags2::RawBitFlags,
+    F: Type + enumflags2::BitFlag,
 {
     #[inline]
     fn signature() -> Signature<'static> {

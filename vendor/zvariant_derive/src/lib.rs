@@ -20,9 +20,7 @@ mod value;
 /// For structs it works just like serde's [`Serialize`] and [`Deserialize`] macros:
 ///
 /// ```
-/// use zvariant::{EncodingContext, from_slice, to_bytes};
-/// use zvariant::Type;
-/// use zvariant_derive::Type;
+/// use zvariant::{EncodingContext, from_slice, to_bytes, Type};
 /// use serde::{Deserialize, Serialize};
 /// use byteorder::LE;
 ///
@@ -50,9 +48,7 @@ mod value;
 /// you'll also need [serde_repr] crate.
 ///
 /// ```
-/// use zvariant::{EncodingContext, from_slice, to_bytes};
-/// use zvariant::Type;
-/// use zvariant_derive::Type;
+/// use zvariant::{EncodingContext, from_slice, to_bytes, Type};
 /// use serde::{Deserialize, Serialize};
 /// use serde_repr::{Deserialize_repr, Serialize_repr};
 /// use byteorder::LE;
@@ -86,14 +82,16 @@ mod value;
 /// assert_eq!(NoReprEnum::signature(), u32::signature());
 /// ```
 ///
-/// [`Type`]: https://docs.rs/zvariant/2.0.0/zvariant/trait.Type.html
+/// [`Type`]: https://docs.rs/zvariant/2.10.0/zvariant/trait.Type.html
 /// [`Serialize`]: https://docs.serde.rs/serde/trait.Serialize.html
 /// [`Deserialize`]: https://docs.serde.rs/serde/de/trait.Deserialize.html
 /// [serde_repr]: https://crates.io/crates/serde_repr
 #[proc_macro_derive(Type)]
 pub fn type_macro_derive(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
-    r#type::expand_derive(ast).into()
+    r#type::expand_derive(ast)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
 }
 
 /// Derive macro to add [`Type`] implementation to structs serialized as `a{sv}` type.
@@ -101,8 +99,7 @@ pub fn type_macro_derive(input: TokenStream) -> TokenStream {
 /// # Examples
 ///
 /// ```
-/// use zvariant::{Signature, Type};
-/// use zvariant_derive::TypeDict;
+/// use zvariant::{Signature, Type, TypeDict};
 ///
 /// #[derive(TypeDict)]
 /// struct Struct {
@@ -116,7 +113,9 @@ pub fn type_macro_derive(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(TypeDict)]
 pub fn type_dict_macro_derive(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
-    dict::expand_type_derive(ast).into()
+    dict::expand_type_derive(ast)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
 }
 
 /// Adds [`Serialize`] implementation to structs to be serialized as `a{sv}` type.
@@ -131,8 +130,7 @@ pub fn type_dict_macro_derive(input: TokenStream) -> TokenStream {
 /// For structs it works just like serde's [`Serialize`] macros:
 ///
 /// ```
-/// use zvariant::{EncodingContext, to_bytes};
-/// use zvariant_derive::{SerializeDict, TypeDict};
+/// use zvariant::{EncodingContext, to_bytes, SerializeDict, TypeDict};
 ///
 /// #[derive(SerializeDict, TypeDict)]
 /// struct Struct {
@@ -150,7 +148,9 @@ pub fn type_dict_macro_derive(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(SerializeDict, attributes(zvariant))]
 pub fn serialize_dict_macro_derive(input: TokenStream) -> TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
-    dict::expand_serialize_derive(input).into()
+    dict::expand_serialize_derive(input)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
 }
 
 /// Adds [`Deserialize`] implementation to structs to be deserialized from `a{sv}` type.
@@ -165,8 +165,7 @@ pub fn serialize_dict_macro_derive(input: TokenStream) -> TokenStream {
 /// For structs it works just like serde's [`Deserialize`] macros:
 ///
 /// ```
-/// use zvariant::{EncodingContext, to_bytes};
-/// use zvariant_derive::{DeserializeDict, TypeDict};
+/// use zvariant::{EncodingContext, to_bytes, DeserializeDict, TypeDict};
 ///
 /// #[derive(DeserializeDict, TypeDict)]
 /// struct Struct {
@@ -184,7 +183,9 @@ pub fn serialize_dict_macro_derive(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(DeserializeDict, attributes(zvariant))]
 pub fn deserialize_dict_macro_derive(input: TokenStream) -> TokenStream {
     let input: DeriveInput = syn::parse(input).unwrap();
-    dict::expand_deserialize_derive(input).into()
+    dict::expand_deserialize_derive(input)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
 }
 
 /// Implements conversions for your type to/from [`Value`].
@@ -198,7 +199,6 @@ pub fn deserialize_dict_macro_derive(input: TokenStream) -> TokenStream {
 /// ```
 /// use std::convert::TryFrom;
 /// use zvariant::{OwnedObjectPath, OwnedValue, Value};
-/// use zvariant_derive::{OwnedValue, Value};
 ///
 /// #[derive(Clone, Value, OwnedValue)]
 /// struct OwnedStruct {
@@ -224,7 +224,6 @@ pub fn deserialize_dict_macro_derive(input: TokenStream) -> TokenStream {
 ///# use std::convert::TryFrom;
 /// use zvariant::{ObjectPath, Str};
 ///# use zvariant::{OwnedValue, Value};
-///# use zvariant_derive::{OwnedValue, Value};
 ///#
 /// #[derive(Clone, Value, OwnedValue)]
 /// struct UnownedStruct<'a> {
@@ -251,7 +250,6 @@ pub fn deserialize_dict_macro_derive(input: TokenStream) -> TokenStream {
 /// ```
 ///# use std::convert::TryFrom;
 ///# use zvariant::{OwnedObjectPath, OwnedValue, Value};
-///# use zvariant_derive::{OwnedValue, Value};
 ///#
 /// #[derive(Clone, Value, OwnedValue)]
 /// struct GenericStruct<S, O> {
@@ -276,7 +274,6 @@ pub fn deserialize_dict_macro_derive(input: TokenStream) -> TokenStream {
 /// ```
 ///# use std::convert::TryFrom;
 ///# use zvariant::{OwnedObjectPath, OwnedValue, Value};
-///# use zvariant_derive::{OwnedValue, Value};
 ///#
 /// #[derive(Debug, PartialEq, Value, OwnedValue)]
 /// #[repr(u8)]
@@ -293,11 +290,13 @@ pub fn deserialize_dict_macro_derive(input: TokenStream) -> TokenStream {
 /// assert_eq!(e, Enum::Variant2);
 /// ```
 ///
-/// [`Value`]: https://docs.rs/zvariant/2.0.0/zvariant/enum.Value.html
+/// [`Value`]: https://docs.rs/zvariant/2.10.0/zvariant/enum.Value.html
 #[proc_macro_derive(Value)]
 pub fn value_macro_derive(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
-    value::expand_derive(ast, value::ValueType::Value).into()
+    value::expand_derive(ast, value::ValueType::Value)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
 }
 
 /// Implements conversions for your type to/from [`OwnedValue`].
@@ -306,9 +305,11 @@ pub fn value_macro_derive(input: TokenStream) -> TokenStream {
 ///
 /// See [`Value`] documentation for examples.
 ///
-/// [`OwnedValue`]: https://docs.rs/zvariant/2.0.0/zvariant/struct.OwnedValue.html
+/// [`OwnedValue`]: https://docs.rs/zvariant/2.10.0/zvariant/struct.OwnedValue.html
 #[proc_macro_derive(OwnedValue)]
 pub fn owned_value_macro_derive(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
-    value::expand_derive(ast, value::ValueType::OwnedValue).into()
+    value::expand_derive(ast, value::ValueType::OwnedValue)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
 }

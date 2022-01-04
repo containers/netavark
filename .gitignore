@@ -1,4 +1,5 @@
 bin/
+target/
 targets/
 *.swp
 netavark.1

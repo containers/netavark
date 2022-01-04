@@ -1,8 +1,8 @@
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{
-    self, Attribute, Data, DataEnum, DeriveInput, Expr, Fields, Generics, Ident, Lifetime,
-    LifetimeDef,
+    self, spanned::Spanned, Attribute, Data, DataEnum, DeriveInput, Error, Expr, Fields, Generics,
+    Ident, Lifetime, LifetimeDef,
 };
 
 use crate::utils::zvariant_path;
@@ -12,18 +12,21 @@ pub enum ValueType {
     OwnedValue,
 }
 
-pub fn expand_derive(ast: DeriveInput, value_type: ValueType) -> TokenStream {
+pub fn expand_derive(ast: DeriveInput, value_type: ValueType) -> Result<TokenStream, Error> {
     let zv = zvariant_path();
 
-    match ast.data {
-        Data::Struct(ds) => match ds.fields {
+    match &ast.data {
+        Data::Struct(ds) => match &ds.fields {
             Fields::Named(_) | Fields::Unnamed(_) => {
-                impl_struct(value_type, ast.ident, ast.generics, ds.fields, &zv)
+                impl_struct(value_type, ast.ident, ast.generics, &ds.fields, &zv)
             }
-            Fields::Unit => panic!("Unit structures not supported"),
+            Fields::Unit => Err(Error::new(ast.span(), "Unit structures not supported")),
         },
         Data::Enum(data) => impl_enum(value_type, ast.ident, ast.generics, ast.attrs, data, &zv),
-        _ => panic!("Only structures and enums supported at the moment"),
+        _ => Err(Error::new(
+            ast.span(),
+            "only structs and enums are supported",
+        )),
     }
 }
 
@@ -31,9 +34,9 @@ fn impl_struct(
     value_type: ValueType,
     name: Ident,
     generics: Generics,
-    fields: Fields,
+    fields: &Fields,
     zv: &TokenStream,
-) -> TokenStream {
+) -> Result<TokenStream, Error> {
     let statc_lifetime = LifetimeDef::new(Lifetime::new("'static", Span::call_site()));
     let (value_type, value_lifetime) = match value_type {
         ValueType::Value => {
@@ -42,10 +45,12 @@ fn impl_struct(
                 .next()
                 .cloned()
                 .unwrap_or_else(|| statc_lifetime.clone());
-            assert!(
-                lifetimes.next().is_none(),
-                "Type with more than 1 lifetime not supported"
-            );
+            if lifetimes.next().is_some() {
+                return Err(Error::new(
+                    name.span(),
+                    "Type with more than 1 lifetime not supported",
+                ));
+            }
 
             (quote! { #zv::Value<#value_lifetime> }, value_lifetime)
         }
@@ -78,7 +83,7 @@ fn impl_struct(
                 .iter()
                 .map(|field| field.ident.to_token_stream())
                 .collect();
-            quote! {
+            Ok(quote! {
                 impl #impl_generics ::std::convert::TryFrom<#value_type> for #name #ty_generics
                     #from_value_where_clause
                 {
@@ -113,11 +118,11 @@ fn impl_struct(
                         .into()
                     }
                 }
-            }
+            })
         }
         Fields::Unnamed(_) if fields.iter().next().is_some() => {
             // Newtype struct.
-            quote! {
+            Ok(quote! {
                 impl #impl_generics ::std::convert::TryFrom<#value_type> for #name #ty_generics
                     #from_value_where_clause
                 {
@@ -137,7 +142,7 @@ fn impl_struct(
                         s.0.into()
                     }
                 }
-            }
+            })
         }
         Fields::Unnamed(_) => panic!("impl_struct must not be called for tuples"),
         Fields::Unit => panic!("impl_struct must not be called for unit structures"),
@@ -149,34 +154,38 @@ fn impl_enum(
     name: Ident,
     _generics: Generics,
     attrs: Vec<Attribute>,
-    data: DataEnum,
+    data: &DataEnum,
     zv: &TokenStream,
-) -> TokenStream {
+) -> Result<TokenStream, Error> {
     let repr: TokenStream = match attrs.iter().find(|attr| attr.path.is_ident("repr")) {
-        Some(repr_attr) => repr_attr
-            .parse_args()
-            .expect("Failed to parse `#[repr(...)]` attribute"),
+        Some(repr_attr) => repr_attr.parse_args()?,
         None => quote! { u32 },
     };
 
     let mut variant_names = vec![];
     let mut variant_values = vec![];
-    for variant in data.variants {
+    for variant in &data.variants {
         // Ensure all variants of the enum are unit type
         match variant.fields {
             Fields::Unit => {
-                variant_names.push(variant.ident);
-                let value = match variant
+                variant_names.push(&variant.ident);
+                let value = match &variant
                     .discriminant
-                    .expect("expected `Name = Value` variants")
+                    .as_ref()
+                    .ok_or_else(|| Error::new(variant.span(), "expected `Name = Value` variants"))?
                     .1
                 {
-                    Expr::Lit(lit_exp) => lit_exp.lit,
-                    _ => panic!("expected `Name = Value` variants"),
+                    Expr::Lit(lit_exp) => &lit_exp.lit,
+                    _ => {
+                        return Err(Error::new(
+                            variant.span(),
+                            "expected `Name = Value` variants",
+                        ))
+                    }
                 };
                 variant_values.push(value);
             }
-            _ => panic!("`{}` must be a unit variant", variant.ident),
+            _ => return Err(Error::new(variant.span(), "must be a unit variant")),
         }
     }
 
@@ -185,7 +194,7 @@ fn impl_enum(
         ValueType::OwnedValue => quote! { #zv::OwnedValue },
     };
 
-    quote! {
+    Ok(quote! {
         impl ::std::convert::TryFrom<#value_type> for #name {
             type Error = #zv::Error;
 
@@ -214,5 +223,5 @@ fn impl_enum(
                 <#zv::Value as ::std::convert::From<_>>::from(u).into()
              }
         }
-    }
+    })
 }

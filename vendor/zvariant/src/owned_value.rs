@@ -3,8 +3,8 @@ use static_assertions::assert_impl_all;
 use std::{collections::HashMap, convert::TryFrom, hash::BuildHasher};
 
 use crate::{
-    derive::Type, Array, Dict, Fd, ObjectPath, OwnedObjectPath, OwnedSignature, Signature, Str,
-    Structure, Value,
+    Array, Dict, Fd, ObjectPath, OwnedObjectPath, OwnedSignature, Signature, Str, Structure, Type,
+    Value,
 };
 
 #[cfg(feature = "gvariant")]
@@ -110,8 +110,8 @@ where
 #[cfg(feature = "enumflags2")]
 impl<'a, F> TryFrom<OwnedValue> for enumflags2::BitFlags<F>
 where
-    F: enumflags2::RawBitFlags,
-    F::Type: TryFrom<Value<'a>, Error = crate::Error>,
+    F: enumflags2::BitFlag,
+    F::Numeric: TryFrom<Value<'a>, Error = crate::Error>,
 {
     type Error = crate::Error;
 
@@ -217,7 +217,8 @@ mod tests {
     #[test]
     fn bitflags() -> Result<(), Box<dyn Error>> {
         #[repr(u32)]
-        #[derive(enumflags2::BitFlags, Copy, Clone, Debug)]
+        #[enumflags2::bitflags]
+        #[derive(Copy, Clone, Debug)]
         pub enum Flaggy {
             One = 0x1,
             Two = 0x2,

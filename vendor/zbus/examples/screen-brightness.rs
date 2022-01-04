@@ -6,7 +6,7 @@
 // the brightness by 5%. Pass '-' for decreasing it by 5%.
 
 fn main() {
-    let connection = zbus::Connection::new_session().unwrap();
+    let connection = zbus::blocking::Connection::session().unwrap();
 
     let method = match std::env::args().nth(1) {
         Some(s) => {
@@ -31,6 +31,6 @@ fn main() {
         )
         .unwrap();
 
-    let (percent, _) = reply.body::<(u32, &str)>().unwrap();
+    let (percent, _) = reply.body::<(i32, &str)>().unwrap();
     println!("New level: {}%", percent);
 }

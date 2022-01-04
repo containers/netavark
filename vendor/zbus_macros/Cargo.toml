@@ -3,30 +3,29 @@
 # When uploading crates to the registry Cargo will automatically
 # "normalize" Cargo.toml files for maximal compatibility
 # with all versions of Cargo and also rewrite `path` dependencies
-# to registry (e.g., crates.io) dependencies
+# to registry (e.g., crates.io) dependencies.
 #
-# If you believe there's an error in this file please file an
-# issue against the rust-lang/cargo repository. If you're
-# editing this file be aware that the upstream Cargo.toml
-# will likely look very different (and much more reasonable)
+# If you are reading this file be aware that the original Cargo.toml
+# will likely look very different (and much more reasonable).
+# See Cargo.toml.orig for the original contents.
 
 [package]
 edition = "2018"
 name = "zbus_macros"
-version = "1.9.1"
+version = "2.0.0"
 authors = ["Marc-André Lureau <marcandre.lureau@redhat.com>"]
 description = "proc-macros for zbus"
-documentation = "http://docs.rs/zbus_macros/"
 readme = "../README.md"
 keywords = ["D-Bus", "DBus", "IPC"]
 categories = ["data-structures", "encoding", "parsing"]
 license = "MIT"
 repository = "https://gitlab.freedesktop.org/dbus/zbus/"
+resolver = "2"
 
 [lib]
 proc-macro = true
 [dependencies.proc-macro-crate]
-version = "0.1.4"
+version = "1.0.0"
 
 [dependencies.proc-macro2]
 version = "1.0"
@@ -34,21 +33,9 @@ version = "1.0"
 [dependencies.quote]
 version = "1.0.3"
 
+[dependencies.regex]
+version = "1.5.4"
+
 [dependencies.syn]
 version = "1.0.18"
-features = ["extra-traits", "full"]
-[dev-dependencies.rustversion]
-version = "1.0.4"
-
-[dev-dependencies.serde]
-version = "1.0"
-features = ["derive"]
-
-[dev-dependencies.trybuild]
-version = "1.0.31"
-
-[dev-dependencies.zbus]
-version = "1"
-
-[dev-dependencies.zvariant]
-version = "2"
+features = ["extra-traits", "fold", "full"]

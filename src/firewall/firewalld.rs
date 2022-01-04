@@ -1,6 +1,7 @@
 use crate::firewall;
 use crate::network::internal_types::{PortForwardConfig, TearDownNetwork, TeardownPortForward};
 use crate::network::{internal_types, types};
+use futures::executor::block_on;
 use log::debug;
 use std::collections::HashMap;
 use std::error::Error;
@@ -38,13 +39,13 @@ impl firewall::FirewallDriver for FirewallD {
 
         if need_reload {
             debug!("Reloading firewalld config to bring up zone and policy");
-            let _ = self.conn.call_method(
+            let _ = block_on(self.conn.call_method(
                 Some("org.fedoraproject.FirewallD1"),
                 "/org/fedoraproject/FirewallD1",
                 Some("org.fedoraproject.FirewallD1"),
                 "reload",
                 &(),
-            )?;
+            ))?;
         }
 
         // MUST come after the reload; otherwise the zone we made might not be
@@ -80,13 +81,13 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> Result<bool, 
     debug!("Creating firewall zone {}", zone_name);
 
     // First, double-check if the zone exists in the running config.
-    let zones_msg = conn.call_method(
+    let zones_msg = block_on(conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1",
         Some("org.fedoraproject.FirewallD1.zone"),
         "getZones",
         &(),
-    )?;
+    ))?;
     let zones: Vec<&str> = match zones_msg.body() {
         Ok(b) => b,
         Err(e) => bail!("Error decoding DBus message for active zones: {}", e),
@@ -99,13 +100,13 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> Result<bool, 
     }
 
     // Zone is not in running config - check permanent config.
-    let perm_zones_msg = conn.call_method(
+    let perm_zones_msg = block_on(conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1/config",
         Some("org.fedoraproject.FirewallD1.config"),
         "getZoneNames",
         &(),
-    )?;
+    ))?;
     let zones_perm: Vec<&str> = match perm_zones_msg.body() {
         Ok(b) => b,
         Err(e) => bail!("Error decoding DBus message for permanent zones: {}", e),
@@ -122,13 +123,13 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> Result<bool, 
     // errors - but I really don't want to deal with matching error strings and
     // the complexities that could entail.
     // TODO: We can add a description to the zone, should do that.
-    let _ = conn.call_method(
+    let _ = block_on(conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1/config",
         Some("org.fedoraproject.FirewallD1.config"),
         "addZone2",
         &(zone_name, HashMap::<&str, &Value>::new()),
-    )?;
+    ))?;
 
     Ok(true)
 }
@@ -145,13 +146,13 @@ fn add_source_subnets_to_zone(
             net.subnet, zone_name
         );
 
-        let _ = conn.call_method(
+        let _ = block_on(conn.call_method(
             Some("org.fedoraproject.FirewallD1"),
             "/org/fedoraproject/FirewallD1",
             Some("org.fedoraproject.FirewallD1.zone"),
             "changeZoneOfSource",
             &(zone_name, net.subnet.to_string()),
-        )?;
+        ))?;
     }
 
     Ok(())
@@ -169,13 +170,13 @@ fn add_policy_if_not_exist(
     );
 
     // Does policy exist in running policies?
-    let policies_msg = conn.call_method(
+    let policies_msg = block_on(conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1",
         Some("org.fedoraproject.FirewallD1.policy"),
         "getPolicies",
         &(),
-    )?;
+    ))?;
     let policies: Vec<&str> = match policies_msg.body() {
         Ok(v) => v,
         Err(e) => bail!("Error decoding policy list response: {}", e),
@@ -188,13 +189,13 @@ fn add_policy_if_not_exist(
     }
 
     // Does the policy exist in permanent policies?
-    let perm_policies_msg = conn.call_method(
+    let perm_policies_msg = block_on(conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1/config",
         Some("org.fedoraproject.FirewallD1.config"),
         "getPolicyNames",
         &(),
-    )?;
+    ))?;
     let perm_policies: Vec<&str> = match perm_policies_msg.body() {
         Ok(v) => v,
         Err(e) => bail!("Error decoding permanent policy list response: {}", e),
@@ -219,13 +220,13 @@ fn add_policy_if_not_exist(
 
     // Policy does not exist, create it.
     // Returns object path, which we don't need.
-    let _ = conn.call_method(
+    let _ = block_on(conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1/config",
         Some("org.fedoraproject.FirewallD1.config"),
         "addPolicy",
         &(policy_name, &policy_opts),
-    )?;
+    ))?;
 
     Ok(true)
 }

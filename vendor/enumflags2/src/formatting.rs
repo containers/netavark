@@ -1,15 +1,15 @@
-use core::fmt::{self, Debug, Binary};
-use crate::{BitFlags, RawBitFlags};
+use crate::{BitFlag, BitFlags};
+use core::fmt::{self, Binary, Debug};
 
 impl<T> fmt::Debug for BitFlags<T>
 where
-    T: RawBitFlags + fmt::Debug,
+    T: BitFlag + fmt::Debug,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = T::bitflags_type_name();
+        let name = T::BITFLAGS_TYPE_NAME;
         let bits = DebugBinaryFormatter(&self.val);
         let iter = if !self.is_empty() {
-            let iter = T::flag_list().iter().filter(|&&flag| self.contains(flag));
+            let iter = T::FLAG_LIST.iter().filter(|&&flag| self.contains(flag));
             Some(FlagFormatter(iter))
         } else {
             None
@@ -37,8 +37,8 @@ where
 
 impl<T> fmt::Binary for BitFlags<T>
 where
-    T: RawBitFlags,
-    T::Type: fmt::Binary,
+    T: BitFlag,
+    T::Numeric: fmt::Binary,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Binary::fmt(&self.bits(), fmt)
@@ -47,8 +47,8 @@ where
 
 impl<T> fmt::Octal for BitFlags<T>
 where
-    T: RawBitFlags,
-    T::Type: fmt::Octal,
+    T: BitFlag,
+    T::Numeric: fmt::Octal,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Octal::fmt(&self.bits(), fmt)
@@ -57,8 +57,8 @@ where
 
 impl<T> fmt::LowerHex for BitFlags<T>
 where
-    T: RawBitFlags,
-    T::Type: fmt::LowerHex,
+    T: BitFlag,
+    T::Numeric: fmt::LowerHex,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::LowerHex::fmt(&self.bits(), fmt)
@@ -67,8 +67,8 @@ where
 
 impl<T> fmt::UpperHex for BitFlags<T>
 where
-    T: RawBitFlags,
-    T::Type: fmt::UpperHex,
+    T: BitFlag,
+    T::Numeric: fmt::UpperHex,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::UpperHex::fmt(&self.bits(), fmt)
@@ -78,7 +78,7 @@ where
 // Format an iterator of flags into "A | B | etc"
 struct FlagFormatter<I>(I);
 
-impl<T: Debug, I: Clone + Iterator<Item=T>> Debug for FlagFormatter<I> {
+impl<T: Debug, I: Clone + Iterator<Item = T>> Debug for FlagFormatter<I> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut iter = self.0.clone();
         if let Some(val) = iter.next() {
@@ -110,9 +110,11 @@ impl<'a, F: Debug + Binary + 'a> Debug for DebugBinaryFormatter<'a, F> {
         let format_hex = fmt.flags() >> 4;
         let width = fmt.width().unwrap_or(0);
 
-        if format_hex & 1 != 0 { // FlagV1::DebugLowerHex
+        if format_hex & 1 != 0 {
+            // FlagV1::DebugLowerHex
             write!(fmt, "{:#0width$x?}", &self.0, width = width)
-        } else if format_hex & 2 != 0 { // FlagV1::DebugUpperHex
+        } else if format_hex & 2 != 0 {
+            // FlagV1::DebugUpperHex
             write!(fmt, "{:#0width$X?}", &self.0, width = width)
         } else {
             // Fall back to binary otheriwse

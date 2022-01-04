@@ -1,29 +1,21 @@
+use super::BitFlag;
+use super::BitFlags;
 use core::convert::TryFrom;
 use core::fmt;
-use super::BitFlags;
-use super::RawBitFlags;
 
 // Coherence doesn't let us use a generic type here. Work around by implementing
 // for each integer type manually.
-macro_rules! impl_try_from {
-    ($($ty:ty),*) => {
-        $(
-            impl<T> TryFrom<$ty> for BitFlags<T>
-            where
-                T: RawBitFlags<Type=$ty>,
-            {
-                type Error = FromBitsError<T>;
+for_each_uint! { $ty $hide_docs =>
+    impl<T> TryFrom<$ty> for BitFlags<T>
+    where
+        T: BitFlag<Numeric=$ty>,
+    {
+        type Error = FromBitsError<T>;
 
-                fn try_from(bits: T::Type) -> Result<Self, Self::Error> {
-                    Self::from_bits(bits)
-                }
-            }
-        )*
-    };
-}
-
-impl_try_from! {
-    u8, u16, u32, u64, usize
+        fn try_from(bits: T::Numeric) -> Result<Self, Self::Error> {
+            Self::from_bits(bits)
+        }
+    }
 }
 
 /// The error struct used by [`BitFlags::from_bits`]
@@ -32,8 +24,9 @@ impl_try_from! {
 ///
 /// ```
 /// # use std::convert::TryInto;
-/// # use enumflags2::BitFlags;
-/// #[derive(Clone, Copy, Debug, BitFlags)]
+/// # use enumflags2::{bitflags, BitFlags};
+/// #[bitflags]
+/// #[derive(Clone, Copy, Debug)]
 /// #[repr(u8)]
 /// enum MyFlags {
 ///     A = 0b0001,
@@ -49,31 +42,35 @@ impl_try_from! {
 /// assert_eq!(error.invalid_bits(), 0b10000);
 /// ```
 #[derive(Debug, Copy, Clone)]
-pub struct FromBitsError<T: RawBitFlags> {
+pub struct FromBitsError<T: BitFlag> {
     pub(crate) flags: BitFlags<T>,
-    pub(crate) invalid: T::Type,
+    pub(crate) invalid: T::Numeric,
 }
 
-impl<T: RawBitFlags> FromBitsError<T> {
+impl<T: BitFlag> FromBitsError<T> {
     /// Return the truncated result of the conversion.
     pub fn truncate(self) -> BitFlags<T> {
         self.flags
     }
 
     /// Return the bits that didn't correspond to any flags.
-    pub fn invalid_bits(self) -> T::Type {
+    pub fn invalid_bits(self) -> T::Numeric {
         self.invalid
     }
 }
 
-impl<T: RawBitFlags + fmt::Debug> fmt::Display for FromBitsError<T> {
+impl<T: BitFlag + fmt::Debug> fmt::Display for FromBitsError<T> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(fmt, "Invalid bits for {:?}: {:#b}", self.flags, self.invalid)
+        write!(
+            fmt,
+            "Invalid bits for {:?}: {:#b}",
+            self.flags, self.invalid
+        )
     }
 }
 
 #[cfg(feature = "std")]
-impl<T: RawBitFlags + fmt::Debug> std::error::Error for FromBitsError<T> {
+impl<T: BitFlag + fmt::Debug> std::error::Error for FromBitsError<T> {
     fn description(&self) -> &str {
         "invalid bitflags representation"
     }

@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "zvariant"
-version = "2.10.0"
+version = "3.0.0"
 authors = ["Zeeshan Ali <zeeshanak@gnome.org>"]
 description = "D-Bus & GVariant encoding & decoding"
 readme = "../README.md"
@@ -29,7 +29,7 @@ bench = false
 name = "benchmarks"
 harness = false
 [dependencies.arrayvec]
-version = "0.5.1"
+version = "0.7.1"
 features = ["serde"]
 optional = true
 
@@ -37,7 +37,7 @@ optional = true
 version = "1.3.1"
 
 [dependencies.enumflags2]
-version = "0.6.4"
+version = "0.7.1"
 features = ["serde"]
 optional = true
 
@@ -56,7 +56,7 @@ optional = true
 version = "1.1.0"
 
 [dependencies.zvariant_derive]
-version = "=2.10.0"
+version = "=3.0.0"
 [dev-dependencies.criterion]
 version = "0.3"
 

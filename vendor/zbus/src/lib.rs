@@ -21,13 +21,16 @@
 //! This code display a notification on your Freedesktop.org-compatible OS:
 //!
 //! ```rust,no_run
-//! use std::collections::HashMap;
-//! use std::error::Error;
+//! use std::{collections::HashMap, error::Error};
 //!
-//! use zbus::dbus_proxy;
+//! use zbus::{Connection, dbus_proxy};
 //! use zvariant::Value;
 //!
-//! #[dbus_proxy]
+//! #[dbus_proxy(
+//!     interface = "org.freedesktop.Notifications",
+//!     default_service = "org.freedesktop.Notifications",
+//!     default_path = "/org/freedesktop/Notifications"
+//! )]
 //! trait Notifications {
 //!     fn notify(
 //!         &self,
@@ -37,15 +40,18 @@
 //!         summary: &str,
 //!         body: &str,
 //!         actions: &[&str],
-//!         hints: HashMap<&str, &Value>,
+//!         hints: &HashMap<&str, &Value<'_>>,
 //!         expire_timeout: i32,
 //!     ) -> zbus::Result<u32>;
 //! }
 //!
-//! fn main() -> Result<(), Box<dyn Error>> {
-//!     let connection = zbus::Connection::new_session()?;
+//! // Although we use `async-std` here, you can use any async runtime of choice.
+//! #[async_std::main]
+//! async fn main() -> Result<(), Box<dyn Error>> {
+//!     let connection = Connection::session().await?;
 //!
-//!     let proxy = NotificationsProxy::new(&connection)?;
+//!     // `dbus_proxy` macro creates `NotificationProxy` based on `Notifications` trait.
+//!     let proxy = NotificationsProxy::new(&connection).await?;
 //!     let reply = proxy.notify(
 //!         "my-app",
 //!         0,
@@ -53,9 +59,9 @@
 //!         "A summary",
 //!         "Some body",
 //!         &[],
-//!         HashMap::new(),
+//!         &HashMap::new(),
 //!         5000,
-//!     )?;
+//!     ).await?;
 //!     dbg!(reply);
 //!
 //!     Ok(())
@@ -67,37 +73,40 @@
 //! A simple service that politely greets whoever calls its `SayHello` method:
 //!
 //! ```rust,no_run
-//! use std::error::Error;
-//! use std::convert::TryInto;
-//! use zbus::{dbus_interface, fdo};
+//! use std::{
+//!     error::Error,
+//!     thread::sleep,
+//!     time::Duration,
+//! };
+//! use zbus::{ObjectServer, ConnectionBuilder, dbus_interface, fdo};
 //!
 //! struct Greeter {
 //!     count: u64
-//! };
+//! }
 //!
 //! #[dbus_interface(name = "org.zbus.MyGreeter1")]
 //! impl Greeter {
+//!     // Can be `async` as well.
 //!     fn say_hello(&mut self, name: &str) -> String {
 //!         self.count += 1;
 //!         format!("Hello {}! I have been called: {}", name, self.count)
 //!     }
 //! }
 //!
-//! fn main() -> Result<(), Box<dyn Error>> {
-//!     let connection = zbus::Connection::new_session()?;
-//!     fdo::DBusProxy::new(&connection)?.request_name(
-//!         "org.zbus.MyGreeter",
-//!         fdo::RequestNameFlags::ReplaceExisting.into(),
-//!     )?;
+//! // Although we use `async-std` here, you can use any async runtime of choice.
+//! #[async_std::main]
+//! async fn main() -> Result<(), Box<dyn Error>> {
+//!     let greeter = Greeter { count: 0 };
+//!     let _ = ConnectionBuilder::session()?
+//!         .name("org.zbus.MyGreeter")?
+//!         .serve_at("/org/zbus/MyGreeter", greeter)?
+//!         .build()
+//!         .await?;
 //!
-//!     let mut object_server = zbus::ObjectServer::new(&connection);
-//!     let mut greeter = Greeter { count: 0 };
-//!     object_server.at(&"/org/zbus/MyGreeter".try_into()?, greeter)?;
-//!     loop {
-//!         if let Err(err) = object_server.try_handle_next() {
-//!             eprintln!("{}", err);
-//!         }
-//!     }
+//!     // Do other things or go to sleep.
+//!     sleep(Duration::from_secs(60));
+//!
+//!     Ok(())
 //! }
 //! ```
 //!
@@ -113,14 +122,22 @@
 //! $
 //! ```
 //!
-//! #### Asynchronous API
+//! ### Blocking API
 //!
-//! Currently, only [low-level asynchronous API] is provided. You can do everything you can through
-//! it that you can do through the high-level asynchronous API (when it exists), it's [not at all as
-//! hard to use](azync::Connection#monitoring-all-messages) as it may sound.
+//! While zbus is primarily asynchronous (since 2.0), [blocking wrappers][bw] are provided for
+//! convenience.
+//!
+//! ### Compatibility with async runtimes
+//!
+//! zbus is runtime-agnostic and should work out of the box with different Rust async runtimes.
+//! However, in order to achieve that, zbus spawns a thread per connection to handle various
+//! internal tasks. If that is something you would like to avoid, you need to:
+//!   * Use [`ConnectionBuilder`] and disable the `internal_executor` flag.
+//!   * Ensure the [internal executor keeps ticking continuously][iektc].
 //!
 //! [book]: https://dbus.pages.freedesktop.org/zbus/
-//! [low-level asynchronous API]: azync::Connection
+//! [bw]: https://docs.rs/zbus/2.0.0/zbus/blocking/index.html
+//! [iektc]: `Connection::executor`
 //!
 //! [^otheros]: Support for other OS exist, but it is not supported to the same extent. D-Bus
 //!   clients in javascript (running from any browser) do exist though. And zbus may also be
@@ -129,20 +146,25 @@
 
 #[cfg(doctest)]
 mod doctests {
-    doc_comment::doctest!("../../README.md");
     // Book markdown checks
     doc_comment::doctest!("../../book/src/client.md");
     doc_comment::doctest!("../../book/src/concepts.md");
     doc_comment::doctest!("../../book/src/connection.md");
+    doc_comment::doctest!("../../book/src/faq.md");
     doc_comment::doctest!("../../book/src/contributors.md");
     doc_comment::doctest!("../../book/src/introduction.md");
     doc_comment::doctest!("../../book/src/server.md");
+    doc_comment::doctest!("../../book/src/blocking.md");
 }
+
+mod dbus_error;
+pub use dbus_error::*;
 
 mod error;
 pub use error::*;
 
 mod address;
+pub use address::*;
 
 mod guid;
 pub use guid::*;
@@ -159,29 +181,35 @@ pub use message_field::*;
 mod message_fields;
 pub use message_fields::*;
 
+mod handshake;
+pub(crate) use handshake::*;
 mod connection;
 pub use connection::*;
-
-mod proxy;
-pub use proxy::*;
-
-mod signal_receiver;
-pub use signal_receiver::*;
-
-mod owned_fd;
-pub use owned_fd::*;
-
-mod utils;
-
+mod connection_builder;
+pub use connection_builder::*;
+mod message_stream;
+pub use message_stream::*;
 mod object_server;
 pub use object_server::*;
+mod proxy;
+pub use proxy::*;
+mod proxy_builder;
+pub use proxy_builder::*;
+mod signal_context;
+pub use signal_context::*;
+mod interface;
+pub use interface::*;
 
+mod utils;
+pub use utils::*;
+
+#[macro_use]
 pub mod fdo;
 
-pub mod raw;
+mod raw;
+pub use raw::Socket;
 
-pub mod azync;
-pub mod handshake;
+pub mod blocking;
 
 pub mod xml;
 
@@ -193,30 +221,47 @@ extern crate self as zbus;
 // Macro support module, not part of the public API.
 #[doc(hidden)]
 pub mod export {
-    pub use zvariant;
+    pub use async_trait;
+    pub use futures_core;
+    pub use futures_util;
+    pub use ordered_stream;
+    pub use serde;
+    pub use static_assertions;
 }
+
+pub use zbus_names as names;
+pub use zvariant;
+
+use zvariant::OwnedFd;
 
 #[cfg(test)]
 mod tests {
     use std::{
         collections::HashMap,
-        convert::TryInto,
+        convert::{TryFrom, TryInto},
         fs::File,
         os::unix::io::{AsRawFd, FromRawFd},
+        sync::{mpsc::channel, Arc, Condvar, Mutex},
     };
 
+    use async_io::block_on;
     use enumflags2::BitFlags;
     use ntest::timeout;
-    use serde_repr::{Deserialize_repr, Serialize_repr};
+    use test_log::test;
 
-    use zvariant::{derive::Type, Fd, OwnedValue, Type};
+    use zbus_names::UniqueName;
+    use zvariant::{Fd, OwnedObjectPath, OwnedValue, Type};
 
-    use crate::{azync::ConnectionType, Connection, Message, MessageFlags, Result};
+    use crate::{
+        blocking::{self, MessageIterator},
+        fdo::{RequestNameFlags, RequestNameReply},
+        Connection, Message, MessageFlags, Result, SignalContext,
+    };
 
     #[test]
     fn msg() {
         let mut m = Message::method(
-            None,
+            None::<()>,
             Some("org.freedesktop.DBus"),
             "/org/freedesktop/DBus",
             Some("org.freedesktop.DBus.Peer"),
@@ -224,21 +269,25 @@ mod tests {
             &(),
         )
         .unwrap();
+        assert_eq!(m.path().unwrap(), "/org/freedesktop/DBus");
+        assert_eq!(m.interface().unwrap(), "org.freedesktop.DBus.Peer");
+        assert_eq!(m.member().unwrap(), "GetMachineId");
         m.modify_primary_header(|primary| {
             primary.set_flags(BitFlags::from(MessageFlags::NoAutoStart));
-            primary.set_serial_num(11);
+            primary.serial_num_or_init(|| 11);
 
             Ok(())
         })
         .unwrap();
-        let primary = m.primary_header().unwrap();
-        assert!(primary.serial_num() == 11);
+        let primary = m.primary_header();
+        assert!(*primary.serial_num().unwrap() == 11);
         assert!(primary.flags() == MessageFlags::NoAutoStart);
     }
 
     #[test]
+    #[timeout(15000)]
     fn basic_connection() {
-        let connection = crate::Connection::new_session()
+        let connection = blocking::Connection::session()
             .map_err(|e| {
                 println!("error: {}", e);
 
@@ -261,14 +310,13 @@ mod tests {
     }
 
     #[test]
+    #[timeout(15000)]
     fn basic_connection_async() {
-        futures::executor::block_on(test_basic_connection()).unwrap();
+        async_io::block_on(test_basic_connection()).unwrap();
     }
 
     async fn test_basic_connection() -> Result<()> {
-        let mut connection = match ConnectionType::new_session().await? {
-            ConnectionType::Unix(c) => c,
-        };
+        let connection = Connection::session().await?;
 
         match connection
             .call_method(
@@ -289,10 +337,11 @@ mod tests {
     }
 
     #[test]
+    #[timeout(15000)]
     fn fdpass_systemd() {
-        let connection = crate::Connection::new_system().unwrap();
+        let connection = blocking::Connection::system().unwrap();
 
-        let mut reply = connection
+        let reply = connection
             .call_method(
                 Some("org.freedesktop.systemd1"),
                 "/org/freedesktop/systemd1",
@@ -308,47 +357,22 @@ mod tests {
             .unwrap());
 
         let fd: Fd = reply.body().unwrap();
-        reply.disown_fds();
+        let _fds = reply.take_fds();
         assert!(fd.as_raw_fd() >= 0);
         let f = unsafe { File::from_raw_fd(fd.as_raw_fd()) };
         f.metadata().unwrap();
     }
 
-    // Let's try getting us a fancy name on the bus
-    #[repr(u32)]
-    #[derive(Type, BitFlags, Debug, PartialEq, Copy, Clone)]
-    enum RequestNameFlags {
-        AllowReplacement = 0x01,
-        ReplaceExisting = 0x02,
-        DoNotQueue = 0x04,
-    }
-
-    #[repr(u32)]
-    #[derive(Deserialize_repr, Serialize_repr, Type, Debug, PartialEq)]
-    enum RequestNameReply {
-        PrimaryOwner = 0x01,
-        InQueue = 0x02,
-        Exists = 0x03,
-        AlreadyOwner = 0x04,
-    }
-
     #[test]
+    #[timeout(15000)]
     fn freedesktop_api() {
-        let mut connection = crate::Connection::new_session()
+        let connection = blocking::Connection::session()
             .map_err(|e| {
                 println!("error: {}", e);
 
                 e
             })
             .unwrap();
-
-        #[allow(deprecated)]
-        connection.set_default_message_handler(Box::new(|msg| {
-            // Debug implementation will test it a bit
-            println!("Received while waiting for a reply: {}", msg);
-
-            Some(msg)
-        }));
 
         let reply = connection
             .call_method(
@@ -415,8 +439,8 @@ mod tests {
             .map(|s| s == <&str>::signature())
             .unwrap());
         assert_eq!(
-            Some(reply.body::<&str>().unwrap()),
-            connection.unique_name()
+            reply.body::<UniqueName<'_>>().unwrap(),
+            *connection.unique_name().unwrap(),
         );
 
         let reply = connection
@@ -440,14 +464,13 @@ mod tests {
     }
 
     #[test]
+    #[timeout(15000)]
     fn freedesktop_api_async() {
-        futures::executor::block_on(test_freedesktop_api()).unwrap();
+        async_io::block_on(test_freedesktop_api()).unwrap();
     }
 
     async fn test_freedesktop_api() -> Result<()> {
-        let mut connection = match ConnectionType::new_session().await? {
-            ConnectionType::Unix(c) => c,
-        };
+        let connection = Connection::session().await?;
 
         let reply = connection
             .call_method(
@@ -518,8 +541,8 @@ mod tests {
             .map(|s| s == <&str>::signature())
             .unwrap());
         assert_eq!(
-            Some(reply.body::<&str>().unwrap()),
-            connection.unique_name()
+            reply.body::<UniqueName<'_>>().unwrap(),
+            *connection.unique_name().unwrap(),
         );
 
         let reply = connection
@@ -546,20 +569,22 @@ mod tests {
     }
 
     #[test]
-    #[timeout(1000)]
+    #[timeout(15000)]
     fn issue_68() {
         // Tests the fix for https://gitlab.freedesktop.org/dbus/zbus/-/issues/68
         //
         // While this is not an exact reproduction of the issue 68, the underlying problem it
         // produces is exactly the same: `Connection::call_method` dropping all incoming messages
         // while waiting for the reply to the method call.
-        let conn = Connection::new_session().unwrap();
+        let conn = blocking::Connection::session().unwrap();
+        let stream = MessageIterator::from(&conn);
 
         // Send a message as client before service starts to process messages
-        let client_conn = Connection::new_session().unwrap();
+        let client_conn = blocking::Connection::session().unwrap();
+        let destination = conn.unique_name().map(UniqueName::<'_>::from);
         let msg = Message::method(
-            None,
-            conn.unique_name(),
+            None::<()>,
+            destination,
             "/org/freedesktop/Issue68",
             Some("org.freedesktop.Issue68"),
             "Ping",
@@ -568,33 +593,32 @@ mod tests {
         .unwrap();
         let serial = client_conn.send_message(msg).unwrap();
 
-        crate::fdo::DBusProxy::new(&conn).unwrap().get_id().unwrap();
+        crate::blocking::fdo::DBusProxy::new(&conn)
+            .unwrap()
+            .get_id()
+            .unwrap();
 
-        loop {
-            let msg = conn.receive_message().unwrap();
+        for m in stream {
+            let msg = m.unwrap();
 
-            if msg.primary_header().unwrap().serial_num() == serial {
+            if *msg.primary_header().serial_num().unwrap() == serial {
                 break;
             }
         }
     }
 
     #[test]
-    #[timeout(1000)]
+    #[timeout(15000)]
     fn issue104() {
         // Tests the fix for https://gitlab.freedesktop.org/dbus/zbus/-/issues/104
         //
         // The issue is caused by `dbus_proxy` macro adding `()` around the return value of methods
-        // with multiple out arguments, ending up with double paranthesis around the signature of
+        // with multiple out arguments, ending up with double parenthesis around the signature of
         // the return type and zbus only removing the outer `()` only and then it not matching the
         // signature we receive on the reply message.
-        use std::{cell::RefCell, convert::TryFrom, rc::Rc};
-        use zvariant::{ObjectPath, OwnedObjectPath, Value};
-        let conn = Connection::new_session().unwrap();
-        let service_name = conn.unique_name().unwrap().to_string();
-        let mut object_server = super::ObjectServer::new(&conn);
+        use zvariant::{ObjectPath, Value};
 
-        struct Secret(Rc<RefCell<bool>>);
+        struct Secret;
         #[super::dbus_interface(name = "org.freedesktop.Secret.Service")]
         impl Secret {
             fn open_session(
@@ -602,7 +626,6 @@ mod tests {
                 _algorithm: &str,
                 input: Value<'_>,
             ) -> zbus::fdo::Result<(OwnedValue, OwnedObjectPath)> {
-                *self.0.borrow_mut() = true;
                 Ok((
                     OwnedValue::from(input),
                     ObjectPath::try_from("/org/freedesktop/secrets/Blah")
@@ -612,50 +635,201 @@ mod tests {
             }
         }
 
-        let quit = Rc::new(RefCell::new(false));
-        let secret = Secret(quit.clone());
-        object_server
-            .at(&"/org/freedesktop/secrets".try_into().unwrap(), secret)
+        let secret = Secret;
+        let conn = blocking::ConnectionBuilder::session()
+            .unwrap()
+            .serve_at("/org/freedesktop/secrets", secret)
+            .unwrap()
+            .build()
             .unwrap();
+        let service_name = conn.unique_name().unwrap().clone();
 
         let child = std::thread::spawn(move || {
-            let conn = Connection::new_session().unwrap();
-            #[super::dbus_proxy(interface = "org.freedesktop.Secret.Service")]
+            let conn = blocking::Connection::session().unwrap();
+            #[super::dbus_proxy(interface = "org.freedesktop.Secret.Service", gen_async = false)]
             trait Secret {
                 fn open_session(
                     &self,
                     algorithm: &str,
                     input: &zvariant::Value<'_>,
-                ) -> zbus::Result<(zvariant::OwnedValue, zvariant::OwnedObjectPath)>;
+                ) -> zbus::Result<(OwnedValue, OwnedObjectPath)>;
             }
 
-            let proxy =
-                SecretProxy::new_for(&conn, &service_name, "/org/freedesktop/secrets").unwrap();
+            let proxy = SecretProxy::builder(&conn)
+                .destination(UniqueName::from(service_name))
+                .unwrap()
+                .path("/org/freedesktop/secrets")
+                .unwrap()
+                .build()
+                .unwrap();
 
             proxy.open_session("plain", &Value::from("")).unwrap();
 
             2u32
         });
 
-        loop {
-            let m = conn.receive_message().unwrap();
-            if let Err(e) = object_server.dispatch_message(&m) {
-                eprintln!("{}", e);
-            }
-
-            if *quit.borrow() {
-                break;
-            }
-        }
-
         let val = child.join().expect("failed to join");
         assert_eq!(val, 2);
     }
 
+    // This one we just want to see if it builds, no need to run it. For details see:
+    //
+    // https://gitlab.freedesktop.org/dbus/zbus/-/issues/121
     #[test]
-    fn connection_is_send_and_sync() {
-        accept_send_and_sync::<Connection>();
+    #[ignore]
+    fn issue_121() {
+        use crate::dbus_proxy;
+
+        #[dbus_proxy(interface = "org.freedesktop.IBus")]
+        trait IBus {
+            /// CurrentInputContext property
+            #[dbus_proxy(property)]
+            fn current_input_context(&self) -> zbus::Result<OwnedObjectPath>;
+
+            /// Engines property
+            #[dbus_proxy(property)]
+            fn engines(&self) -> zbus::Result<Vec<zvariant::OwnedValue>>;
+        }
     }
 
-    fn accept_send_and_sync<C: Send + Sync>() {}
+    #[test]
+    #[timeout(15000)]
+    fn issue_122() {
+        let conn = blocking::Connection::session().unwrap();
+        let stream = MessageIterator::from(&conn);
+
+        #[allow(clippy::mutex_atomic)]
+        let pair = Arc::new((Mutex::new(false), Condvar::new()));
+        let pair2 = Arc::clone(&pair);
+
+        let child = std::thread::spawn(move || {
+            {
+                let (lock, cvar) = &*pair2;
+                let mut started = lock.lock().unwrap();
+                *started = true;
+                cvar.notify_one();
+            }
+
+            for m in stream {
+                let msg = m.unwrap();
+                let hdr = msg.header().unwrap();
+
+                if hdr.member().unwrap().map(|m| m.as_str()) == Some("ZBusIssue122") {
+                    break;
+                }
+            }
+        });
+
+        // Wait for the receiving thread to start up.
+        let (lock, cvar) = &*pair;
+        let mut started = lock.lock().unwrap();
+        while !*started {
+            started = cvar.wait(started).unwrap();
+        }
+        // Still give it some milliseconds to ensure it's already blocking on receive_message call
+        // when we send a message.
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        let destination = conn.unique_name().map(UniqueName::<'_>::from);
+        let msg = Message::method(
+            None::<()>,
+            destination,
+            "/does/not/matter",
+            None::<()>,
+            "ZBusIssue122",
+            &(),
+        )
+        .unwrap();
+        conn.send_message(msg).unwrap();
+
+        child.join().unwrap();
+    }
+
+    #[test]
+    #[ignore]
+    fn issue_81() {
+        use zbus::dbus_proxy;
+        use zvariant::{OwnedValue, Type};
+
+        #[derive(
+            Debug, PartialEq, Clone, Type, OwnedValue, serde::Serialize, serde::Deserialize,
+        )]
+        pub struct DbusPath {
+            id: String,
+            path: OwnedObjectPath,
+        }
+
+        #[dbus_proxy]
+        trait Session {
+            #[dbus_proxy(property)]
+            fn sessions_tuple(&self) -> zbus::Result<(String, String)>;
+
+            #[dbus_proxy(property)]
+            fn sessions_struct(&self) -> zbus::Result<DbusPath>;
+        }
+    }
+
+    #[test]
+    #[timeout(15000)]
+    fn issue173() {
+        // Tests the fix for https://gitlab.freedesktop.org/dbus/zbus/-/issues/173
+        //
+        // The issue is caused by proxy not keeping track of its destination's owner changes
+        // (service restart) and failing to receive signals as a result.
+        let (tx, rx) = channel();
+        let child = std::thread::spawn(move || {
+            let conn = blocking::Connection::session().unwrap();
+            #[super::dbus_proxy(
+                interface = "org.freedesktop.zbus.ComeAndGo",
+                default_service = "org.freedesktop.zbus.ComeAndGo",
+                default_path = "/org/freedesktop/zbus/ComeAndGo"
+            )]
+            trait ComeAndGo {
+                #[dbus_proxy(signal)]
+                fn the_signal(&self) -> zbus::Result<()>;
+            }
+
+            let proxy = ComeAndGoProxyBlocking::new(&conn).unwrap();
+            let signals = proxy.receive_the_signal().unwrap();
+            tx.send(()).unwrap();
+
+            // We receive two signals, each time from different unique names. W/o the fix for
+            // issue#173, the second iteration hangs.
+            for _ in signals.take(2) {
+                tx.send(()).unwrap();
+            }
+        });
+
+        struct ComeAndGo;
+        #[super::dbus_interface(name = "org.freedesktop.zbus.ComeAndGo")]
+        impl ComeAndGo {
+            #[dbus_interface(signal)]
+            async fn the_signal(signal_ctxt: &SignalContext<'_>) -> zbus::Result<()>;
+        }
+
+        rx.recv().unwrap();
+        for _ in 0..2 {
+            let conn = blocking::ConnectionBuilder::session()
+                .unwrap()
+                .serve_at("/org/freedesktop/zbus/ComeAndGo", ComeAndGo)
+                .unwrap()
+                .name("org.freedesktop.zbus.ComeAndGo")
+                .unwrap()
+                .build()
+                .unwrap();
+
+            let iface_ref = conn
+                .object_server()
+                .interface::<_, ComeAndGo>("/org/freedesktop/zbus/ComeAndGo")
+                .unwrap();
+            block_on(ComeAndGo::the_signal(iface_ref.signal_context())).unwrap();
+
+            rx.recv().unwrap();
+
+            // Now we release the name ownership to use a different connection (i-e new unique name).
+            conn.release_name("org.freedesktop.zbus.ComeAndGo").unwrap();
+        }
+
+        child.join().unwrap();
+    }
 }

@@ -1,6 +1,7 @@
 use crate::network::internal_types::{
     PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
 };
+use futures::executor::block_on;
 use log::{debug, info};
 use std::env;
 use std::error::Error;
@@ -40,7 +41,7 @@ fn get_firewall_impl() -> FirewallImpl {
         debug!("Forcibly using firewall driver {}", var);
         match var.to_lowercase().as_str() {
             "firewalld" => {
-                let conn = match Connection::new_system() {
+                let conn = match block_on(Connection::system()) {
                     Ok(c) => c,
                     Err(e) => panic!(
                         "Error retrieving dbus connection for requested firewalld backend {}",
@@ -56,17 +57,17 @@ fn get_firewall_impl() -> FirewallImpl {
     }
 
     // Is firewalld running?
-    let conn = match Connection::new_system() {
+    let conn = match block_on(Connection::system()) {
         Ok(conn) => conn,
         Err(_) => return FirewallImpl::Iptables,
     };
-    match conn.call_method(
+    match block_on(conn.call_method(
         Some("org.freedesktop.DBus"),
         "/org/freedesktop/DBus",
         Some("org.freedesktop.DBus"),
         "GetNameOwner",
         &"org.fedoraproject.FirewallD1",
-    ) {
+    )) {
         Ok(_) => FirewallImpl::Firewalld(conn),
         Err(_) => FirewallImpl::Iptables,
     }
