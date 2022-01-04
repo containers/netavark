@@ -1,5 +1,6 @@
 use crate::error::Error;
-use crate::lib::*;
+use core::fmt::{self, Debug, Display};
+use core::mem;
 use serde::de::value::BorrowedStrDeserializer;
 use serde::de::{
     self, Deserialize, DeserializeSeed, Deserializer, IntoDeserializer, MapAccess, Unexpected,
@@ -281,7 +282,7 @@ impl From<Box<RawValue>> for Box<str> {
 #[cfg_attr(docsrs, doc(cfg(feature = "raw_value")))]
 pub fn to_raw_value<T>(value: &T) -> Result<Box<RawValue>, Error>
 where
-    T: Serialize,
+    T: ?Sized + Serialize,
 {
     let json_string = crate::to_string(value)?;
     Ok(RawValue::from_owned(json_string.into_boxed_str()))
