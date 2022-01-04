@@ -123,13 +123,13 @@ impl TryFrom<Value<'_>> for OwnedSignature {
 #[cfg(feature = "enumflags2")]
 impl<'a, F> TryFrom<Value<'a>> for enumflags2::BitFlags<F>
 where
-    F: enumflags2::RawBitFlags,
-    F::Type: TryFrom<Value<'a>, Error = Error>,
+    F: enumflags2::BitFlag,
+    F::Numeric: TryFrom<Value<'a>, Error = Error>,
 {
     type Error = Error;
 
     fn try_from(value: Value<'a>) -> Result<Self, Self::Error> {
-        Self::from_bits(F::Type::try_from(value)?)
+        Self::from_bits(F::Numeric::try_from(value)?)
             .map_err(|_| Error::Message("Failed to convert to bitflags".into()))
     }
 }

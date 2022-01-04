@@ -1,22 +1,23 @@
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::{
-    punctuated::Punctuated, Data, DeriveInput, Meta::Path, NestedMeta::Meta, Type, TypePath,
+    punctuated::Punctuated, spanned::Spanned, Data, DeriveInput, Error, Meta::Path,
+    NestedMeta::Meta, Type, TypePath,
 };
 
 use crate::utils::*;
 
-pub fn expand_type_derive(input: DeriveInput) -> TokenStream {
+pub fn expand_type_derive(input: DeriveInput) -> Result<TokenStream, Error> {
     let name = match input.data {
         Data::Struct(_) => input.ident,
-        _ => panic!("Only works with structure"),
+        _ => return Err(Error::new(input.span(), "only structs supported")),
     };
 
     let zv = zvariant_path();
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    quote! {
+    Ok(quote! {
         impl #impl_generics #zv::Type for #name #ty_generics
         #where_clause
         {
@@ -24,20 +25,20 @@ pub fn expand_type_derive(input: DeriveInput) -> TokenStream {
                 #zv::Signature::from_static_str_unchecked("a{sv}")
             }
         }
-    }
+    })
 }
 
-pub fn expand_serialize_derive(input: DeriveInput) -> TokenStream {
+pub fn expand_serialize_derive(input: DeriveInput) -> Result<TokenStream, Error> {
     let (name, data) = match input.data {
         Data::Struct(data) => (input.ident, data),
-        _ => panic!("Only works with structure"),
+        _ => return Err(Error::new(input.span(), "only structs supported")),
     };
 
     let zv = zvariant_path();
     let mut entries = quote! {};
 
     for f in &data.fields {
-        let attrs = parse_item_attributes(&f.attrs).unwrap();
+        let attrs = parse_item_attributes(&f.attrs)?;
         let name = &f.ident;
         let dict_name = attrs
             .iter()
@@ -72,7 +73,7 @@ pub fn expand_serialize_derive(input: DeriveInput) -> TokenStream {
     let generics = input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    quote! {
+    Ok(quote! {
         impl #impl_generics #zv::export::serde::ser::Serialize for #name #ty_generics
         #where_clause
         {
@@ -88,13 +89,13 @@ pub fn expand_serialize_derive(input: DeriveInput) -> TokenStream {
                 map.end()
             }
         }
-    }
+    })
 }
 
-pub fn expand_deserialize_derive(input: DeriveInput) -> TokenStream {
+pub fn expand_deserialize_derive(input: DeriveInput) -> Result<TokenStream, Error> {
     let (name, data) = match input.data {
         Data::Struct(data) => (input.ident, data),
-        _ => panic!("Only works with structure"),
+        _ => return Err(Error::new(input.span(), "only structs supported")),
     };
 
     let mut deny_unknown_fields = false;
@@ -103,7 +104,7 @@ pub fn expand_deserialize_derive(input: DeriveInput) -> TokenStream {
             Meta(Path(p)) if p.is_ident("deny_unknown_fields") => {
                 deny_unknown_fields = true;
             }
-            _ => panic!("unsupported attribute"),
+            _ => return Err(Error::new(meta_item.span(), "unsupported attribute")),
         }
     }
 
@@ -182,7 +183,7 @@ pub fn expand_deserialize_derive(input: DeriveInput) -> TokenStream {
 
     let (impl_generics, _, where_clause) = generics.split_for_impl();
 
-    quote! {
+    Ok(quote! {
         impl #impl_generics #zv::export::serde::de::Deserialize<'de> for #name #ty_generics
         #where_clause
         {
@@ -233,5 +234,5 @@ pub fn expand_deserialize_derive(input: DeriveInput) -> TokenStream {
                 deserializer.deserialize_map(#visitor(::std::marker::PhantomData))
             }
         }
-    }
+    })
 }

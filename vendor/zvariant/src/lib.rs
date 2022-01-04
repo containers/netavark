@@ -115,8 +115,8 @@
 //! [container types]: https://dbus.freedesktop.org/doc/dbus-specification.html#container-types
 //! [slice]: https://doc.rust-lang.org/std/primitive.slice.html
 //! [`Vec`]: https://doc.rust-lang.org/std/vec/struct.Vec.html
-//! [`arrayvec::ArrayVec`]: https://docs.rs/arrayvec/0.5.1/arrayvec/struct.ArrayVec.html
-//! [`arrayvec::ArrayString`]: https://docs.rs/arrayvec/0.5.1/arrayvec/struct.ArrayString.html
+//! [`arrayvec::ArrayVec`]: https://docs.rs/arrayvec/0.7.1/arrayvec/struct.ArrayVec.html
+//! [`arrayvec::ArrayString`]: https://docs.rs/arrayvec/0.7.1/arrayvec/struct.ArrayString.html
 //! [`Value` module documentation]: enum.Value.html
 
 #[macro_use]
@@ -199,10 +199,7 @@ mod framing_offset_size;
 mod framing_offsets;
 mod signature_parser;
 
-// FIXME: Re-export derive macros from the crate root with the next breaking-change release.
-pub mod derive {
-    pub use zvariant_derive::{DeserializeDict, OwnedValue, SerializeDict, Type, TypeDict, Value};
-}
+pub use zvariant_derive::{DeserializeDict, OwnedValue, SerializeDict, Type, TypeDict, Value};
 
 // Required for the macros to function within this crate.
 extern crate self as zvariant;
@@ -231,16 +228,15 @@ mod tests {
     use glib::{Bytes, FromVariant, Variant};
     use serde::{Deserialize, Serialize};
 
-    use zvariant_derive::{DeserializeDict, SerializeDict, Type, TypeDict};
-
     use crate::{
         from_slice, from_slice_fds, from_slice_for_signature, to_bytes, to_bytes_fds,
         to_bytes_for_signature,
     };
 
     use crate::{
-        Array, Basic, DeserializeValue, Dict, EncodingContext as Context, EncodingFormat, Error,
-        Fd, ObjectPath, Result, SerializeValue, Signature, Str, Structure, Type, Value,
+        Array, Basic, DeserializeDict, DeserializeValue, Dict, EncodingContext as Context,
+        EncodingFormat, Error, Fd, ObjectPath, Result, SerializeDict, SerializeValue, Signature,
+        Str, Structure, Type, TypeDict, Value,
     };
 
     // Test through both generic and specific API (wrt byte order)
@@ -551,11 +547,11 @@ mod tests {
     #[cfg(feature = "arrayvec")]
     #[test]
     fn array_string_value() {
-        let s = ArrayString::<[_; 32]>::from_str("hello world!").unwrap();
+        let s = ArrayString::<32>::from_str("hello world!").unwrap();
         let ctxt = Context::<LE>::new_dbus(0);
         let encoded = to_bytes(ctxt, &s).unwrap();
         assert_eq!(encoded.len(), 17);
-        let decoded: ArrayString<[_; 32]> = from_slice(&encoded, ctxt).unwrap();
+        let decoded: ArrayString<32> = from_slice(&encoded, ctxt).unwrap();
         assert_eq!(&decoded, "hello world!");
     }
 
@@ -640,6 +636,7 @@ mod tests {
         // Array of u8
         //
         // First a normal Rust array that is actually serialized as a struct (thank you Serde!)
+        assert_eq!(<[u8; 2]>::signature(), "(yy)");
         let ay = [77u8, 88];
         let ctxt = Context::<LE>::new_dbus(0);
         let encoded = to_bytes(ctxt, &ay).unwrap();
@@ -657,7 +654,7 @@ mod tests {
         assert_eq!(encoded.len(), 6);
 
         #[cfg(feature = "arrayvec")]
-        let decoded: ArrayVec<[u8; 2]> = from_slice(&encoded, ctxt).unwrap();
+        let decoded: ArrayVec<u8, 2> = from_slice(&encoded, ctxt).unwrap();
         #[cfg(not(feature = "arrayvec"))]
         let decoded: Vec<u8> = from_slice(&encoded, ctxt).unwrap();
         assert_eq!(&decoded.as_slice(), &[77u8, 88]);

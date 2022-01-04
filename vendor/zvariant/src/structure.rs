@@ -7,7 +7,7 @@ use std::convert::TryInto;
 
 use crate::{
     signature_parser::SignatureParser, value::SignatureSeed, DynamicDeserialize, DynamicType,
-    OwnedValue, Signature, Type, Value,
+    OwnedValue, Signature, Value,
 };
 
 /// Use this to efficiently build a [`Structure`].
@@ -168,47 +168,6 @@ impl<'a> Structure<'a> {
     /// Converts `self` to a `Vec` containing all its fields.
     pub fn into_fields(self) -> Vec<Value<'a>> {
         self.fields
-    }
-
-    /// Create a new `Structure`.
-    ///
-    /// Same as `Structure::default()`.
-    #[deprecated(
-        since = "2.3.0",
-        note = "Please use `StructureBuilder` to create a `Structure` instead."
-    )]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Append `field` to `self`.
-    ///
-    /// This method returns `Self` so that you can use the builder pattern to create a complex
-    /// structure.
-    #[deprecated(
-        since = "2.3.0",
-        note = "Please use `StructureBuilder` to create a `Structure` instead."
-    )]
-    pub fn add_field<T>(self, field: T) -> Self
-    where
-        T: Type + Into<Value<'a>>,
-    {
-        #[allow(deprecated)]
-        self.append_field(Value::new(field))
-    }
-
-    /// Append `field` to `self`.
-    ///
-    /// Identical to `add_field`, except the field must be in the form of a `Value`.
-    #[deprecated(
-        since = "2.3.0",
-        note = "Please use `StructureBuilder` to create a `Structure` instead."
-    )]
-    pub fn append_field<'e: 'a>(mut self, field: Value<'e>) -> Self {
-        self.fields.push(field);
-        self.signature = create_signature_from_fields(&self.fields);
-
-        self
     }
 
     /// Get the signature of this `Structure`.

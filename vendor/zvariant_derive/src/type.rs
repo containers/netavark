@@ -1,10 +1,12 @@
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
-use syn::{self, Attribute, Data, DataEnum, DeriveInput, Fields, Generics, Ident};
+use syn::{
+    self, spanned::Spanned, Attribute, Data, DataEnum, DeriveInput, Error, Fields, Generics, Ident,
+};
 
 use crate::utils::zvariant_path;
 
-pub fn expand_derive(ast: DeriveInput) -> TokenStream {
+pub fn expand_derive(ast: DeriveInput) -> Result<TokenStream, Error> {
     let zv = zvariant_path();
 
     match ast.data {
@@ -15,22 +17,30 @@ pub fn expand_derive(ast: DeriveInput) -> TokenStream {
             Fields::Unit => impl_unit_struct(ast.ident, ast.generics, &zv),
         },
         Data::Enum(data) => impl_enum(ast.ident, ast.generics, ast.attrs, data, &zv),
-        _ => panic!("Only structures and enums supported at the moment"),
+        _ => Err(Error::new(
+            ast.span(),
+            "only structs and enums supported at the moment",
+        )),
     }
 }
 
-fn impl_struct(name: Ident, generics: Generics, fields: Fields, zv: &TokenStream) -> TokenStream {
+fn impl_struct(
+    name: Ident,
+    generics: Generics,
+    fields: Fields,
+    zv: &TokenStream,
+) -> Result<TokenStream, Error> {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let signature = signature_for_struct(fields, zv);
 
-    quote! {
+    Ok(quote! {
         impl #impl_generics #zv::Type for #name #ty_generics #where_clause {
             #[inline]
             fn signature() -> #zv::Signature<'static> {
                 #signature
             }
         }
-    }
+    })
 }
 
 fn signature_for_struct(fields: Fields, zv: &TokenStream) -> TokenStream {
@@ -60,17 +70,21 @@ fn signature_for_struct(fields: Fields, zv: &TokenStream) -> TokenStream {
     }
 }
 
-fn impl_unit_struct(name: Ident, generics: Generics, zv: &TokenStream) -> TokenStream {
+fn impl_unit_struct(
+    name: Ident,
+    generics: Generics,
+    zv: &TokenStream,
+) -> Result<TokenStream, Error> {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    quote! {
+    Ok(quote! {
         impl #impl_generics #zv::Type for #name #ty_generics #where_clause {
             #[inline]
             fn signature() -> #zv::Signature<'static> {
                 #zv::Signature::from_static_str_unchecked("")
             }
         }
-    }
+    })
 }
 
 fn impl_enum(
@@ -79,11 +93,9 @@ fn impl_enum(
     attrs: Vec<Attribute>,
     data: DataEnum,
     zv: &TokenStream,
-) -> TokenStream {
+) -> Result<TokenStream, Error> {
     let repr: TokenStream = match attrs.iter().find(|attr| attr.path.is_ident("repr")) {
-        Some(repr_attr) => repr_attr
-            .parse_args()
-            .expect("Failed to parse `#[repr(...)]` attribute"),
+        Some(repr_attr) => repr_attr.parse_args()?,
         None => quote! { u32 },
     };
 
@@ -91,18 +103,18 @@ fn impl_enum(
         // Ensure all variants of the enum are unit type
         match variant.fields {
             Fields::Unit => (),
-            _ => panic!("`{}` must be a unit variant", variant.ident),
+            _ => return Err(Error::new(variant.span(), "must be a unit variant")),
         }
     }
 
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    quote! {
+    Ok(quote! {
         impl #impl_generics #zv::Type for #name #ty_generics #where_clause {
             #[inline]
             fn signature() -> #zv::Signature<'static> {
                 <#repr as #zv::Type>::signature()
             }
         }
-    }
+    })
 }

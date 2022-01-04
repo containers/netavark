@@ -17,13 +17,16 @@
 //! [`org.freedesktop.DBus.Introspectable`]: https://dbus.freedesktop.org/doc/dbus-specification.html#standard-interfaces-introspectable
 
 use serde::{Deserialize, Serialize};
-use serde_xml_rs::{from_reader, from_str, to_writer, Error};
+use serde_xml_rs::{from_reader, from_str, to_writer};
+use static_assertions::assert_impl_all;
 use std::{
     io::{Read, Write},
     result::Result,
 };
 
-// note: serde-xml-rs doesnt handle nicely interleaved elements, so we have to use enums:
+use crate::Error;
+
+// note: serde-xml-rs doesn't handle nicely interleaved elements, so we have to use enums:
 // https://github.com/RReverser/serde-xml-rs/issues/55
 
 macro_rules! get_vec {
@@ -40,6 +43,8 @@ pub struct Annotation {
     name: String,
     value: String,
 }
+
+assert_impl_all!(Annotation: Send, Sync, Unpin);
 
 impl Annotation {
     /// Return the annotation name/key.
@@ -62,6 +67,8 @@ pub struct Arg {
     #[serde(rename = "annotation", default)]
     annotations: Vec<Annotation>,
 }
+
+assert_impl_all!(Arg: Send, Sync, Unpin);
 
 impl Arg {
     /// Return the argument name, if any.
@@ -101,6 +108,8 @@ pub struct Method {
     elems: Vec<MethodElement>,
 }
 
+assert_impl_all!(Method: Send, Sync, Unpin);
+
 impl Method {
     /// Return the method name.
     pub fn name(&self) -> &str {
@@ -134,6 +143,8 @@ pub struct Signal {
     elems: Vec<SignalElement>,
 }
 
+assert_impl_all!(Signal: Send, Sync, Unpin);
+
 impl Signal {
     /// Return the signal name.
     pub fn name(&self) -> &str {
@@ -161,6 +172,8 @@ pub struct Property {
     #[serde(rename = "annotation", default)]
     annotations: Vec<Annotation>,
 }
+
+assert_impl_all!(Property: Send, Sync, Unpin);
 
 impl Property {
     /// Returns the property name.
@@ -201,6 +214,8 @@ pub struct Interface {
     #[serde(rename = "$value", default)]
     elems: Vec<InterfaceElement>,
 }
+
+assert_impl_all!(Interface: Send, Sync, Unpin);
 
 impl Interface {
     /// Returns the interface name.
@@ -245,15 +260,17 @@ pub struct Node {
     elems: Vec<NodeElement>,
 }
 
+assert_impl_all!(Node: Send, Sync, Unpin);
+
 impl Node {
     /// Parse the introspection XML document from reader.
     pub fn from_reader<R: Read>(reader: R) -> Result<Node, Error> {
-        from_reader(reader)
+        Ok(from_reader(reader)?)
     }
 
     /// Write the XML document to writer.
     pub fn to_writer<W: Write>(&self, writer: W) -> Result<(), Error> {
-        to_writer(writer, &self)
+        Ok(to_writer(writer, &self)?)
     }
 
     /// Returns the node name, if any.
@@ -277,13 +294,14 @@ impl std::str::FromStr for Node {
 
     /// Parse the introspection XML document from `s`.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        from_str(s)
+        Ok(from_str(s)?)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use std::{error::Error, str::FromStr};
+    use test_log::test;
 
     use super::Node;
 

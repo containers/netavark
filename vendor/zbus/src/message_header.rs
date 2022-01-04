@@ -1,12 +1,15 @@
 use std::convert::TryFrom;
 
-use enumflags2::BitFlags;
+use enumflags2::{bitflags, BitFlags};
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
-use zvariant::{derive::Type, ObjectPath, Signature};
+use static_assertions::assert_impl_all;
+use zbus_names::{BusName, ErrorName, InterfaceName, MemberName, UniqueName};
+use zvariant::{EncodingContext, ObjectPath, Signature, Type};
 
-use crate::{MessageError, MessageField, MessageFieldCode, MessageFields};
+use crate::{Error, MessageField, MessageFieldCode, MessageFields};
 
 pub(crate) const PRIMARY_HEADER_SIZE: usize = 12;
 pub(crate) const MIN_MESSAGE_SIZE: usize = PRIMARY_HEADER_SIZE + 4;
@@ -22,15 +25,17 @@ pub enum EndianSig {
     Little = b'l',
 }
 
+assert_impl_all!(EndianSig: Send, Sync, Unpin);
+
 // Such a shame I've to do this manually
 impl TryFrom<u8> for EndianSig {
-    type Error = MessageError;
+    type Error = Error;
 
-    fn try_from(val: u8) -> Result<EndianSig, MessageError> {
+    fn try_from(val: u8) -> Result<EndianSig, Error> {
         match val {
             b'B' => Ok(EndianSig::Big),
             b'l' => Ok(EndianSig::Little),
-            _ => Err(MessageError::IncorrectEndian),
+            _ => Err(Error::IncorrectEndian),
         }
     }
 }
@@ -58,6 +63,8 @@ pub enum MessageType {
     Signal = 4,
 }
 
+assert_impl_all!(MessageType: Send, Sync, Unpin);
+
 // Such a shame I've to do this manually
 impl From<u8> for MessageType {
     fn from(val: u8) -> MessageType {
@@ -72,8 +79,9 @@ impl From<u8> for MessageType {
 }
 
 /// Pre-defined flags that can be passed in Message header.
+#[bitflags]
 #[repr(u8)]
-#[derive(Debug, Copy, Clone, PartialEq, BitFlags, Type)]
+#[derive(Debug, Copy, Clone, PartialEq, Type)]
 pub enum MessageFlags {
     /// This message does not expect method return replies or error replies, even if it is of a type
     /// that can have a reply; the reply should be omitted.
@@ -92,18 +100,61 @@ pub enum MessageFlags {
     AllowInteractiveAuth = 0x4,
 }
 
+assert_impl_all!(MessageFlags: Send, Sync, Unpin);
+
+#[derive(Clone, Debug)]
+struct SerialNum(OnceCell<u32>);
+
+// FIXME: Can use `zvariant::Type` macro after `zvariant` provides a blanket implementation for
+// `OnceCell<T>`.
+impl zvariant::Type for SerialNum {
+    fn signature() -> Signature<'static> {
+        u32::signature()
+    }
+}
+
+// Unfortunately Serde doesn't provide a blanket impl. for `Cell<T>` so we have to implement manually.
+//
+// https://github.com/serde-rs/serde/issues/1952
+impl Serialize for SerialNum {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // `Message` serializes the PrimaryHeader at construct time before the user has the
+        // time to tweak it and set a correct serial_num. We should probably avoid this but
+        // for now, let's silently use a default serialized value.
+        self.0
+            .get()
+            .cloned()
+            .unwrap_or_default()
+            .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SerialNum {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(SerialNum(OnceCell::from(u32::deserialize(deserializer)?)))
+    }
+}
+
 /// The primary message header, which is present in all D-Bus messages.
 ///
 /// This header contains all the essential information about a message, regardless of its type.
-#[derive(Debug, Serialize, Deserialize, Type)]
+#[derive(Clone, Debug, Serialize, Deserialize, Type)]
 pub struct MessagePrimaryHeader {
     endian_sig: EndianSig,
     msg_type: MessageType,
     flags: BitFlags<MessageFlags>,
     protocol_version: u8,
     body_len: u32,
-    serial_num: u32,
+    serial_num: SerialNum,
 }
+
+assert_impl_all!(MessagePrimaryHeader: Send, Sync, Unpin);
 
 impl MessagePrimaryHeader {
     /// Create a new `MessagePrimaryHeader` instance.
@@ -114,8 +165,15 @@ impl MessagePrimaryHeader {
             flags: BitFlags::empty(),
             protocol_version: 1,
             body_len,
-            serial_num: u32::max_value(),
+            serial_num: SerialNum(OnceCell::new()),
         }
+    }
+
+    pub(crate) fn read(buf: &[u8]) -> Result<(MessagePrimaryHeader, u32), Error> {
+        let ctx = EncodingContext::<byteorder::NativeEndian>::new_dbus(0);
+        let primary_header = zvariant::from_slice(buf, ctx)?;
+        let fields_len = zvariant::from_slice(&buf[PRIMARY_HEADER_SIZE..], ctx)?;
+        Ok((primary_header, fields_len))
     }
 
     /// D-Bus code for bytorder encoding of the message.
@@ -172,18 +230,21 @@ impl MessagePrimaryHeader {
         self.body_len = len;
     }
 
-    /// The serial number of the message.
+    /// The serial number of the message (if set).
     ///
     /// This is used to match a reply to a method call.
     ///
     /// **Note:** There is no setter provided for this in the public API since this is set by the
     /// [`Connection`](struct.Connection.html) the message is sent over.
-    pub fn serial_num(&self) -> u32 {
-        self.serial_num
+    pub fn serial_num(&self) -> Option<&u32> {
+        self.serial_num.0.get()
     }
 
-    pub(crate) fn set_serial_num(&mut self, serial: u32) {
-        self.serial_num = serial;
+    pub(crate) fn serial_num_or_init<F>(&mut self, f: F) -> &u32
+    where
+        F: FnOnce() -> u32,
+    {
+        self.serial_num.0.get_or_init(f)
     }
 }
 
@@ -193,13 +254,15 @@ impl MessagePrimaryHeader {
 ///
 /// [`MessagePrimaryHeader`]: struct.MessagePrimaryHeader.html
 /// [`MessageFields`]: struct.MessageFields.html
-#[derive(Debug, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct MessageHeader<'m> {
     primary: MessagePrimaryHeader,
     #[serde(borrow)]
     fields: MessageFields<'m>,
-    end: ((),), // To ensure header end on 8-byte boundry
+    end: ((),), // To ensure header end on 8-byte boundary
 }
+
+assert_impl_all!(MessageHeader<'_>: Send, Sync, Unpin);
 
 macro_rules! get_field {
     ($self:ident, $kind:ident) => {
@@ -209,15 +272,9 @@ macro_rules! get_field {
         #[allow(clippy::redundant_closure_call)]
         match $self.fields().get_field(MessageFieldCode::$kind) {
             Some(MessageField::$kind(value)) => Ok(Some($closure(value))),
-            Some(_) => Err(MessageError::InvalidField),
+            Some(_) => Err(Error::InvalidField),
             None => Ok(None),
         }
-    };
-}
-
-macro_rules! get_field_str {
-    ($self:ident, $kind:ident) => {
-        get_field!($self, $kind, (|v: &'s zvariant::Str<'m>| v.as_str()))
     };
 }
 
@@ -268,52 +325,52 @@ impl<'m> MessageHeader<'m> {
     }
 
     /// The message type
-    pub fn message_type(&self) -> Result<MessageType, MessageError> {
+    pub fn message_type(&self) -> Result<MessageType, Error> {
         Ok(self.primary().msg_type())
     }
 
     /// The object to send a call to, or the object a signal is emitted from.
-    pub fn path<'s>(&'s self) -> Result<Option<&ObjectPath<'m>>, MessageError> {
+    pub fn path<'s>(&'s self) -> Result<Option<&ObjectPath<'m>>, Error> {
         get_field!(self, Path)
     }
 
     /// The interface to invoke a method call on, or that a signal is emitted from.
-    pub fn interface<'s>(&'s self) -> Result<Option<&'s str>, MessageError> {
-        get_field_str!(self, Interface)
+    pub fn interface<'s>(&'s self) -> Result<Option<&InterfaceName<'m>>, Error> {
+        get_field!(self, Interface)
     }
 
     /// The member, either the method name or signal name.
-    pub fn member<'s>(&'s self) -> Result<Option<&'s str>, MessageError> {
-        get_field_str!(self, Member)
+    pub fn member<'s>(&'s self) -> Result<Option<&MemberName<'m>>, Error> {
+        get_field!(self, Member)
     }
 
     /// The name of the error that occurred, for errors.
-    pub fn error_name<'s>(&'s self) -> Result<Option<&'s str>, MessageError> {
-        get_field_str!(self, ErrorName)
+    pub fn error_name<'s>(&'s self) -> Result<Option<&ErrorName<'m>>, Error> {
+        get_field!(self, ErrorName)
     }
 
     /// The serial number of the message this message is a reply to.
-    pub fn reply_serial(&self) -> Result<Option<u32>, MessageError> {
+    pub fn reply_serial(&self) -> Result<Option<u32>, Error> {
         get_field_u32!(self, ReplySerial)
     }
 
     /// The name of the connection this message is intended for.
-    pub fn destination<'s>(&'s self) -> Result<Option<&'s str>, MessageError> {
-        get_field_str!(self, Destination)
+    pub fn destination<'s>(&'s self) -> Result<Option<&BusName<'m>>, Error> {
+        get_field!(self, Destination)
     }
 
     /// Unique name of the sending connection.
-    pub fn sender<'s>(&'s self) -> Result<Option<&'s str>, MessageError> {
-        get_field_str!(self, Sender)
+    pub fn sender<'s>(&'s self) -> Result<Option<&UniqueName<'m>>, Error> {
+        get_field!(self, Sender)
     }
 
     /// The signature of the message body.
-    pub fn signature(&self) -> Result<Option<&Signature<'m>>, MessageError> {
+    pub fn signature(&self) -> Result<Option<&Signature<'m>>, Error> {
         get_field!(self, Signature)
     }
 
     /// The number of Unix file descriptors that accompany the message.
-    pub fn unix_fds(&self) -> Result<Option<u32>, MessageError> {
+    pub fn unix_fds(&self) -> Result<Option<u32>, Error> {
         get_field_u32!(self, UnixFDs)
     }
 }
@@ -322,33 +379,41 @@ impl<'m> MessageHeader<'m> {
 mod tests {
     use crate::{MessageField, MessageFields, MessageHeader, MessagePrimaryHeader, MessageType};
 
-    use std::{convert::TryFrom, error::Error, result::Result};
+    use std::{
+        convert::{TryFrom, TryInto},
+        error::Error,
+        result::Result,
+    };
+    use test_log::test;
+    use zbus_names::{InterfaceName, MemberName};
     use zvariant::{ObjectPath, Signature};
 
     #[test]
     fn header() -> Result<(), Box<dyn Error>> {
         let path = ObjectPath::try_from("/some/path")?;
+        let iface = InterfaceName::try_from("some.interface")?;
+        let member = MemberName::try_from("Member")?;
         let mut f = MessageFields::new();
         f.add(MessageField::Path(path.clone()));
-        f.add(MessageField::Interface("some.interface".into()));
-        f.add(MessageField::Member("Member".into()));
-        f.add(MessageField::Sender(":1.84".into()));
+        f.add(MessageField::Interface(iface.clone()));
+        f.add(MessageField::Member(member.clone()));
+        f.add(MessageField::Sender(":1.84".try_into()?));
         let h = MessageHeader::new(MessagePrimaryHeader::new(MessageType::Signal, 77), f);
 
         assert_eq!(h.message_type()?, MessageType::Signal);
         assert_eq!(h.path()?, Some(&path));
-        assert_eq!(h.interface()?, Some("some.interface"));
-        assert_eq!(h.member()?, Some("Member"));
+        assert_eq!(h.interface()?, Some(&iface));
+        assert_eq!(h.member()?, Some(&member));
         assert_eq!(h.error_name()?, None);
         assert_eq!(h.destination()?, None);
         assert_eq!(h.reply_serial()?, None);
-        assert_eq!(h.sender()?, Some(":1.84"));
+        assert_eq!(h.sender()?.unwrap(), ":1.84");
         assert_eq!(h.signature()?, None);
         assert_eq!(h.unix_fds()?, None);
 
         let mut f = MessageFields::new();
-        f.add(MessageField::ErrorName("org.zbus.Error".into()));
-        f.add(MessageField::Destination(":1.11".into()));
+        f.add(MessageField::ErrorName("org.zbus.Error".try_into()?));
+        f.add(MessageField::Destination(":1.11".try_into()?));
         f.add(MessageField::ReplySerial(88));
         f.add(MessageField::Signature(Signature::from_str_unchecked(
             "say",
@@ -360,8 +425,8 @@ mod tests {
         assert_eq!(h.path()?, None);
         assert_eq!(h.interface()?, None);
         assert_eq!(h.member()?, None);
-        assert_eq!(h.error_name()?, Some("org.zbus.Error"));
-        assert_eq!(h.destination()?, Some(":1.11"));
+        assert_eq!(h.error_name()?.unwrap(), "org.zbus.Error");
+        assert_eq!(h.destination()?.unwrap(), ":1.11");
         assert_eq!(h.reply_serial()?, Some(88));
         assert_eq!(h.sender()?, None);
         assert_eq!(h.signature()?, Some(&Signature::from_str_unchecked("say")));

@@ -260,7 +260,6 @@ impl<'a> Debug for Signature<'a> {
 impl<'a> Basic for Signature<'a> {
     const SIGNATURE_CHAR: char = 'g';
     const SIGNATURE_STR: &'static str = "g";
-    const ALIGNMENT: usize = 1;
 
     fn alignment(format: EncodingFormat) -> usize {
         match format {
@@ -426,7 +425,7 @@ fn ensure_correct_signature_str(signature: &[u8]) -> Result<()> {
 }
 
 /// Owned [`Signature`](struct.Signature.html)
-#[derive(Debug, Clone, PartialEq, serde::Serialize, zvariant_derive::Type)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, Type)]
 pub struct OwnedSignature(Signature<'static>);
 
 assert_impl_all!(OwnedSignature: Send, Sync, Unpin);

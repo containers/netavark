@@ -310,8 +310,7 @@ where
 {
     pub fn get_fd(&self, idx: u32) -> Result<i32> {
         self.fds
-            .map(|fds| fds.get(idx as usize))
-            .flatten()
+            .and_then(|fds| fds.get(idx as usize))
             .copied()
             .ok_or(Error::UnknownFd)
     }

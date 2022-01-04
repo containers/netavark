@@ -7,7 +7,6 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use zvariant::{
     from_slice_for_signature, to_bytes_for_signature, EncodingContext as Context, Type, Value,
 };
-use zvariant_derive::Type;
 
 fn fixed_size_array(c: &mut Criterion) {
     let ay = vec![77u8; 100_000];
