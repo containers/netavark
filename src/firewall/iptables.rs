@@ -4,7 +4,6 @@ use crate::firewall::varktables::types::TeardownPolicy::OnComplete;
 use crate::firewall::varktables::types::{
     get_network_chains, get_port_forwarding_chains, TeardownPolicy,
 };
-use crate::network::core_utils::CoreUtils;
 use crate::network::internal_types::{
     PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
 };
@@ -94,17 +93,6 @@ impl firewall::FirewallDriver for IptablesDriver {
     }
 
     fn setup_port_forward(&self, setup_portfw: PortForwardConfig) -> Result<(), Box<dyn Error>> {
-        // Need to enable sysctl localnet so that traffic can pass
-        // through localhost to containers
-        let network_interface = &setup_portfw.net.network_interface;
-        match network_interface {
-            None => {}
-            Some(i) => {
-                let localnet_path = format!("net.ipv4.conf.{}.route_localnet", i);
-                CoreUtils::apply_sysctl_value(localnet_path, "1")?;
-            }
-        }
-
         if let Some(v4) = setup_portfw.container_ip_v4 {
             let subnet_v4 = match setup_portfw.subnet_v4.clone() {
                 Some(s) => s,

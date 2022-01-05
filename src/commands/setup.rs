@@ -89,7 +89,7 @@ impl Setup {
                                 format!("network options for network {} not found", net_name),
                             )
                         })?;
-                    //Configure Bridge and veth_pairs
+                    // Configure Bridge and veth_pairs
                     let status_block = network::core::Core::bridge_per_podman_network(
                         per_network_opts,
                         network,
@@ -173,6 +173,16 @@ impl Setup {
                                 container_ip_v6: addr_v6,
                                 subnet_v6: net_v6,
                             };
+                            // Need to enable sysctl localnet so that traffic can pass
+                            // through localhost to containers
+                            match spf.net.network_interface.clone() {
+                                None => {}
+                                Some(i) => {
+                                    let localnet_path =
+                                        format!("net.ipv4.conf.{}.route_localnet", i);
+                                    CoreUtils::apply_sysctl_value(localnet_path, "1")?;
+                                }
+                            }
                             firewall_driver.setup_port_forward(spf)?;
                         }
                     }
