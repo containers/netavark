@@ -4,10 +4,12 @@ use crate::network::core_utils::CoreUtils;
 use crate::network::internal_types::{
     PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
 };
+use crate::network::types::Subnet;
 use crate::{firewall, network};
 use clap::{self, Clap};
 use log::debug;
 use std::error::Error;
+use std::net::IpAddr;
 
 #[derive(Clap, Debug)]
 pub struct Teardown {
@@ -86,42 +88,53 @@ impl Teardown {
                                             "no container ip provided",
                                         )
                                     })?;
+                                let networks = network.subnets.as_ref().ok_or_else(|| {
+                                    std::io::Error::new(
+                                        std::io::ErrorKind::Other,
+                                        "no network address provided",
+                                    )
+                                })?;
+
                                 let mut has_ipv4 = false;
                                 let mut has_ipv6 = false;
+                                let mut addr_v4: Option<IpAddr> = None;
+                                let mut addr_v6: Option<IpAddr> = None;
+                                let mut net_v4: Option<Subnet> = None;
+                                let mut net_v6: Option<Subnet> = None;
                                 for (idx, ip) in container_ips.iter().enumerate() {
                                     if ip.is_ipv4() {
                                         if has_ipv4 {
                                             continue;
                                         }
+                                        addr_v4 = Some(*ip);
+                                        net_v4 = Some(networks[idx].clone());
                                         has_ipv4 = true;
                                     }
                                     if ip.is_ipv6() {
                                         if has_ipv6 {
                                             continue;
                                         }
+                                        addr_v6 = Some(*ip);
+                                        net_v6 = Some(networks[idx].clone());
                                         has_ipv6 = true;
                                     }
-                                    let networks = network.subnets.as_ref().ok_or_else(|| {
-                                        std::io::Error::new(
-                                            std::io::ErrorKind::Other,
-                                            "no network address provided",
-                                        )
-                                    })?;
-                                    let spf = PortForwardConfig {
-                                        net: network.clone(),
-                                        container_id: network_options.container_id.clone(),
-                                        port_mappings: i.clone(),
-                                        network_name: (*net_name).clone(),
-                                        network_hash_name: id_network_hash.clone(),
-                                        container_ip: *ip,
-                                        network_address: networks[idx].clone(),
-                                    };
-                                    let td = TeardownPortForward {
-                                        config: spf,
-                                        complete_teardown,
-                                    };
-                                    firewall_driver.teardown_port_forward(td)?;
                                 }
+                                let spf = PortForwardConfig {
+                                    net: network.clone(),
+                                    container_id: network_options.container_id.clone(),
+                                    port_mappings: i.clone(),
+                                    network_name: (*net_name).clone(),
+                                    network_hash_name: id_network_hash.clone(),
+                                    container_ip_v4: addr_v4,
+                                    subnet_v4: net_v4,
+                                    container_ip_v6: addr_v6,
+                                    subnet_v6: net_v6,
+                                };
+                                let td = TeardownPortForward {
+                                    config: spf,
+                                    complete_teardown,
+                                };
+                                firewall_driver.teardown_port_forward(td)?;
                             }
                         }
                     }

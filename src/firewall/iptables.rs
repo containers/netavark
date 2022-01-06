@@ -96,11 +96,6 @@ impl firewall::FirewallDriver for IptablesDriver {
     fn setup_port_forward(&self, setup_portfw: PortForwardConfig) -> Result<(), Box<dyn Error>> {
         // Need to enable sysctl localnet so that traffic can pass
         // through localhost to containers
-        let is_ipv6 = setup_portfw.container_ip.is_ipv6();
-        let mut conn = &self.conn;
-        if is_ipv6 {
-            conn = &self.conn6;
-        }
         let network_interface = &setup_portfw.net.network_interface;
         match network_interface {
             None => {}
@@ -109,33 +104,96 @@ impl firewall::FirewallDriver for IptablesDriver {
                 CoreUtils::apply_sysctl_value(localnet_path, "1")?;
             }
         }
-        // let container_network_address = setup_portfw.network_address.subnet;
-        let chains = get_port_forwarding_chains(conn, &setup_portfw, is_ipv6);
 
-        for chain in chains {
-            chain.add_rules()?;
+        if let Some(v4) = setup_portfw.container_ip_v4 {
+            let subnet_v4 = match setup_portfw.subnet_v4.clone() {
+                Some(s) => s,
+                None => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "ipv4 address but provided but no v4 subnet provided",
+                    )))
+                }
+            };
+            let chains =
+                get_port_forwarding_chains(&self.conn, &setup_portfw, &v4, &subnet_v4, false);
+            for chain in chains {
+                chain.add_rules()?;
+            }
         }
+        if let Some(v6) = setup_portfw.container_ip_v6 {
+            let subnet_v6 = match setup_portfw.subnet_v6.clone() {
+                Some(s) => s,
+                None => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "ipv6 address but provided but no v4 subnet provided",
+                    )))
+                }
+            };
+            let chains =
+                get_port_forwarding_chains(&self.conn6, &setup_portfw, &v6, &subnet_v6, true);
+            for chain in chains {
+                chain.add_rules()?;
+            }
+        };
         Result::Ok(())
     }
 
     fn teardown_port_forward(&self, tear: TeardownPortForward) -> Result<(), Box<dyn Error>> {
-        let is_ipv6 = tear.config.container_ip.is_ipv6();
-        let mut conn = &self.conn;
-        if is_ipv6 {
-            conn = &self.conn6;
+        if let Some(v4) = tear.config.container_ip_v4 {
+            let subnet_v4 = match tear.config.subnet_v4.clone() {
+                Some(s) => s,
+                None => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "ipv4 address but provided but no v4 subnet provided",
+                    )))
+                }
+            };
+
+            let chains =
+                get_port_forwarding_chains(&self.conn, &tear.config, &v4, &subnet_v4, false);
+
+            for chain in &chains {
+                chain.remove_rules(tear.complete_teardown)?;
+            }
+            for chain in &chains {
+                match &chain.td_policy {
+                    None => {}
+                    Some(policy) => {
+                        if tear.complete_teardown && *policy == TeardownPolicy::OnComplete {
+                            chain.remove()?;
+                        }
+                    }
+                }
+            }
         }
 
-        let chains = get_port_forwarding_chains(conn, &tear.config, is_ipv6);
+        if let Some(v6) = tear.config.container_ip_v6 {
+            let subnet_v6 = match tear.config.subnet_v6.clone() {
+                Some(s) => s,
+                None => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "ipv6 address but provided but no v4 subnet provided",
+                    )))
+                }
+            };
 
-        for chain in &chains {
-            chain.remove_rules(tear.complete_teardown)?;
-        }
-        for chain in &chains {
-            match &chain.td_policy {
-                None => {}
-                Some(policy) => {
-                    if tear.complete_teardown && *policy == TeardownPolicy::OnComplete {
-                        chain.remove()?;
+            let chains =
+                get_port_forwarding_chains(&self.conn6, &tear.config, &v6, &subnet_v6, true);
+
+            for chain in &chains {
+                chain.remove_rules(tear.complete_teardown)?;
+            }
+            for chain in &chains {
+                match &chain.td_policy {
+                    None => {}
+                    Some(policy) => {
+                        if tear.complete_teardown && *policy == TeardownPolicy::OnComplete {
+                            chain.remove()?;
+                        }
                     }
                 }
             }
