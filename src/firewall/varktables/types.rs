@@ -382,25 +382,31 @@ pub fn get_port_forwarding_chains<'a>(
             ),
             None,
         ));
-        // dn container (the actual port usages)
-        netavark_hashed_dn_chain.build_rule(VarkRule::new(
-            format!(
-                "-j {} -s {} -p {} --dport {}",
-                NETAVARK_HOSTPORT_SETMARK,
-                network_address.subnet.to_string(),
-                i.protocol,
-                &host_port
-            ),
-            None,
-        ));
 
-        netavark_hashed_dn_chain.build_rule(VarkRule::new(
-            format!(
-                "-j {} -s {} -p {} --dport {}",
-                NETAVARK_HOSTPORT_SETMARK, localhost_ip, i.protocol, &host_port
-            ),
-            None,
-        ));
+        let mut dn_setmark_rule_localhost = format!(
+            "-j {} -s {} -p {} --dport {}",
+            NETAVARK_HOSTPORT_SETMARK,
+            network_address.subnet.to_string(),
+            i.protocol,
+            &host_port
+        );
+
+        let mut dn_setmark_rule_subnet = format!(
+            "-j {} -s {} -p {} --dport {}",
+            NETAVARK_HOSTPORT_SETMARK, localhost_ip, i.protocol, &host_port
+        );
+
+        // if a destination ip address is provided, we need to alter
+        // the rule a bit
+        if !i.host_ip.is_empty() {
+            dn_setmark_rule_localhost = format!("{} -d {}", dn_setmark_rule_localhost, i.host_ip);
+            dn_setmark_rule_subnet = format!("{} -d {}", dn_setmark_rule_subnet, i.host_ip);
+        }
+
+        // dn container (the actual port usages)
+        netavark_hashed_dn_chain.build_rule(VarkRule::new(dn_setmark_rule_localhost, None));
+
+        netavark_hashed_dn_chain.build_rule(VarkRule::new(dn_setmark_rule_subnet, None));
 
         let mut container_ip_value = container_ip.to_string();
         if is_ipv6 {
@@ -415,13 +421,17 @@ pub fn get_port_forwarding_chains<'a>(
                 i.host_port.to_string()
             );
         }
-        netavark_hashed_dn_chain.build_rule(VarkRule::new(
-            format!(
-                "-j {} -p {} --to-destination {}:{} --destination-port {}",
-                DNAT, i.protocol, container_ip_value, container_port, &host_port
-            ),
-            None,
-        ));
+        let mut dnat_rule = format!(
+            "-j {} -p {} --to-destination {}:{} --destination-port {}",
+            DNAT, i.protocol, container_ip_value, container_port, &host_port
+        );
+
+        // if a destination ip address is provided, we need to alter
+        // the rule a bit
+        if !i.host_ip.is_empty() {
+            dnat_rule = format!("{} -d {}", dnat_rule, i.host_ip)
+        }
+        netavark_hashed_dn_chain.build_rule(VarkRule::new(dnat_rule, None));
     }
 
     //  The order is important here.  Be certain before changing it
