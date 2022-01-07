@@ -37,8 +37,20 @@ pub struct PortForwardConfig {
     pub network_name: String,
     // hash id for the network
     pub network_hash_name: String,
-    // ip addresses of the container
-    pub container_ip: IpAddr,
-    // network address (subnet)
-    pub network_address: Subnet,
+    // ipv4 address of the container to bind to.
+    // If multiple v4 addresses are present, use the first one for this.
+    // At least one of container_ip_v6 and container_ip_v6 must be set. Both can
+    // be set at the same time as well.
+    pub container_ip_v4: Option<IpAddr>,
+    // subnet associated with the IPv4 address.
+    // Must be set if v4 address is set.
+    pub subnet_v4: Option<Subnet>,
+    // ipv6 address of the container.
+    // If multiple v6 addresses are present, use the first one for this.
+    // At least one of container_ip_v6 and container_ip_v6 must be set. Both can
+    // be set at the same time as well.
+    pub container_ip_v6: Option<IpAddr>,
+    // subnet associated with the ipv6 address.
+    // Must be set if the v6 address is set.
+    pub subnet_v6: Option<Subnet>,
 }

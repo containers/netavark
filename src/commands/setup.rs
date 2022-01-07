@@ -5,11 +5,13 @@ use crate::firewall::iptables::MAX_HASH_SIZE;
 use crate::network;
 use crate::network::core_utils::CoreUtils;
 use crate::network::internal_types::{PortForwardConfig, SetupNetwork};
+use crate::network::types::Subnet;
 use crate::network::{core_utils, types};
 use clap::{self, Clap};
 use log::debug;
 use std::collections::HashMap;
 use std::error::Error;
+use std::net::IpAddr;
 
 const IPV4_FORWARD: &str = "net.ipv4.ip_forward";
 const IPV6_FORWARD: &str = "/proc/sys/net/ipv6/conf/all/forwarding";
@@ -123,38 +125,48 @@ impl Setup {
                                         "no container ip provided",
                                     )
                                 })?;
+                            let networks = network.subnets.as_ref().ok_or_else(|| {
+                                std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    "no network address provided",
+                                )
+                            })?;
                             let mut has_ipv4 = false;
                             let mut has_ipv6 = false;
+                            let mut addr_v4: Option<IpAddr> = None;
+                            let mut addr_v6: Option<IpAddr> = None;
+                            let mut net_v4: Option<Subnet> = None;
+                            let mut net_v6: Option<Subnet> = None;
                             for (idx, ip) in container_ips.iter().enumerate() {
                                 if ip.is_ipv4() {
                                     if has_ipv4 {
                                         continue;
                                     }
+                                    addr_v4 = Some(*ip);
+                                    net_v4 = Some(networks[idx].clone());
                                     has_ipv4 = true;
                                 }
                                 if ip.is_ipv6() {
                                     if has_ipv6 {
                                         continue;
                                     }
+                                    addr_v6 = Some(*ip);
+                                    net_v6 = Some(networks[idx].clone());
                                     has_ipv6 = true;
                                 }
-                                let networks = network.subnets.as_ref().ok_or_else(|| {
-                                    std::io::Error::new(
-                                        std::io::ErrorKind::Other,
-                                        "no network address provided",
-                                    )
-                                })?;
-                                let spf = PortForwardConfig {
-                                    net: network.clone(),
-                                    container_id: network_options.container_id.clone(),
-                                    port_mappings: i.clone(),
-                                    network_name: (*net_name).clone(),
-                                    network_hash_name: id_network_hash.clone(),
-                                    container_ip: *ip,
-                                    network_address: networks[idx].clone(),
-                                };
-                                firewall_driver.setup_port_forward(spf)?;
                             }
+                            let spf = PortForwardConfig {
+                                net: network.clone(),
+                                container_id: network_options.container_id.clone(),
+                                port_mappings: i.clone(),
+                                network_name: (*net_name).clone(),
+                                network_hash_name: id_network_hash.clone(),
+                                container_ip_v4: addr_v4,
+                                subnet_v4: net_v4,
+                                container_ip_v6: addr_v6,
+                                subnet_v6: net_v6,
+                            };
+                            firewall_driver.setup_port_forward(spf)?;
                         }
                     }
                 }

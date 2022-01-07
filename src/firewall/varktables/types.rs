@@ -3,9 +3,11 @@ use crate::firewall::varktables::helpers::{
 };
 use crate::firewall::varktables::types::TeardownPolicy::OnComplete;
 use crate::network::internal_types::PortForwardConfig;
+use crate::network::types::Subnet;
 use ipnet::IpNet;
 use iptables::IPTables;
 use std::error::Error;
+use std::net::IpAddr;
 
 //  Chain names
 const NAT: &str = "nat";
@@ -246,6 +248,8 @@ pub fn get_network_chains(
 pub fn get_port_forwarding_chains<'a>(
     conn: &'a IPTables,
     pfwd: &PortForwardConfig,
+    container_ip: &IpAddr,
+    network_address: &Subnet,
     is_ipv6: bool,
     // portmappings: Vec<PortMapping>,
 ) -> Vec<VarkChain<'a>> {
@@ -344,7 +348,7 @@ pub fn get_port_forwarding_chains<'a>(
         format!(
             "-j {} -s {} {}",
             netavark_hashed_network_chain_name,
-            pfwd.container_ip.to_string(),
+            container_ip.to_string(),
             comment_network_cid
         ),
         None,
@@ -383,7 +387,7 @@ pub fn get_port_forwarding_chains<'a>(
             format!(
                 "-j {} -s {} -p {} --dport {}",
                 NETAVARK_HOSTPORT_SETMARK,
-                pfwd.network_address.subnet.to_string(),
+                network_address.subnet.to_string(),
                 i.protocol,
                 &host_port
             ),
@@ -398,7 +402,7 @@ pub fn get_port_forwarding_chains<'a>(
             None,
         ));
 
-        let mut container_ip_value = pfwd.container_ip.to_string();
+        let mut container_ip_value = container_ip.to_string();
         if is_ipv6 {
             container_ip_value = format!("[{}]", container_ip_value)
         }
