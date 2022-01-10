@@ -34,7 +34,7 @@ else
 endif
 
 .PHONY: all
-all: vendor build
+all: build
 
 bin:
 	mkdir -p $@
