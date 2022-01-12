@@ -1095,11 +1095,22 @@ impl CoreUtils {
                     Ok(())
                 });
                 match thread_handle.join() {
-                    Ok(_) => {}
+                    Ok(ok) => {
+                        // read the result from the thread
+                        match ok {
+                            Ok(_) => {}
+                            Err(err) => {
+                                return Err(std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    format!("from network namespace: {}", err),
+                                ));
+                            }
+                        }
+                    }
                     Err(err) => {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::Other,
-                            format!("from container namespace: {:?}", err),
+                            format!("error waiting for thread: {:?}", err),
                         ));
                     }
                 }

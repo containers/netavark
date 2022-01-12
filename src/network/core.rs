@@ -202,7 +202,7 @@ impl Core {
             Err(err) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("failed while configuring network interface {}:", err),
+                    format!("failed while configuring network interface: {}", err),
                 ))
             }
         };
@@ -226,7 +226,7 @@ impl Core {
                 }
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("failed while configuring network interface {}:", err),
+                    format!("failed while configuring network interface: {}", err),
                 ));
             }
         };
