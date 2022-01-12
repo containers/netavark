@@ -322,6 +322,24 @@ impl Core {
             }
         }
 
+        // mtu to configure, 0 means it was not set do nothing.
+        let mut mtu_config: u32 = 0;
+        if let Some(options_map) = network.options.as_ref() {
+            if let Some(mtu) = options_map.get("mtu") {
+                match mtu.parse() {
+                    Ok(mtu) => {
+                        mtu_config = mtu;
+                    }
+                    Err(err) => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("unable to parse mtu: {}", err),
+                        ))
+                    }
+                }
+            }
+        }
+
         // get master interface name
         let mut master_ifname: String = match network.network_interface.as_ref() {
             None => {
@@ -402,6 +420,7 @@ impl Core {
             &master_ifname,
             &container_macvlan_name,
             macvlan_mode,
+            mtu_config,
             address_vector,
             netns,
         ) {
@@ -428,6 +447,7 @@ impl Core {
         master_ifname: &str,
         container_macvlan: &str,
         macvlan_mode: u32,
+        mtu: u32,
         netns_ipaddr: Vec<ipnet::IpNet>,
         netns: &str,
     ) -> Result<String, std::io::Error> {
@@ -435,6 +455,7 @@ impl Core {
             master_ifname,
             container_macvlan,
             macvlan_mode,
+            mtu,
             netns,
         ) {
             Ok(_) => (),
