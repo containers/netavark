@@ -650,6 +650,7 @@ impl CoreUtils {
         master_ifname: &str,
         macvlan_ifname: &str,
         macvlan_mode: u32,
+        mtu: u32,
         netns_path: &str,
     ) -> Result<(), Error> {
         let (_connection, handle, _) = match rtnetlink::new_connection() {
@@ -702,6 +703,17 @@ impl CoreUtils {
                     std::io::ErrorKind::Other,
                     format!("failed to get interface {}: {}", &master_ifname, err),
                 ))
+            }
+        }
+
+        // configure mtu of macvlan interface
+        // before moving it to network namespace
+        // See: https://github.com/containernetworking/plugins/blob/master/plugins/main/macvlan/macvlan.go#L181
+        if mtu != 0 {
+            if let Err(err) =
+                CoreUtils::set_link_mtu(&handle, &macvlan_tmp_name.to_owned(), mtu).await
+            {
+                return Err(err);
             }
         }
 
