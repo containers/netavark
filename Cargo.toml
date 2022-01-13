@@ -26,7 +26,7 @@ serde_json = "1.0.74"
 simple-error = "0.2.3"
 sysctl = "0.4.3"
 url = "2.1.0"
-zbus = "2.0.0"
+zbus = "2.0.1"
 rtnetlink = { git = "https://github.com/little-dude/netlink", branch = "master" }
 futures = "0.3.19"
 nix = "0.23.0"
