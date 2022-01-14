@@ -24,6 +24,7 @@ impl Core {
     ) -> Result<types::StatusBlock, std::io::Error> {
         //  StatusBlock response
         let mut response = types::StatusBlock {
+            dns_server_ips: Some(Vec::<IpAddr>::new()),
             interfaces: Some(HashMap::new()),
         };
         // get bridge name
@@ -42,6 +43,8 @@ impl Core {
         let mut gw_ipaddr_vector = Vec::new();
         // network addresses for response
         let mut response_net_addresses: Vec<NetAddress> = Vec::new();
+        // nameservers which can be configured for this container
+        let mut nameservers: Vec<IpAddr> = Vec::new();
         // interfaces map, but we only ever expect one, for response
         let mut interfaces: HashMap<String, types::NetInterface> = HashMap::new();
         // mtu to configure, 0 means it was not set do nothing.
@@ -131,6 +134,8 @@ impl Core {
                 };
             // Add the IP to the address_vector
             address_vector.push(container_address);
+            // unwrap is ok here since we already created a new field
+            nameservers.push(subnet.gateway.unwrap());
             response_net_addresses.push(types::NetAddress {
                 gateway: subnet.gateway,
                 ipnet: container_address,
@@ -171,6 +176,9 @@ impl Core {
         // Add interface to interfaces (part of StatusBlock)
         interfaces.insert(container_veth_name, interface);
         let _ = response.interfaces.insert(interfaces);
+        if network.dns_enabled {
+            let _ = response.dns_server_ips.insert(nameservers);
+        }
         Ok(response)
     }
 
@@ -305,6 +313,7 @@ impl Core {
         //  StatusBlock response
         //  StatusBlock response
         let mut response = types::StatusBlock {
+            dns_server_ips: Some(Vec::<IpAddr>::new()),
             interfaces: Some(HashMap::new()),
         };
         // Default MACVLAN_MODE to bridge or get from driver options
