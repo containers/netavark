@@ -141,13 +141,17 @@ pub struct PortMapping {
 // connected to one Network.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StatusBlock {
-    // DNS is not needed at the moment
-
+    // Aardvark supports resolving queries with
+    // having fewer than ndots dots. So we dont
+    // need this as of now.
+    // DNS search domains for /etc/resolv.conf
     // #[serde(rename = "dns_search_domains")]
     // pub dns_search_domains: Option<Vec<String>>,
 
-    // #[serde(rename = "dns_server_ips")]
-    // pub dns_server_ips: Option<Vec<String>>,
+    // DNS nameservers /etc/resolv.conf will be populated by these
+    #[serde(rename = "dns_server_ips")]
+    pub dns_server_ips: Option<Vec<IpAddr>>,
+
     /// Interfaces contains the created network interface in the container.
     /// The map key is the interface name.
     #[serde(rename = "interfaces")]
