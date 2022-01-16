@@ -1,4 +1,5 @@
 //! Configures the given network namespace with provided specs
+use crate::dns::aardvark::Aardvark;
 use crate::error::NetavarkError;
 use crate::firewall;
 use crate::firewall::iptables::MAX_HASH_SIZE;
@@ -31,7 +32,7 @@ impl Setup {
         }
     }
 
-    pub fn exec(&self, input_file: String) -> Result<(), Box<dyn Error>> {
+    pub fn exec(&self, input_file: String, config_dir: String) -> Result<(), Box<dyn Error>> {
         match network::validation::ns_checks(&self.network_namespace_path) {
             Ok(_) => (),
             Err(e) => {
@@ -197,6 +198,23 @@ impl Setup {
             }
         }
 
+        if Aardvark::check_aardvark_support() {
+            let mut aardvark_interface = Aardvark::new(config_dir);
+            if let Err(er) = aardvark_interface
+                .clone()
+                .start_aardvark_server_if_not_running()
+            {
+                debug!("Error while trying to start aardvark server {}", er);
+            }
+
+            if let Err(er) = aardvark_interface.commit_netavark_entries(
+                network_options.container_name,
+                network_options.container_id,
+                response.clone(),
+            ) {
+                debug!("Error while applying dns entries {}", er);
+            }
+        }
         debug!("{:#?}", response);
         let response_json = serde_json::to_string(&response)?;
         println!("{}", response_json);
