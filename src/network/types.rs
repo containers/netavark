@@ -47,7 +47,7 @@ pub struct Network {
 }
 
 /// NetworkOptions for a given container.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NetworkOptions {
     /// The container id, used for iptables comments and ipam allocation.
     #[serde(rename = "container_id")]
@@ -139,7 +139,7 @@ pub struct PortMapping {
 
 // StatusBlock contains the network information about a container
 // connected to one Network.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StatusBlock {
     // Aardvark supports resolving queries with
     // having fewer than ndots dots. So we dont
@@ -159,7 +159,7 @@ pub struct StatusBlock {
 }
 
 /// NetInterface contains the settings for a given network interface.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NetInterface {
     /// MacAddress for this Interface.
     #[serde(rename = "mac_address")]
@@ -171,7 +171,7 @@ pub struct NetInterface {
 }
 
 /// NetAddress contains the ip address, subnet and gateway.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NetAddress {
     /// Gateway for the network. This can be empty if there is no gateway, e.g. internal network.
     #[serde(rename = "gateway")]

@@ -1,3 +1,4 @@
+use crate::dns::aardvark::Aardvark;
 use crate::error::NetavarkError;
 use crate::firewall::iptables::MAX_HASH_SIZE;
 use crate::network::core_utils::CoreUtils;
@@ -26,7 +27,7 @@ impl Teardown {
         }
     }
 
-    pub fn exec(&self, input_file: String) -> Result<(), Box<dyn Error>> {
+    pub fn exec(&self, input_file: String, config_dir: String) -> Result<(), Box<dyn Error>> {
         debug!("{:?}", "Tearing down..");
         let network_options = match network::types::NetworkOptions::load(&input_file) {
             Ok(opts) => opts,
@@ -37,6 +38,16 @@ impl Teardown {
                 }));
             }
         };
+
+        if Aardvark::check_aardvark_support() {
+            // stop dns server first before netavark clears the interface
+            let mut aardvark_interface = Aardvark::new(config_dir);
+            if let Err(er) =
+                aardvark_interface.delete_from_netavark_entries(network_options.clone())
+            {
+                debug!("Error while deleting dns entries {}", er);
+            }
+        }
 
         let firewall_driver = match firewall::get_supported_firewall_driver() {
             Ok(driver) => driver,
