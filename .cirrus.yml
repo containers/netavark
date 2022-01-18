@@ -17,7 +17,7 @@ env:
     # Save a little typing (path relative to $CIRRUS_WORKING_DIR)
     SCRIPT_BASE: "./contrib/cirrus"
     FEDORA_NAME: "fedora-35"
-    IMAGE_SUFFIX: "c4559025915297792"
+    IMAGE_SUFFIX: "c4560539387953152"
     FEDORA_NETAVARK_IMAGE: "fedora-netavark-${IMAGE_SUFFIX}"
 
 
