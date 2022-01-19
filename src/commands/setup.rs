@@ -13,6 +13,7 @@ use log::debug;
 use std::collections::HashMap;
 use std::error::Error;
 use std::net::IpAddr;
+use std::path::Path;
 
 const IPV4_FORWARD: &str = "net.ipv4.ip_forward";
 const IPV6_FORWARD: &str = "/proc/sys/net/ipv6/conf/all/forwarding";
@@ -32,7 +33,12 @@ impl Setup {
         }
     }
 
-    pub fn exec(&self, input_file: String, config_dir: String) -> Result<(), Box<dyn Error>> {
+    pub fn exec(
+        &self,
+        input_file: String,
+        config_dir: String,
+        rootless: bool,
+    ) -> Result<(), Box<dyn Error>> {
         match network::validation::ns_checks(&self.network_namespace_path) {
             Ok(_) => (),
             Err(e) => {
@@ -199,20 +205,26 @@ impl Setup {
         }
 
         if Aardvark::check_aardvark_support() {
-            let mut aardvark_interface = Aardvark::new(config_dir);
-            if let Err(er) = aardvark_interface
-                .clone()
-                .start_aardvark_server_if_not_running()
-            {
-                debug!("Error while trying to start aardvark server {}", er);
-            }
+            let path = Path::new(&config_dir).join("aardvark-dns".to_string());
 
-            if let Err(er) = aardvark_interface.commit_netavark_entries(
-                network_options.container_name,
-                network_options.container_id,
-                response.clone(),
-            ) {
-                debug!("Error while applying dns entries {}", er);
+            if let Ok(path_string) = path.into_os_string().into_string() {
+                let mut aardvark_interface = Aardvark::new(path_string, rootless);
+                if let Err(er) = aardvark_interface
+                    .clone()
+                    .start_aardvark_server_if_not_running()
+                {
+                    debug!("Error while trying to start aardvark server {}", er);
+                }
+
+                if let Err(er) = aardvark_interface.commit_netavark_entries(
+                    network_options.container_name,
+                    network_options.container_id,
+                    response.clone(),
+                ) {
+                    debug!("Error while applying dns entries {}", er);
+                }
+            } else {
+                debug!("Unable to parse aardvark config path");
             }
         }
         debug!("{:#?}", response);

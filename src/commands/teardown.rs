@@ -11,6 +11,7 @@ use clap::{self, Clap};
 use log::debug;
 use std::error::Error;
 use std::net::IpAddr;
+use std::path::Path;
 
 #[derive(Clap, Debug)]
 pub struct Teardown {
@@ -27,7 +28,12 @@ impl Teardown {
         }
     }
 
-    pub fn exec(&self, input_file: String, config_dir: String) -> Result<(), Box<dyn Error>> {
+    pub fn exec(
+        &self,
+        input_file: String,
+        config_dir: String,
+        rootless: bool,
+    ) -> Result<(), Box<dyn Error>> {
         debug!("{:?}", "Tearing down..");
         let network_options = match network::types::NetworkOptions::load(&input_file) {
             Ok(opts) => opts,
@@ -41,11 +47,16 @@ impl Teardown {
 
         if Aardvark::check_aardvark_support() {
             // stop dns server first before netavark clears the interface
-            let mut aardvark_interface = Aardvark::new(config_dir);
-            if let Err(er) =
-                aardvark_interface.delete_from_netavark_entries(network_options.clone())
-            {
-                debug!("Error while deleting dns entries {}", er);
+            let path = Path::new(&config_dir).join("aardvark-dns".to_string());
+            if let Ok(path_string) = path.into_os_string().into_string() {
+                let mut aardvark_interface = Aardvark::new(path_string, rootless);
+                if let Err(er) =
+                    aardvark_interface.delete_from_netavark_entries(network_options.clone())
+                {
+                    debug!("Error while deleting dns entries {}", er);
+                }
+            } else {
+                debug!("Unable to parse aardvark config directory");
             }
         }
 
