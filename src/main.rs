@@ -12,6 +12,9 @@ struct Opts {
     /// config directory for aardvark, usually path to a tmpfs.
     #[clap(short, long)]
     config: Option<String>,
+    /// Tells if current netavark invocation is for rootless container.
+    #[clap(short, long)]
+    rootless: Option<bool>,
     /// Netavark trig command
     #[clap(subcommand)]
     subcmd: SubCommand,
@@ -33,10 +36,11 @@ fn main() {
 
     let file = opts.file.unwrap_or_else(|| String::from("/dev/stdin"));
     // aardvark config directory must be supplied by parent or it defaults to /tmp/aardvark
-    let config = opts.config.unwrap_or_else(|| String::from("/tmp/aardvark"));
+    let config = opts.config.unwrap_or_else(|| String::from("/tmp"));
+    let rootless = opts.rootless.unwrap_or(false);
     let result = match opts.subcmd {
-        SubCommand::Setup(setup) => setup.exec(file, config),
-        SubCommand::Teardown(teardown) => teardown.exec(file, config),
+        SubCommand::Setup(setup) => setup.exec(file, config, rootless),
+        SubCommand::Teardown(teardown) => teardown.exec(file, config, rootless),
     };
 
     match result {

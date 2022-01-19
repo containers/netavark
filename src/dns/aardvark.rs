@@ -29,11 +29,13 @@ pub struct AardvarkEntry {
 pub struct Aardvark {
     // aardvark's config directory
     pub config: String,
+    // tells if container is rootfull or rootless
+    pub rootless: bool,
 }
 
 impl Aardvark {
-    pub fn new(config: String) -> Self {
-        Aardvark { config }
+    pub fn new(config: String, rootless: bool) -> Self {
+        Aardvark { config, rootless }
     }
 
     pub fn check_aardvark_support() -> bool {
@@ -67,6 +69,18 @@ impl Aardvark {
         pid
     }
 
+    fn is_executable_in_path(program: &str) -> bool {
+        if let Ok(path) = std::env::var("PATH") {
+            for p in path.split(':') {
+                let p_str = format!("{}/{}", p, program);
+                if fs::metadata(p_str).is_ok() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     pub fn start_aardvark_server_if_not_running(&mut self) -> Result<()> {
         let aardvark_pid = self.get_aardvark_pid();
         if aardvark_pid != -1 {
@@ -89,17 +103,38 @@ impl Aardvark {
         }
 
         log::debug!("Spawning aardvark server");
-        Command::new("systemd-run")
-            .args([
-                "-q",
+
+        if Aardvark::is_executable_in_path("systemd-run") {
+            // TODO: This could be replaced by systemd-api.
+            let systemd_run_args = vec![
+                "--scope",
                 AARDVARK_BINARY[0],
                 "--config",
                 &self.config,
                 "-p",
                 "53",
                 "run",
-            ])
-            .spawn()?;
+            ];
+
+            if self.rootless {
+                let mut rootless_systemd_args = vec!["-q", "--user"];
+                rootless_systemd_args.extend(&systemd_run_args);
+
+                Command::new("systemd-run")
+                    .args(rootless_systemd_args)
+                    .spawn()?;
+            } else {
+                let mut rootfull_systemd_args = vec!["-q"];
+                rootfull_systemd_args.extend(&systemd_run_args);
+                Command::new("systemd-run")
+                    .args(rootfull_systemd_args)
+                    .spawn()?;
+            }
+        } else {
+            Command::new(AARDVARK_BINARY[0])
+                .args(["--config", &self.config, "-p", "53", "run"])
+                .spawn()?;
+        }
 
         Ok(())
     }
