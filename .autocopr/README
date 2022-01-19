@@ -1,5 +1,0 @@
-Enable COPR:
-sudo dnf copr enable rhcontainerbot/podman-next
-
-Install netavark:
-sudo dnf install netavark -y
