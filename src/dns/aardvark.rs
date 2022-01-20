@@ -1,6 +1,10 @@
 use crate::network::types;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
+use nix::{
+    sys::wait::waitpid,
+    unistd::{fork, ForkResult},
+};
 use std::collections::HashMap;
 use std::fs;
 use std::fs::File;
@@ -104,36 +108,67 @@ impl Aardvark {
 
         log::debug!("Spawning aardvark server");
 
-        if Aardvark::is_executable_in_path("systemd-run") {
-            // TODO: This could be replaced by systemd-api.
-            let systemd_run_args = vec![
-                "--scope",
-                AARDVARK_BINARY[0],
-                "--config",
-                &self.config,
-                "-p",
-                "53",
-                "run",
-            ];
+        // Why double fork ?
+        // Its important that nature of aardvark server is more like a daemon
+        // so following block ensures that aardvark server keeps on running even
+        // if parent is killed
+        //
+        // setsid() ensures that there is no controlling terminal on the child process
 
-            if self.rootless {
-                let mut rootless_systemd_args = vec!["-q", "--user"];
-                rootless_systemd_args.extend(&systemd_run_args);
-
-                Command::new("systemd-run")
-                    .args(rootless_systemd_args)
-                    .spawn()?;
-            } else {
-                let mut rootfull_systemd_args = vec!["-q"];
-                rootfull_systemd_args.extend(&systemd_run_args);
-                Command::new("systemd-run")
-                    .args(rootfull_systemd_args)
-                    .spawn()?;
+        match unsafe { fork() } {
+            Ok(ForkResult::Parent { child, .. }) => {
+                log::debug!("starting aardvark on a child with pid {}", child);
+                if let Err(err) = waitpid(Some(child), None) {
+                    log::debug!("error while waiting for child pid {}", err);
+                }
             }
-        } else {
-            Command::new(AARDVARK_BINARY[0])
-                .args(["--config", &self.config, "-p", "53", "run"])
-                .spawn()?;
+            Ok(ForkResult::Child) => {
+                if Aardvark::is_executable_in_path("systemd-run") {
+                    // remove any controlling terminals
+                    // but don't hardstop if this fails
+                    let _ = unsafe { libc::setsid() }; // check https://docs.rs/libc
+
+                    // TODO: This could be replaced by systemd-api.
+                    let systemd_run_args = vec![
+                        "--scope",
+                        AARDVARK_BINARY[0],
+                        "--config",
+                        &self.config,
+                        "-p",
+                        "53",
+                        "run",
+                    ];
+
+                    if self.rootless {
+                        let mut rootless_systemd_args = vec!["-q", "--user"];
+                        rootless_systemd_args.extend(&systemd_run_args);
+
+                        Command::new("systemd-run")
+                            .args(rootless_systemd_args)
+                            .spawn()?;
+                    } else {
+                        let mut rootfull_systemd_args = vec!["-q"];
+                        rootfull_systemd_args.extend(&systemd_run_args);
+                        Command::new("systemd-run")
+                            .args(rootfull_systemd_args)
+                            .spawn()?;
+                    }
+                } else {
+                    Command::new(AARDVARK_BINARY[0])
+                        .args(["--config", &self.config, "-p", "53", "run"])
+                        .spawn()?;
+                }
+
+                // exit child
+                std::process::exit(0);
+            }
+            Err(err) => {
+                log::debug!("fork failed with error {}", err);
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("fork failed with error: {}", err),
+                ));
+            }
         }
 
         Ok(())
