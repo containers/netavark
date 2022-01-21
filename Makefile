@@ -58,7 +58,7 @@ docs: ## build the docs on the host
 	$(MAKE) -C docs
 
 .PHONY: install
-install: docs build
+install:
 	install ${SELINUXOPT} -D -m0755 bin/netavark $(DESTDIR)/$(LIBEXECPODMAN)/netavark
 	$(MAKE) -C install
 
