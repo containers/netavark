@@ -1,8 +1,12 @@
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::{
-    punctuated::Punctuated, spanned::Spanned, Data, DeriveInput, Error, Meta::Path,
-    NestedMeta::Meta, Type, TypePath,
+    punctuated::Punctuated,
+    spanned::Spanned,
+    Data, DeriveInput, Error,
+    Meta::{NameValue, Path},
+    NestedMeta::Meta,
+    Type, TypePath,
 };
 
 use crate::utils::*;
@@ -38,13 +42,8 @@ pub fn expand_serialize_derive(input: DeriveInput) -> Result<TokenStream, Error>
     let mut entries = quote! {};
 
     for f in &data.fields {
-        let attrs = parse_item_attributes(&f.attrs)?;
         let name = &f.ident;
-        let dict_name = attrs
-            .iter()
-            .find_map(|x| match x {
-                ItemAttribute::Rename(n) => Some(n.to_string()),
-            })
+        let dict_name = get_rename_attribute(&f.attrs, f.span())?
             .unwrap_or_else(|| f.ident.as_ref().unwrap().to_string());
 
         let is_option = match &f.ty {
@@ -104,6 +103,18 @@ pub fn expand_deserialize_derive(input: DeriveInput) -> Result<TokenStream, Erro
             Meta(Path(p)) if p.is_ident("deny_unknown_fields") => {
                 deny_unknown_fields = true;
             }
+            Meta(NameValue(name_val)) => {
+                match name_val
+                    .path
+                    .get_ident()
+                    .map(ToString::to_string)
+                    .unwrap_or_default()
+                    .as_str()
+                {
+                    "signature" => continue,
+                    _ => return Err(Error::new(meta_item.span(), "unsupported attribute")),
+                }
+            }
             _ => return Err(Error::new(meta_item.span(), "unsupported attribute")),
         }
     }
@@ -116,13 +127,8 @@ pub fn expand_deserialize_derive(input: DeriveInput) -> Result<TokenStream, Erro
     let mut entries = Vec::new();
 
     for f in &data.fields {
-        let attrs = parse_item_attributes(&f.attrs).unwrap();
         let name = &f.ident;
-        let dict_name = attrs
-            .iter()
-            .find_map(|x| match x {
-                ItemAttribute::Rename(n) => Some(n.to_string()),
-            })
+        let dict_name = get_rename_attribute(&f.attrs, f.span())?
             .unwrap_or_else(|| f.ident.as_ref().unwrap().to_string());
 
         let is_option = match &f.ty {

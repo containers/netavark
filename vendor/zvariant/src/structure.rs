@@ -30,6 +30,7 @@ impl<'a> StructureBuilder<'a> {
     ///
     /// This method returns `Self` so that you can use the builder pattern to create a complex
     /// structure.
+    #[must_use]
     pub fn add_field<T>(self, field: T) -> Self
     where
         T: DynamicType + Into<Value<'a>>,
@@ -40,6 +41,7 @@ impl<'a> StructureBuilder<'a> {
     /// Append `field` to `self`.
     ///
     /// Identical to `add_field`, except the field must be in the form of a `Value`.
+    #[must_use]
     pub fn append_field<'e: 'a>(mut self, field: Value<'e>) -> Self {
         self.0.push(field);
 
@@ -96,6 +98,7 @@ impl<'a> StructureSeed<'a> {
     /// Create a new `StructureSeed`
     ///
     /// The given signature must be a valid structure signature.
+    #[must_use]
     pub fn new_unchecked(signature: Signature<'a>) -> Self {
         StructureSeed(signature)
     }

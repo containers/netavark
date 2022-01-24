@@ -1,4 +1,5 @@
 use crate::firewall;
+use crate::firewall::firewalld;
 use crate::firewall::varktables;
 use crate::firewall::varktables::types::TeardownPolicy::OnComplete;
 use crate::firewall::varktables::types::{
@@ -7,9 +8,13 @@ use crate::firewall::varktables::types::{
 use crate::network::internal_types::{
     PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
 };
+use crate::network::types;
+use futures::executor::block_on;
 use iptables;
 use iptables::IPTables;
+use log::{debug, warn};
 use std::error::Error;
+use zbus::Connection;
 
 pub(crate) const MAX_HASH_SIZE: usize = 13;
 
@@ -49,6 +54,8 @@ impl firewall::FirewallDriver for IptablesDriver {
                 for chain in chains {
                     chain.add_rules()?;
                 }
+
+                add_firewalld_if_possible(&network);
             }
         }
         Ok(())
@@ -86,6 +93,10 @@ impl firewall::FirewallDriver for IptablesDriver {
                             }
                         }
                     }
+                }
+
+                if tear.complete_teardown {
+                    rm_firewalld_if_possible(&network)
                 }
             }
         }
@@ -188,4 +199,71 @@ impl firewall::FirewallDriver for IptablesDriver {
         }
         Result::Ok(())
     }
+}
+
+// Check if firewalld is running
+fn is_firewalld_running(conn: &Connection) -> bool {
+    block_on(conn.call_method(
+        Some("org.freedesktop.DBus"),
+        "/org/freedesktop/DBus",
+        Some("org.freedesktop.DBus"),
+        "GetNameOwner",
+        &"org.fedoraproject.FirewallD1",
+    ))
+    .is_ok()
+}
+
+// If possible, add a firewalld rule to allow traffic.
+// Ignore all errors, beyond possibly logging them.
+fn add_firewalld_if_possible(net: &types::Subnet) {
+    let conn = match block_on(Connection::system()) {
+        Ok(conn) => conn,
+        Err(_) => return,
+    };
+    if !is_firewalld_running(&conn) {
+        return;
+    }
+    debug!(
+        "Adding firewalld rules for network {}",
+        net.subnet.to_string()
+    );
+
+    match firewalld::add_source_subnets_to_zone(&conn, "trusted", vec![net.clone()]) {
+        Ok(_) => {}
+        Err(e) => warn!(
+            "Error adding subnet {} from firewalld trusted zone: {}",
+            net.subnet.to_string(),
+            e
+        ),
+    }
+}
+
+// If possible, remove a firewalld rule to allow traffic.
+// Ignore all errors, beyond possibly logging them.
+fn rm_firewalld_if_possible(net: &types::Subnet) {
+    let conn = match block_on(Connection::system()) {
+        Ok(conn) => conn,
+        Err(_) => return,
+    };
+    if !is_firewalld_running(&conn) {
+        return;
+    }
+    debug!(
+        "Removing firewalld rules for IPs {}",
+        net.subnet.to_string()
+    );
+    match block_on(conn.call_method(
+        Some("org.fedoraproject.FirewallD1"),
+        "/org/fedoraproject/FirewallD1",
+        Some("org.fedoraproject.FirewallD1.zone"),
+        "removeSource",
+        &("trusted", net.subnet.to_string()),
+    )) {
+        Ok(_) => {}
+        Err(e) => warn!(
+            "Error removing subnet {} from firewalld trusted zone: {}",
+            net.subnet.to_string(),
+            e
+        ),
+    };
 }

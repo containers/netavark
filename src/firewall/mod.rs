@@ -56,21 +56,25 @@ fn get_firewall_impl() -> FirewallImpl {
         }
     }
 
+    // Until firewalld 1.1.0 with support for self-port forwarding lands:
+    // Just use iptables
+    FirewallImpl::Iptables
+
     // Is firewalld running?
-    let conn = match block_on(Connection::system()) {
-        Ok(conn) => conn,
-        Err(_) => return FirewallImpl::Iptables,
-    };
-    match block_on(conn.call_method(
-        Some("org.freedesktop.DBus"),
-        "/org/freedesktop/DBus",
-        Some("org.freedesktop.DBus"),
-        "GetNameOwner",
-        &"org.fedoraproject.FirewallD1",
-    )) {
-        Ok(_) => FirewallImpl::Firewalld(conn),
-        Err(_) => FirewallImpl::Iptables,
-    }
+    // let conn = match block_on(Connection::system()) {
+    //     Ok(conn) => conn,
+    //     Err(_) => return FirewallImpl::Iptables,
+    // };
+    // match block_on(conn.call_method(
+    //     Some("org.freedesktop.DBus"),
+    //     "/org/freedesktop/DBus",
+    //     Some("org.freedesktop.DBus"),
+    //     "GetNameOwner",
+    //     &"org.fedoraproject.FirewallD1",
+    // )) {
+    //     Ok(_) => FirewallImpl::Firewalld(conn),
+    //     Err(_) => FirewallImpl::Iptables,
+    // }
 }
 
 // Get the preferred firewall implementation for the current system

@@ -163,6 +163,37 @@ impl<'a> Signature<'a> {
         }
     }
 
+    /// Same as `from_static_str_unchecked`, except it checks validity of the signature.
+    ///
+    /// It's recommended to use this method instead of `TryFrom<&str>` implementation for
+    /// `&'static str`. The former will ensure that [`Signature::to_owned`] and
+    /// [`Signature::into_owned`] do not clone the underlying bytes.
+    pub fn from_static_str(signature: &'static str) -> Result<Self> {
+        let bytes = signature.as_bytes();
+        ensure_correct_signature_str(bytes)?;
+
+        Ok(Self {
+            bytes: Bytes::Static(bytes),
+            pos: 0,
+            end: signature.len(),
+        })
+    }
+
+    /// Same as `from_static_bytes_unchecked`, except it checks validity of the signature.
+    ///
+    /// It's recommended to use this method instead of the `TryFrom<&[u8]>` implementation for
+    /// `&'static [u8]`. The former will ensure that [`Signature::to_owned`] and
+    /// [`Signature::into_owned`] do not clone the underlying bytes.
+    pub fn from_static_bytes(bytes: &'static [u8]) -> Result<Self> {
+        ensure_correct_signature_str(bytes)?;
+
+        Ok(Self {
+            bytes: Bytes::Static(bytes),
+            pos: 0,
+            end: bytes.len(),
+        })
+    }
+
     /// the signature's length.
     pub fn len(&self) -> usize {
         self.end - self.pos
@@ -206,6 +237,7 @@ impl<'a> Signature<'a> {
     /// # Panics
     ///
     /// Requires that begin <= end and end <= self.len(), otherwise slicing will panic.
+    #[must_use]
     pub fn slice(&self, range: impl RangeBounds<usize>) -> Self {
         let len = self.len();
 

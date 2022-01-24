@@ -1,4 +1,4 @@
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use proc_macro_crate::{crate_name, FoundCrate};
 use quote::{format_ident, quote};
 use syn::{Attribute, Lit, Meta, Meta::List, MetaList, NestedMeta, Result};
@@ -7,6 +7,9 @@ pub fn zvariant_path() -> TokenStream {
     if let Ok(FoundCrate::Name(name)) = crate_name("zvariant") {
         let ident = format_ident!("{}", name);
         quote! { ::#ident }
+    } else if let Ok(FoundCrate::Name(name)) = crate_name("zbus") {
+        let ident = format_ident!("{}", name);
+        quote! { ::#ident::zvariant }
     } else {
         quote! { ::zvariant }
     }
@@ -51,13 +54,22 @@ fn parse_attribute(meta: &NestedMeta) -> (String, String) {
 #[derive(Debug, PartialEq)]
 pub enum ItemAttribute {
     Rename(String),
+    Signature(String),
 }
 
-fn parse_item_attribute(meta: &NestedMeta) -> Result<ItemAttribute> {
+fn parse_item_attribute(meta: &NestedMeta) -> Result<Option<ItemAttribute>> {
     let (ident, v) = parse_attribute(meta);
 
     match ident.as_ref() {
-        "rename" => Ok(ItemAttribute::Rename(v)),
+        "rename" => Ok(Some(ItemAttribute::Rename(v))),
+        "signature" => {
+            let signature = match v.as_str() {
+                "dict" => "a{sv}".to_string(),
+                _ => v,
+            };
+            Ok(Some(ItemAttribute::Signature(signature)))
+        }
+        "deny_unknown_fields" => Ok(None),
         s => panic!("Unknown item meta {}", s),
     }
 }
@@ -71,12 +83,40 @@ pub fn parse_item_attributes(attrs: &[Attribute]) -> Result<Vec<ItemAttribute>> 
         Some(meta) => meta
             .nested
             .iter()
-            .map(|m| parse_item_attribute(m).unwrap())
+            .filter_map(|m| parse_item_attribute(m).unwrap())
             .collect(),
         None => Vec::new(),
     };
 
     Ok(v)
+}
+
+pub fn get_signature_attribute(attrs: &[Attribute], span: Span) -> Result<Option<String>> {
+    let attrs = parse_item_attributes(attrs)?;
+    attrs
+        .into_iter()
+        .find_map(|x| match x {
+            ItemAttribute::Signature(s) => Some(Ok(s)),
+            ItemAttribute::Rename(_) => Some(Err(syn::Error::new(
+                span,
+                "`rename` attribute is not applicable to type declarations",
+            ))),
+        })
+        .transpose()
+}
+
+pub fn get_rename_attribute(attrs: &[Attribute], span: Span) -> Result<Option<String>> {
+    let attrs = parse_item_attributes(attrs)?;
+    attrs
+        .into_iter()
+        .find_map(|x| match x {
+            ItemAttribute::Rename(s) => Some(Ok(s)),
+            ItemAttribute::Signature(_) => Some(Err(syn::Error::new(
+                span,
+                "`signature` not applicable to fields",
+            ))),
+        })
+        .transpose()
 }
 
 pub fn get_meta_items(attr: &Attribute) -> Result<Vec<NestedMeta>> {

@@ -52,6 +52,7 @@ function teardown() {
 }
 
 @test "check firewalld driver is in use" {
+    skip "TODO: Firewalld driver swapped with iptables until firewalld 1.1.0"
     RUST_LOG=netavark=info run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
     assert "${lines[0]}" "==" "[INFO  netavark::firewall] Using firewalld firewall driver" "firewalld driver is in use"
 }
@@ -133,50 +134,95 @@ function teardown() {
     run_in_host_netns ping6 -c 1 fd10:88:a::2
 }
 
+@test "$fw_driver - check error message from netns thread" {
+    # create interface in netns to force error
+    run_in_container_netns ip link add eth0 type dummy
+
+    expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+    assert_json ".error" "failed to configure bridge and veth interface: failed while configuring network interface: from network namespace: interface eth0 already exists on container namespace" "interface exists on netns"
+}
+
 @test "$fw_driver - port forwarding ipv4 - tcp" {
-    skip "TODO: pf not yet supported"
     test_port_fw
 }
 
 @test "$fw_driver - port forwarding ipv6 - tcp" {
-    skip "TODO: pf not yet supported"
     test_port_fw ip=6
 }
 
 @test "$fw_driver - port forwarding dualstack - tcp" {
-    skip "TODO: pf not yet supported"
     test_port_fw ip=dual
 }
 
 @test "$fw_driver - port forwarding ipv4 - udp" {
-    skip "TODO: pf not yet supported"
     test_port_fw proto=udp
 }
 
 @test "$fw_driver - port forwarding ipv6 - udp" {
-    skip "TODO: pf not yet supported"
     test_port_fw ip=6 proto=udp
 }
 
 @test "$fw_driver - port forwarding dualstack - udp" {
-    skip "TODO: pf not yet supported"
     test_port_fw ip=dual proto=udp
 }
 
 @test "$fw_driver - port forwarding ipv4 - sctp" {
-    skip "TODO: pf not yet supported"
     setup_sctp_kernel_module
     test_port_fw proto=sctp
 }
 
 @test "$fw_driver - port forwarding ipv6 - sctp" {
-    skip "TODO: pf not yet supported"
     setup_sctp_kernel_module
     test_port_fw ip=6 proto=sctp
 }
 
 @test "$fw_driver - port forwarding dualstack - sctp" {
-    skip "TODO: pf not yet supported"
     setup_sctp_kernel_module
     test_port_fw ip=dual proto=sctp
+}
+
+@test "$fw_driver - port range forwarding ipv4 - tcp" {
+    test_port_fw range=3
+}
+
+@test "$fw_driver - port range forwarding ipv6 - tcp" {
+    test_port_fw ip=6 range=3
+}
+
+@test "$fw_driver - port range forwarding ipv4 - udp" {
+    test_port_fw proto=udp range=3
+}
+
+@test "$fw_driver - port range forwarding ipv6 - udp" {
+    test_port_fw ip=6 proto=udp range=3
+}
+
+@test "$fw_driver - port range forwarding dual - udp" {
+    test_port_fw ip=dual proto=udp range=3
+}
+
+@test "$fw_driver - port range forwarding dual - tcp" {
+    test_port_fw ip=dual proto=tcp range=3
+}
+
+
+@test "$fw_driver - port forwarding with hostip ipv4 - tcp" {
+    add_dummy_interface_on_host dummy0 "172.16.0.1/24"
+    run_in_host_netns ip addr
+    test_port_fw hostip="172.16.0.1"
+}
+
+@test "$fw_driver - port range forwarding with hostip ipv6 - tcp" {
+    add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
+    test_port_fw ip=6 hostip="fd65:8371:648b:0c06::1"
+}
+
+@test "$fw_driver - port range forwarding with hostip ipv4 - udp" {
+    add_dummy_interface_on_host dummy0 "172.16.0.1/24"
+    test_port_fw proto=udp hostip="172.16.0.1"
+}
+
+@test "$fw_driver - port range forwarding with hostip ipv6 - udp" {
+    add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
+    test_port_fw ip=6 proto=udp hostip="fd65:8371:648b:0c06::1"
 }

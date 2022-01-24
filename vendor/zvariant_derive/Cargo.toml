@@ -12,10 +12,10 @@
 [package]
 edition = "2018"
 name = "zvariant_derive"
-version = "3.0.0"
+version = "3.1.1"
 authors = ["Zeeshan Ali <zeeshanak@gnome.org>"]
 description = "D-Bus & GVariant encoding & decoding"
-readme = "../README.md"
+readme = "README.md"
 keywords = ["D-Bus", "DBus", "IPC", "GVariant"]
 categories = ["data-structures", "encoding", "parsing"]
 license = "MIT"

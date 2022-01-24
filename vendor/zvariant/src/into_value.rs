@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::BuildHasher};
 
 #[cfg(feature = "gvariant")]
 use crate::Maybe;
@@ -45,7 +45,7 @@ into_value!(Dict<'a, 'a>, Dict);
 #[cfg(feature = "gvariant")]
 into_value!(Maybe<'a>, Maybe);
 
-impl<'s> From<String> for Value<'s> {
+impl From<String> for Value<'static> {
     fn from(v: String) -> Self {
         Value::Str(crate::Str::from(v))
     }
@@ -87,14 +87,15 @@ where
     }
 }
 
-impl<'a, 'k, 'v, K, V> From<HashMap<K, V>> for Value<'a>
+impl<'a, 'k, 'v, K, V, H> From<HashMap<K, V, H>> for Value<'a>
 where
     'k: 'a,
     'v: 'a,
     K: Type + Into<Value<'k>> + std::hash::Hash + std::cmp::Eq,
-    V: Type + Into<Value<'k>>,
+    V: Type + Into<Value<'v>>,
+    H: BuildHasher + Default,
 {
-    fn from(value: HashMap<K, V>) -> Self {
+    fn from(value: HashMap<K, V, H>) -> Self {
         Self::Dict(value.into())
     }
 }

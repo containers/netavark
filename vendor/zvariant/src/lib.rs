@@ -3,121 +3,12 @@
 #![doc(
     html_logo_url = "https://storage.googleapis.com/fdo-gitlab-uploads/project/avatar/3213/zbus-logomark.png"
 )]
+#![doc = include_str!("../README.md")]
 
-//! This crate provides API for serialization/deserialization of data to/from [D-Bus] wire format.
-//! This binary wire format is simple and very efficient and hence useful outside of D-Bus context
-//! as well. A modified form of this format, [GVariant] is very commonly used for efficient storage
-//! of arbitrary data and is also supported by this crate.
-//!
-//! Since version 2.0, the API is [serde]-based and hence you'll find it very intuitive if you're
-//! already familiar with serde. If you're not familiar with serde, you may want to first read its
-//! [tutorial] before learning further about this crate.
-//!
-//! Serialization and deserialization is achieved through the [toplevel functions]:
-//!
-//! ```rust
-//! use std::collections::HashMap;
-//! use byteorder::LE;
-//! use zvariant::{from_slice, to_bytes};
-//! use zvariant::EncodingContext as Context;
-//!
-//! // All serialization and deserialization API, needs a context.
-//! let ctxt = Context::<LE>::new_dbus(0);
-//! // You can also use the more efficient GVariant format:
-//! // let ctxt = Context::<LE>::new_gvariant(0);
-//!
-//! // i16
-//! let encoded = to_bytes(ctxt, &42i16).unwrap();
-//! let decoded: i16 = from_slice(&encoded, ctxt).unwrap();
-//! assert_eq!(decoded, 42);
-//!
-//! // strings
-//! let encoded = to_bytes(ctxt, &"hello").unwrap();
-//! let decoded: &str = from_slice(&encoded, ctxt).unwrap();
-//! assert_eq!(decoded, "hello");
-//!
-//! // tuples
-//! let t = ("hello", 42i32, true);
-//! let encoded = to_bytes(ctxt, &t).unwrap();
-//! let decoded: (&str, i32, bool) = from_slice(&encoded, ctxt).unwrap();
-//! assert_eq!(decoded, t);
-//!
-//! // Vec
-//! let v = vec!["hello", "world!"];
-//! let encoded = to_bytes(ctxt, &v).unwrap();
-//! let decoded: Vec<&str> = from_slice(&encoded, ctxt).unwrap();
-//! assert_eq!(decoded, v);
-//!
-//! // Dictionary
-//! let mut map: HashMap<i64, &str> = HashMap::new();
-//! map.insert(1, "123");
-//! map.insert(2, "456");
-//! let encoded = to_bytes(ctxt, &map).unwrap();
-//! let decoded: HashMap<i64, &str> = from_slice(&encoded, ctxt).unwrap();
-//! assert_eq!(decoded[&1], "123");
-//! assert_eq!(decoded[&2], "456");
-//! ```
-//!
-//! Apart from the obvious requirement of [`EncodingContext`] instance by the main serialization and
-//! deserialization API, the type being serialized or deserialized must also implement `Type`
-//! trait in addition to [`Serialize`] or [`Deserialize`], respectively. Please refer to [`Type`
-//! module documentation] for more details.
-//!
-//! Most of the [basic types] of D-Bus match 1-1 with all the primitive Rust types. The only two
-//! exceptions being, [`Signature`] and [`ObjectPath`], which are really just strings. These types
-//! are covered by the [`Basic`] trait.
-//!
-//! Similarly, most of the [container types] also map nicely to the usual Rust types and
-//! collections (as can be seen in the example code above). The only note worthy exception being
-//! ARRAY type. As arrays in Rust are fixed-sized, serde treats them as tuples and so does this
-//! crate. This means they are encoded as STRUCT type of D-Bus. If you need to serialize to, or
-//! deserialize from a D-Bus array, you'll need to use a [slice] (array can easily be converted to a
-//! slice), a [`Vec`] or an [`arrayvec::ArrayVec`].
-//!
-//! D-Bus string types, including [`Signature`] and [`ObjectPath`], require one additional
-//! restriction that strings in Rust do not. They must not contain any interior null bytes (`'\0'`).
-//! Encoding/Decoding strings that contain this character will return an error.
-//!
-//! The generic D-Bus type, `VARIANT` is represented by `Value`, an enum that holds exactly one
-//! value of any of the other types. Please refer to [`Value` module documentation] for examples.
-//!
-//! # no-std
-//!
-//! While `std` is currently a hard requirement, optional `no-std` support is planned in the future.
-//! On the other hand, `noalloc` support is not planned as it will be extremely difficult to
-//! accomplish. However, community contribution can change that. 😊
-//!
-//! # Optional features
-//!
-//! | Feature | Description |
-//! | ---     | ----------- |
-//! | arrayvec | Implement `Type` for [`arrayvec::ArrayVec`] and [`arrayvec::ArrayString`] |
-//! | enumflags2 | Implement `Type` for [`struct@enumflags2::BitFlags<F>`] |
-//!
-//! # Portability
-//!
-//! zvariant is currently Unix-only and will fail to build on non-unix. This is hopefully a
-//! temporary limitation.
-//!
-//! [D-Bus]: https://dbus.freedesktop.org/doc/dbus-specification.html
-//! [GVariant]: https://developer.gnome.org/glib/stable/glib-GVariant.html
-//! [serde]: https://crates.io/crates/serde
-//! [tutorial]: https://serde.rs/
-//! [toplevel functions]: #functions
-//! [`EncodingContext`]: struct.EncodingContext.html
-//! [`Serialize`]: https://docs.serde.rs/serde/trait.Serialize.html
-//! [`Deserialize`]: https://docs.serde.rs/serde/de/trait.Deserialize.html
-//! [`Type` module documentation]: trait.Type.html
-//! [basic types]: https://dbus.freedesktop.org/doc/dbus-specification.html#basic-types
-//! [`Signature`]: struct.Signature.html
-//! [`ObjectPath`]: struct.ObjectPath.html
-//! [`Basic`]: trait.Basic.html
-//! [container types]: https://dbus.freedesktop.org/doc/dbus-specification.html#container-types
-//! [slice]: https://doc.rust-lang.org/std/primitive.slice.html
-//! [`Vec`]: https://doc.rust-lang.org/std/vec/struct.Vec.html
-//! [`arrayvec::ArrayVec`]: https://docs.rs/arrayvec/0.7.1/arrayvec/struct.ArrayVec.html
-//! [`arrayvec::ArrayString`]: https://docs.rs/arrayvec/0.7.1/arrayvec/struct.ArrayString.html
-//! [`Value` module documentation]: enum.Value.html
+#[cfg(doctest)]
+mod doctests {
+    doc_comment::doctest!("../README.md");
+}
 
 #[macro_use]
 mod utils;
@@ -236,7 +127,7 @@ mod tests {
     use crate::{
         Array, Basic, DeserializeDict, DeserializeValue, Dict, EncodingContext as Context,
         EncodingFormat, Error, Fd, ObjectPath, Result, SerializeDict, SerializeValue, Signature,
-        Str, Structure, Type, TypeDict, Value,
+        Str, Structure, Type, Value,
     };
 
     // Test through both generic and specific API (wrt byte order)
@@ -1178,7 +1069,8 @@ mod tests {
             panic!();
         }
 
-        #[derive(SerializeDict, DeserializeDict, TypeDict, PartialEq, Debug)]
+        #[derive(SerializeDict, DeserializeDict, Type, PartialEq, Debug)]
+        #[zvariant(signature = "a{sv}")]
         struct Test {
             process_id: Option<u32>,
             group_id: Option<u32>,
@@ -1201,7 +1093,8 @@ mod tests {
         let decoded: Test = from_slice(&encoded, ctxt).unwrap();
         assert_eq!(decoded, test);
 
-        #[derive(SerializeDict, DeserializeDict, TypeDict, PartialEq, Debug)]
+        #[derive(SerializeDict, DeserializeDict, Type, PartialEq, Debug)]
+        #[zvariant(signature = "a{sv}")]
         struct TestMissing {
             process_id: Option<u32>,
             group_id: Option<u32>,
@@ -1214,15 +1107,16 @@ mod tests {
             Error::Message("missing field `quota`".to_string())
         );
 
-        #[derive(SerializeDict, DeserializeDict, TypeDict, PartialEq, Debug)]
+        #[derive(SerializeDict, DeserializeDict, Type, PartialEq, Debug)]
+        #[zvariant(signature = "a{sv}")]
         struct TestSkipUnknown {
             process_id: Option<u32>,
             group_id: Option<u32>,
         }
         let _: TestSkipUnknown = from_slice(&encoded, ctxt).unwrap();
 
-        #[derive(SerializeDict, DeserializeDict, TypeDict, PartialEq, Debug)]
-        #[zvariant(deny_unknown_fields)]
+        #[derive(SerializeDict, DeserializeDict, Type, PartialEq, Debug)]
+        #[zvariant(deny_unknown_fields, signature = "a{sv}")]
         struct TestUnknown {
             process_id: Option<u32>,
             group_id: Option<u32>,

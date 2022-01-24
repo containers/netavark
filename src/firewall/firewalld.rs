@@ -341,7 +341,7 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> Result<bool, 
 }
 
 // Add source subnets to the zone.
-fn add_source_subnets_to_zone(
+pub fn add_source_subnets_to_zone(
     conn: &Connection,
     zone_name: &str,
     subnets: Vec<types::Subnet>,
