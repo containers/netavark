@@ -10,7 +10,7 @@ use std::io::Result;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 const AARDVARK_BINARY: [&str; 1] = ["/usr/libexec/podman/aardvark-dns"];
 
@@ -104,37 +104,31 @@ impl Aardvark {
 
         log::debug!("Spawning aardvark server");
 
-        if Aardvark::is_executable_in_path("systemd-run") {
+        let mut aardvark_args = vec![];
+        let systemd_run = "systemd-run";
+        if Aardvark::is_executable_in_path(systemd_run) {
             // TODO: This could be replaced by systemd-api.
-            let systemd_run_args = vec![
-                "--scope",
-                AARDVARK_BINARY[0],
-                "--config",
-                &self.config,
-                "-p",
-                "53",
-                "run",
-            ];
+            aardvark_args = vec![systemd_run, "-q", "--scope"];
 
             if self.rootless {
-                let mut rootless_systemd_args = vec!["-q", "--user"];
-                rootless_systemd_args.extend(&systemd_run_args);
-
-                Command::new("systemd-run")
-                    .args(rootless_systemd_args)
-                    .spawn()?;
-            } else {
-                let mut rootfull_systemd_args = vec!["-q"];
-                rootfull_systemd_args.extend(&systemd_run_args);
-                Command::new("systemd-run")
-                    .args(rootfull_systemd_args)
-                    .spawn()?;
+                aardvark_args.push("--user");
             }
-        } else {
-            Command::new(AARDVARK_BINARY[0])
-                .args(["--config", &self.config, "-p", "53", "run"])
-                .spawn()?;
         }
+
+        aardvark_args.extend(vec![
+            AARDVARK_BINARY[0],
+            "--config",
+            &self.config,
+            "-p",
+            "53",
+            "run",
+        ]);
+
+        Command::new(&aardvark_args[0])
+            .args(&aardvark_args[1..])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?;
 
         Ok(())
     }
