@@ -60,7 +60,7 @@ docs: ## build the docs on the host
 .PHONY: install
 install:
 	install ${SELINUXOPT} -D -m0755 bin/netavark $(DESTDIR)/$(LIBEXECPODMAN)/netavark
-	$(MAKE) -C install
+	$(MAKE) -C docs install
 
 .PHONY: uninstall
 uninstall:
