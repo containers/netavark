@@ -37,6 +37,7 @@ impl Setup {
         &self,
         input_file: String,
         config_dir: String,
+        aardvark_bin: String,
         rootless: bool,
     ) -> Result<(), Box<dyn Error>> {
         match network::validation::ns_checks(&self.network_namespace_path) {
@@ -211,7 +212,7 @@ impl Setup {
                 let mut aardvark_interface = Aardvark::new(path_string, rootless);
                 if let Err(er) = aardvark_interface
                     .clone()
-                    .start_aardvark_server_if_not_running()
+                    .start_aardvark_server_if_not_running(&aardvark_bin)
                 {
                     debug!("Error while trying to start aardvark server {}", er);
                 }

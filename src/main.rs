@@ -15,6 +15,9 @@ struct Opts {
     /// Tells if current netavark invocation is for rootless container.
     #[clap(short, long)]
     rootless: Option<bool>,
+    #[clap(short, long)]
+    /// Path to the aardvark-dns binary.
+    aardvark_binary: Option<String>,
     /// Netavark trig command
     #[clap(subcommand)]
     subcmd: SubCommand,
@@ -38,8 +41,11 @@ fn main() {
     // aardvark config directory must be supplied by parent or it defaults to /tmp/aardvark
     let config = opts.config.unwrap_or_else(|| String::from("/tmp"));
     let rootless = opts.rootless.unwrap_or(false);
+    let aardvark_bin = opts
+        .aardvark_binary
+        .unwrap_or_else(|| String::from("/usr/libexec/podman/aardvark-dns"));
     let result = match opts.subcmd {
-        SubCommand::Setup(setup) => setup.exec(file, config, rootless),
+        SubCommand::Setup(setup) => setup.exec(file, config, aardvark_bin, rootless),
         SubCommand::Teardown(teardown) => teardown.exec(file, config, rootless),
     };
 
