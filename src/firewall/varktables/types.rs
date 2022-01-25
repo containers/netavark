@@ -1,7 +1,7 @@
 use crate::firewall::varktables::helpers::{
     add_chain_unique, append_unique, remove_if_rule_exists,
 };
-use crate::firewall::varktables::types::TeardownPolicy::OnComplete;
+use crate::firewall::varktables::types::TeardownPolicy::{Never, OnComplete};
 use crate::network::internal_types::PortForwardConfig;
 use crate::network::types::Subnet;
 use ipnet::IpNet;
@@ -341,7 +341,7 @@ pub fn get_port_forwarding_chains<'a>(
     let mut postrouting = VarkChain::new(conn, NAT.to_string(), POSTROUTING.to_string(), None);
     postrouting.build_rule(VarkRule::new(
         format!("-j {} ", NETAVARK_HOSTPORT_MASK),
-        None,
+        Some(Never),
     ));
     let netavark_hashed_network_chain_name = CONTAINER_CHAIN.to_string() + &pfwd.network_hash_name;
     postrouting.build_rule(VarkRule::new(
