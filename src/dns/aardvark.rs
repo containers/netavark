@@ -81,7 +81,7 @@ impl Aardvark {
         false
     }
 
-    pub fn start_aardvark_server_if_not_running(&mut self) -> Result<()> {
+    pub fn start_aardvark_server_if_not_running(&mut self, aardvark_bin: &str) -> Result<()> {
         let aardvark_pid = self.get_aardvark_pid();
         if aardvark_pid != -1 {
             // check if pid is running
@@ -116,7 +116,7 @@ impl Aardvark {
         }
 
         aardvark_args.extend(vec![
-            AARDVARK_BINARY[0],
+            aardvark_bin,
             "--config",
             &self.config,
             "-p",
