@@ -49,3 +49,9 @@ impl From<&Connection> for MessageIterator {
         Self::from(conn.clone())
     }
 }
+
+impl From<MessageIterator> for Connection {
+    fn from(iter: MessageIterator) -> Connection {
+        Connection::from(crate::Connection::from(iter.0))
+    }
+}

@@ -189,12 +189,13 @@ where
 // impl<'d, 'k, 'v, K, V, H> TryFrom<&'d Dict<'k, 'v>> for HashMap<&'k K, &'v V, H>
 
 // Conversion of Hashmap to Dict
-impl<'k, 'v, K, V> From<HashMap<K, V>> for Dict<'k, 'v>
+impl<'k, 'v, K, V, H> From<HashMap<K, V, H>> for Dict<'k, 'v>
 where
     K: Type + Into<Value<'k>> + std::hash::Hash + std::cmp::Eq,
     V: Type + Into<Value<'v>>,
+    H: BuildHasher + Default,
 {
-    fn from(value: HashMap<K, V>) -> Self {
+    fn from(value: HashMap<K, V, H>) -> Self {
         let entries = value
             .into_iter()
             .map(|(key, value)| DictEntry {

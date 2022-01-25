@@ -139,6 +139,17 @@ where
     }
 }
 
+impl<K, V, H> From<HashMap<K, V, H>> for OwnedValue
+where
+    K: Type + Into<Value<'static>> + std::hash::Hash + std::cmp::Eq,
+    V: Type + Into<Value<'static>>,
+    H: BuildHasher + Default,
+{
+    fn from(value: HashMap<K, V, H>) -> Self {
+        Self(value.into())
+    }
+}
+
 // tuple conversions in `structure` module for avoiding code-duplication.
 
 impl<'a> From<Value<'a>> for OwnedValue {
@@ -209,7 +220,7 @@ impl<'de> Deserialize<'de> for OwnedValue {
 #[cfg(test)]
 mod tests {
     use byteorder::LE;
-    use std::{convert::TryFrom, error::Error, result::Result};
+    use std::{collections::HashMap, convert::TryFrom, error::Error, result::Result};
 
     use crate::{from_slice, to_bytes, EncodingContext, OwnedValue, Value};
 
@@ -245,6 +256,19 @@ mod tests {
         let ser = to_bytes(ec, &ov)?;
         let de: Value<'_> = from_slice(&ser, ec)?;
         assert_eq!(<&str>::try_from(&de)?, "hi!");
+        Ok(())
+    }
+
+    #[test]
+    fn map_conversion() -> Result<(), Box<dyn Error>> {
+        let mut map = HashMap::<String, String>::new();
+        map.insert("one".to_string(), "1".to_string());
+        map.insert("two".to_string(), "2".to_string());
+        let value = OwnedValue::from(map.clone());
+        // Now convert back
+        let map2 = <HashMap<String, String>>::try_from(value)?;
+        assert_eq!(map, map2);
+
         Ok(())
     }
 }

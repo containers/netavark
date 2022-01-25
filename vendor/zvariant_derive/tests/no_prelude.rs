@@ -1,7 +1,7 @@
 #![no_implicit_prelude]
 #![allow(dead_code)]
 
-use ::zvariant_derive::{DeserializeDict, SerializeDict, Type, TypeDict};
+use ::zvariant_derive::{DeserializeDict, SerializeDict, Type};
 
 #[derive(Type)]
 struct FooF(f64);
@@ -21,8 +21,8 @@ enum RequestNameFlags {
     DoNotQueue = 0x04,
 }
 
-#[derive(SerializeDict, DeserializeDict, TypeDict)]
-#[zvariant(deny_unknown_fields)]
+#[derive(SerializeDict, DeserializeDict, Type)]
+#[zvariant(deny_unknown_fields, signature = "a{sv}")]
 struct Test {
     field_a: ::std::option::Option<u32>,
     #[zvariant(rename = "field-b")]

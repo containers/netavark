@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use zvariant::{DeserializeDict, SerializeDict, Type, TypeDict};
+use zvariant::{DeserializeDict, SerializeDict, Type};
 
 #[test]
 fn derive_unit_struct() {
@@ -37,8 +37,8 @@ fn derive_enum() {
 
 #[test]
 fn derive_dict() {
-    #[derive(SerializeDict, DeserializeDict, TypeDict)]
-    #[zvariant(deny_unknown_fields)]
+    #[derive(SerializeDict, DeserializeDict, Type)]
+    #[zvariant(deny_unknown_fields, signature = "a{sv}")]
     struct Test {
         field_a: Option<u32>,
         #[zvariant(rename = "field-b")]

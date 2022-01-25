@@ -2,159 +2,25 @@
 #![doc(
     html_logo_url = "https://storage.googleapis.com/fdo-gitlab-uploads/project/avatar/3213/zbus-logomark.png"
 )]
-
-//! This crate provides the main API you will use to interact with D-Bus from Rust. It takes care of
-//! the establishment of a connection, the creation, sending and receiving of different kind of
-//! D-Bus messages (method calls, signals etc) for you.
-//!
-//! zbus crate is currently Linux-specific[^otheros].
-//!
-//! ### Getting Started
-//!
-//! The best way to get started with zbus is the [book], where we start with basic D-Bus concepts
-//! and explain with code samples, how zbus makes D-Bus easy.
-//!
-//! ### Example code
-//!
-//! #### Client
-//!
-//! This code display a notification on your Freedesktop.org-compatible OS:
-//!
-//! ```rust,no_run
-//! use std::{collections::HashMap, error::Error};
-//!
-//! use zbus::{Connection, dbus_proxy};
-//! use zvariant::Value;
-//!
-//! #[dbus_proxy(
-//!     interface = "org.freedesktop.Notifications",
-//!     default_service = "org.freedesktop.Notifications",
-//!     default_path = "/org/freedesktop/Notifications"
-//! )]
-//! trait Notifications {
-//!     fn notify(
-//!         &self,
-//!         app_name: &str,
-//!         replaces_id: u32,
-//!         app_icon: &str,
-//!         summary: &str,
-//!         body: &str,
-//!         actions: &[&str],
-//!         hints: &HashMap<&str, &Value<'_>>,
-//!         expire_timeout: i32,
-//!     ) -> zbus::Result<u32>;
-//! }
-//!
-//! // Although we use `async-std` here, you can use any async runtime of choice.
-//! #[async_std::main]
-//! async fn main() -> Result<(), Box<dyn Error>> {
-//!     let connection = Connection::session().await?;
-//!
-//!     // `dbus_proxy` macro creates `NotificationProxy` based on `Notifications` trait.
-//!     let proxy = NotificationsProxy::new(&connection).await?;
-//!     let reply = proxy.notify(
-//!         "my-app",
-//!         0,
-//!         "dialog-information",
-//!         "A summary",
-//!         "Some body",
-//!         &[],
-//!         &HashMap::new(),
-//!         5000,
-//!     ).await?;
-//!     dbg!(reply);
-//!
-//!     Ok(())
-//! }
-//! ```
-//!
-//! #### Server
-//!
-//! A simple service that politely greets whoever calls its `SayHello` method:
-//!
-//! ```rust,no_run
-//! use std::{
-//!     error::Error,
-//!     thread::sleep,
-//!     time::Duration,
-//! };
-//! use zbus::{ObjectServer, ConnectionBuilder, dbus_interface, fdo};
-//!
-//! struct Greeter {
-//!     count: u64
-//! }
-//!
-//! #[dbus_interface(name = "org.zbus.MyGreeter1")]
-//! impl Greeter {
-//!     // Can be `async` as well.
-//!     fn say_hello(&mut self, name: &str) -> String {
-//!         self.count += 1;
-//!         format!("Hello {}! I have been called: {}", name, self.count)
-//!     }
-//! }
-//!
-//! // Although we use `async-std` here, you can use any async runtime of choice.
-//! #[async_std::main]
-//! async fn main() -> Result<(), Box<dyn Error>> {
-//!     let greeter = Greeter { count: 0 };
-//!     let _ = ConnectionBuilder::session()?
-//!         .name("org.zbus.MyGreeter")?
-//!         .serve_at("/org/zbus/MyGreeter", greeter)?
-//!         .build()
-//!         .await?;
-//!
-//!     // Do other things or go to sleep.
-//!     sleep(Duration::from_secs(60));
-//!
-//!     Ok(())
-//! }
-//! ```
-//!
-//! You can use the following command to test it:
-//!
-//! ```bash
-//! $ busctl --user call \
-//!     org.zbus.MyGreeter \
-//!     /org/zbus/MyGreeter \
-//!     org.zbus.MyGreeter1 \
-//!     SayHello s "Maria"
-//! Hello Maria!
-//! $
-//! ```
-//!
-//! ### Blocking API
-//!
-//! While zbus is primarily asynchronous (since 2.0), [blocking wrappers][bw] are provided for
-//! convenience.
-//!
-//! ### Compatibility with async runtimes
-//!
-//! zbus is runtime-agnostic and should work out of the box with different Rust async runtimes.
-//! However, in order to achieve that, zbus spawns a thread per connection to handle various
-//! internal tasks. If that is something you would like to avoid, you need to:
-//!   * Use [`ConnectionBuilder`] and disable the `internal_executor` flag.
-//!   * Ensure the [internal executor keeps ticking continuously][iektc].
-//!
-//! [book]: https://dbus.pages.freedesktop.org/zbus/
-//! [bw]: https://docs.rs/zbus/2.0.0/zbus/blocking/index.html
-//! [iektc]: `Connection::executor`
-//!
-//! [^otheros]: Support for other OS exist, but it is not supported to the same extent. D-Bus
-//!   clients in javascript (running from any browser) do exist though. And zbus may also be
-//!   working from the browser sometime in the future too, thanks to Rust 🦀 and WebAssembly 🕸.
-//!
+#![doc = include_str!("../README.md")]
 
 #[cfg(doctest)]
 mod doctests {
+    doc_comment::doctest!("../README.md");
+    doc_comment::doctest!("../../README.md");
+
     // Book markdown checks
     doc_comment::doctest!("../../book/src/client.md");
     doc_comment::doctest!("../../book/src/concepts.md");
     doc_comment::doctest!("../../book/src/connection.md");
-    doc_comment::doctest!("../../book/src/faq.md");
     doc_comment::doctest!("../../book/src/contributors.md");
     doc_comment::doctest!("../../book/src/introduction.md");
     doc_comment::doctest!("../../book/src/server.md");
     doc_comment::doctest!("../../book/src/blocking.md");
+
+    // FAQ contains a code sample that requires our tokio support.
+    #[cfg(feature = "tokio")]
+    doc_comment::doctest!("../../book/src/faq.md");
 }
 
 mod dbus_error;

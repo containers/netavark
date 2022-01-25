@@ -12,10 +12,10 @@
 [package]
 edition = "2018"
 name = "zbus_macros"
-version = "2.0.0"
+version = "2.0.1"
 authors = ["Marc-André Lureau <marcandre.lureau@redhat.com>"]
 description = "proc-macros for zbus"
-readme = "../README.md"
+readme = "README.md"
 keywords = ["D-Bus", "DBus", "IPC"]
 categories = ["data-structures", "encoding", "parsing"]
 license = "MIT"

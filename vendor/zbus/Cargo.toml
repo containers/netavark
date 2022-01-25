@@ -12,10 +12,10 @@
 [package]
 edition = "2018"
 name = "zbus"
-version = "2.0.0"
+version = "2.0.1"
 authors = ["Zeeshan Ali <zeeshanak@gnome.org>"]
 description = "API for D-Bus communication"
-readme = "../README.md"
+readme = "README.md"
 keywords = ["D-Bus", "DBus", "IPC"]
 categories = ["os::unix-apis"]
 license = "MIT"
@@ -111,7 +111,7 @@ features = ["net"]
 optional = true
 
 [dependencies.zbus_macros]
-version = "=2.0.0"
+version = "=2.0.1"
 
 [dependencies.zbus_names]
 version = "2"
@@ -141,7 +141,7 @@ version = "0.2.8"
 
 [dev-dependencies.tokio]
 version = "1"
-features = ["macros", "rt-multi-thread", "sync", "fs", "io-util"]
+features = ["macros", "rt-multi-thread", "sync", "fs", "io-util", "net"]
 
 [features]
 default = []

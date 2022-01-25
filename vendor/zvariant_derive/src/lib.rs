@@ -2,8 +2,12 @@
 #![doc(
     html_logo_url = "https://storage.googleapis.com/fdo-gitlab-uploads/project/avatar/3213/zbus-logomark.png"
 )]
+#![doc = include_str!("../README.md")]
 
-//! This crate provides derive macros helpers for zvariant.
+#[cfg(doctest)]
+mod doctests {
+    doc_comment::doctest!("../README.md");
+}
 
 use proc_macro::TokenStream;
 use syn::{self, DeriveInput};
@@ -82,6 +86,38 @@ mod value;
 /// assert_eq!(NoReprEnum::signature(), u32::signature());
 /// ```
 ///
+/// # Custom signatures
+///
+/// There are times when you'd find yourself wanting to specify a hardcoded signature yourself for
+/// the type. The `signature` attribute exists for this purpose. A typical use case is when you'd
+/// need to encode your type as a dictionary (signature `a{sv}`) type. For convenience, `dict` is
+/// an alias for `a{sv}`. Here is an example:
+///
+/// ```
+/// use zvariant::{SerializeDict, DeserializeDict, EncodingContext, from_slice, to_bytes, Type};
+/// use byteorder::LE;
+///
+/// #[derive(DeserializeDict, SerializeDict, Type, PartialEq, Debug)]
+/// // `#[zvariant(signature = "a{sv}")]` would be the same.
+/// #[zvariant(signature = "dict")]
+/// struct Struct {
+///     field1: u16,
+///     field2: i64,
+///     field3: String,
+/// }
+///
+/// assert_eq!(Struct::signature(), "a{sv}");
+/// let s = Struct {
+///     field1: 42,
+///     field2: i64::max_value(),
+///     field3: "hello".to_string(),
+/// };
+/// let ctxt = EncodingContext::<LE>::new_dbus(0);
+/// let encoded = to_bytes(ctxt, &s).unwrap();
+/// let decoded: Struct = from_slice(&encoded, ctxt).unwrap();
+/// assert_eq!(decoded, s);
+/// ```
+///
 /// [`Type`]: https://docs.rs/zvariant/2.10.0/zvariant/trait.Type.html
 /// [`Serialize`]: https://docs.serde.rs/serde/trait.Serialize.html
 /// [`Deserialize`]: https://docs.serde.rs/serde/de/trait.Deserialize.html
@@ -111,6 +147,10 @@ pub fn type_macro_derive(input: TokenStream) -> TokenStream {
 ///
 /// [`Type`]: ../zvariant/trait.Type.html
 #[proc_macro_derive(TypeDict)]
+#[deprecated(
+    since = "3.1.0",
+    note = "Please use `Type` macro with `#[zvariant(signature = \"dict\")]` attribute instead."
+)]
 pub fn type_dict_macro_derive(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
     dict::expand_type_derive(ast)
@@ -130,9 +170,10 @@ pub fn type_dict_macro_derive(input: TokenStream) -> TokenStream {
 /// For structs it works just like serde's [`Serialize`] macros:
 ///
 /// ```
-/// use zvariant::{EncodingContext, to_bytes, SerializeDict, TypeDict};
+/// use zvariant::{SerializeDict, Type};
 ///
-/// #[derive(SerializeDict, TypeDict)]
+/// #[derive(SerializeDict, Type)]
+/// #[zvariant(signature = "a{sv}")]
 /// struct Struct {
 ///     field1: u16,
 ///     #[zvariant(rename = "another-name")]
@@ -165,9 +206,10 @@ pub fn serialize_dict_macro_derive(input: TokenStream) -> TokenStream {
 /// For structs it works just like serde's [`Deserialize`] macros:
 ///
 /// ```
-/// use zvariant::{EncodingContext, to_bytes, DeserializeDict, TypeDict};
+/// use zvariant::{DeserializeDict, Type};
 ///
-/// #[derive(DeserializeDict, TypeDict)]
+/// #[derive(DeserializeDict, Type)]
+/// #[zvariant(signature = "a{sv}")]
 /// struct Struct {
 ///     field1: u16,
 ///     #[zvariant(rename = "another-name")]
@@ -290,7 +332,14 @@ pub fn deserialize_dict_macro_derive(input: TokenStream) -> TokenStream {
 /// assert_eq!(e, Enum::Variant2);
 /// ```
 ///
+/// # Dictionary encoding
+///
+/// For treating your type as a dictionary, you can use the `signature = "dict"` attribute. See
+/// [`Type`] for more details and an example use. Please note that this macro can only handle
+/// `dict` or `a{sv}` values. All other values will be ignored.
+///
 /// [`Value`]: https://docs.rs/zvariant/2.10.0/zvariant/enum.Value.html
+/// [`Type`]: derive.Type.html#custom-types
 #[proc_macro_derive(Value)]
 pub fn value_macro_derive(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();

@@ -43,7 +43,7 @@ const DEFAULT_MAX_QUEUED: usize = 64;
 
 /// Inner state shared by Connection and WeakConnection
 #[derive(Debug)]
-struct ConnectionInner {
+pub(crate) struct ConnectionInner {
     server_guid: Guid,
     cap_unix_fd: bool,
     bus_conn: bool,
@@ -262,7 +262,7 @@ impl MessageReceiverTask {
 /// [Monitor]: https://dbus.freedesktop.org/doc/dbus-specification.html#bus-messages-become-monitor
 #[derive(Clone, Debug)]
 pub struct Connection {
-    inner: Arc<ConnectionInner>,
+    pub(crate) inner: Arc<ConnectionInner>,
 
     pub(crate) msg_receiver: InactiveReceiver<Arc<Message>>,
 
@@ -524,7 +524,9 @@ impl Connection {
             // method).
             self.object_server();
 
-            let reply = fdo::DBusProxy::new(self)
+            let reply = fdo::DBusProxy::builder(self)
+                .cache_properties(CacheProperties::No)
+                .build()
                 .await?
                 .request_name(
                     well_known_name.clone(),
@@ -562,7 +564,9 @@ impl Connection {
             return Ok(false);
         }
 
-        fdo::DBusProxy::new(self)
+        fdo::DBusProxy::builder(self)
+            .cache_properties(CacheProperties::No)
+            .build()
             .await?
             .release_name(well_known_name)
             .await

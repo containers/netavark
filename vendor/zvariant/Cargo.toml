@@ -12,15 +12,17 @@
 [package]
 edition = "2018"
 name = "zvariant"
-version = "3.0.0"
+version = "3.1.1"
 authors = ["Zeeshan Ali <zeeshanak@gnome.org>"]
 description = "D-Bus & GVariant encoding & decoding"
-readme = "../README.md"
+readme = "README.md"
 keywords = ["D-Bus", "DBus", "IPC", "GVariant"]
 categories = ["data-structures", "encoding", "parsing"]
 license = "MIT"
 repository = "https://gitlab.freedesktop.org/dbus/zbus/"
 resolver = "2"
+[package.metadata.docs.rs]
+all-features = true
 
 [lib]
 bench = false
@@ -56,9 +58,12 @@ optional = true
 version = "1.1.0"
 
 [dependencies.zvariant_derive]
-version = "=3.0.0"
+version = "=3.1.1"
 [dev-dependencies.criterion]
 version = "0.3"
+
+[dev-dependencies.doc-comment]
+version = "0.3.3"
 
 [dev-dependencies.rand]
 version = "0.8.3"

@@ -5,7 +5,7 @@ use syn::{
     Ident, Lifetime, LifetimeDef,
 };
 
-use crate::utils::zvariant_path;
+use crate::utils::{get_signature_attribute, zvariant_path};
 
 pub enum ValueType {
     Value,
@@ -18,7 +18,15 @@ pub fn expand_derive(ast: DeriveInput, value_type: ValueType) -> Result<TokenStr
     match &ast.data {
         Data::Struct(ds) => match &ds.fields {
             Fields::Named(_) | Fields::Unnamed(_) => {
-                impl_struct(value_type, ast.ident, ast.generics, &ds.fields, &zv)
+                let signature = get_signature_attribute(&ast.attrs, ast.span())?;
+                impl_struct(
+                    value_type,
+                    ast.ident,
+                    ast.generics,
+                    &ds.fields,
+                    signature,
+                    &zv,
+                )
             }
             Fields::Unit => Err(Error::new(ast.span(), "Unit structures not supported")),
         },
@@ -35,6 +43,7 @@ fn impl_struct(
     name: Ident,
     generics: Generics,
     fields: &Fields,
+    signature: Option<String>,
     zv: &TokenStream,
 ) -> Result<TokenStream, Error> {
     let statc_lifetime = LifetimeDef::new(Lifetime::new("'static", Span::call_site()));
@@ -83,6 +92,57 @@ fn impl_struct(
                 .iter()
                 .map(|field| field.ident.to_token_stream())
                 .collect();
+            let (from_value_impl, into_value_impl) = match signature {
+                Some(signature) if signature == "a{sv}" => (
+                    // User wants the type to be encoded as a dict.
+                    // FIXME: Not the most efficient implementation.
+                    quote! {
+                        let mut fields = <::std::collections::HashMap::<::std::string::String, #zv::Value>>::try_from(value)?;
+
+                        ::std::result::Result::Ok(Self {
+                            #(
+                                #field_names:
+                                    fields
+                                        .remove(stringify!(#field_names))
+                                        .ok_or_else(|| #zv::Error::IncorrectType)?
+                                        .downcast()
+                                        .ok_or_else(|| #zv::Error::IncorrectType)?
+                            ),*
+                        })
+                    },
+                    quote! {
+                        let mut fields = ::std::collections::HashMap::new();
+                        #(
+                            fields.insert(stringify!(#field_names), #zv::Value::from(s.#field_names));
+                        )*
+
+                        #zv::Value::from(fields).into()
+                    },
+                ),
+                Some(_) | None => (
+                    quote! {
+                        let mut fields = #zv::Structure::try_from(value)?.into_fields();
+
+                        ::std::result::Result::Ok(Self {
+                            #(
+                                #field_names:
+                                    fields
+                                        .remove(0)
+                                        .downcast()
+                                        .ok_or_else(|| #zv::Error::IncorrectType)?
+                            ),*
+                        })
+                    },
+                    quote! {
+                        #zv::StructureBuilder::new()
+                        #(
+                            .add_field(s.#field_names)
+                        )*
+                        .build()
+                        .into()
+                    },
+                ),
+            };
             Ok(quote! {
                 impl #impl_generics ::std::convert::TryFrom<#value_type> for #name #ty_generics
                     #from_value_where_clause
@@ -91,17 +151,7 @@ fn impl_struct(
 
                     #[inline]
                     fn try_from(value: #value_type) -> #zv::Result<Self> {
-                        let mut fields = #zv::Structure::try_from(value)?.into_fields();
-
-                        ::std::result::Result::Ok(Self {
-                            #(
-                                #field_names:
-                                    fields
-                                    .remove(0)
-                                    .downcast()
-                                    .ok_or_else(|| #zv::Error::IncorrectType)?
-                             ),*
-                        })
+                        #from_value_impl
                     }
                 }
 
@@ -110,12 +160,7 @@ fn impl_struct(
                 {
                     #[inline]
                     fn from(s: #name #ty_generics) -> Self {
-                        #zv::StructureBuilder::new()
-                        #(
-                            .add_field(s.#field_names)
-                        )*
-                        .build()
-                        .into()
+                        #into_value_impl
                     }
                 }
             })

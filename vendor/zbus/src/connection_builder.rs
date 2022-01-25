@@ -269,34 +269,3 @@ impl<'a> ConnectionBuilder<'a> {
         }
     }
 }
-
-#[cfg(feature = "tokio")]
-#[test]
-fn tokio_socket() {
-    use std::error::Error;
-    use tokio::net::UnixStream;
-    use zbus::Address;
-    async fn run() -> std::result::Result<(), Box<dyn Error>> {
-        let stream = match Address::session()? {
-            Address::Unix(s) => UnixStream::connect(s).await?,
-        };
-        let conn = ConnectionBuilder::socket(stream)
-            .internal_executor(false)
-            .build()
-            .await?;
-        let executor_conn = conn.clone();
-        tokio::task::spawn(async move {
-            loop {
-                executor_conn.executor().tick().await;
-            }
-        });
-        let proxy = zbus::fdo::DBusProxy::new(&conn).await?;
-        proxy.features().await?;
-        Ok(())
-    }
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-    tokio::task::LocalSet::new().block_on(&rt, run()).unwrap();
-}
