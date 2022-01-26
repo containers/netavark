@@ -1,5 +1,6 @@
 approvers:
   - baude
+  - cevich
   - edsantiago
   - flouthoc
   - giuseppe
@@ -16,6 +17,7 @@ approvers:
 reviewers:
   - ashley-cui
   - baude
+  - cevich
   - edsantiago
   - flouthoc
   - giuseppe
