@@ -212,11 +212,13 @@ impl Aardvark {
         &mut self,
         container_name: String,
         container_id: String,
+        per_network_opts: HashMap<String, types::PerNetworkOptions>,
         netavark_res: HashMap<String, types::StatusBlock>,
     ) -> Result<()> {
         let entries = Aardvark::netavark_response_to_aardvark_entries(
             container_name,
             container_id,
+            per_network_opts,
             netavark_res,
         );
         self.commit_entries(entries)?;
@@ -227,6 +229,7 @@ impl Aardvark {
     pub fn netavark_response_to_aardvark_entries(
         container_name: String,
         container_id: String,
+        per_network_opts: HashMap<String, types::PerNetworkOptions>,
         netavark_res: HashMap<String, types::StatusBlock>,
     ) -> Vec<AardvarkEntry> {
         let mut result: Vec<AardvarkEntry> = Vec::<AardvarkEntry>::new();
@@ -265,6 +268,17 @@ impl Aardvark {
                                                 container_ip_v6 = container_ip.to_string();
                                             }
 
+                                            let mut name_vector =
+                                                Vec::from([container_name.clone()]);
+                                            if let Some(network_opt) =
+                                                &per_network_opts.get(&network_name)
+                                            {
+                                                if let Some(alias) = &network_opt.aliases {
+                                                    let aliases = alias.clone();
+                                                    name_vector.extend(aliases);
+                                                }
+                                            }
+
                                             result.push(AardvarkEntry {
                                                 network_name: network_name.clone(),
                                                 network_gateway_v4,
@@ -272,7 +286,7 @@ impl Aardvark {
                                                 container_id: container_id.clone(),
                                                 container_ip_v6,
                                                 container_ip_v4,
-                                                container_name: Vec::from([container_name.clone()]),
+                                                container_name: name_vector,
                                             });
                                         }
                                     }
