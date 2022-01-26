@@ -1,55 +1,63 @@
+use crate::util::is_continuation;
+
 use super::encode_wide;
-use super::is_continuation;
 
 const SURROGATE_LENGTH: usize = 3;
 
-pub(in super::super) fn ends_with(
-    string: &[u8],
-    mut suffix: &[u8],
-) -> Option<bool> {
-    if suffix.is_empty() {
-        return Some(true);
-    }
+pub(crate) fn ends_with(string: &[u8], mut suffix: &[u8]) -> bool {
+    let index = match string.len().checked_sub(suffix.len()) {
+        Some(index) => index,
+        None => return false,
+    };
+    if let Some(&byte) = string.get(index) {
+        if is_continuation(byte) {
+            let index = index.checked_sub(1).expect("invalid string");
+            let mut wide_surrogate = match suffix.get(..SURROGATE_LENGTH) {
+                Some(surrogate) => encode_wide(surrogate),
+                None => return false,
+            };
+            let surrogate_wchar = wide_surrogate
+                .next()
+                .expect("failed decoding non-empty suffix");
 
-    let index = string.len().checked_sub(suffix.len())?;
-    if is_continuation(string[index]) {
-        let index = index.checked_sub(1)?;
-        let mut wide_suffix = encode_wide(suffix.get(..SURROGATE_LENGTH)?);
-        let suffix_wchar = wide_suffix
-            .next()
-            .expect("failed decoding non-empty suffix");
-
-        if suffix_wchar.is_err()
-            || wide_suffix.next().is_some()
-            || suffix_wchar != encode_wide(&string[index..]).nth(1)?
-        {
-            return None;
+            if wide_surrogate.next().is_some()
+                || encode_wide(&string[index..])
+                    .take_while(Result::is_ok)
+                    .nth(1)
+                    != Some(surrogate_wchar)
+            {
+                return false;
+            }
+            suffix = &suffix[SURROGATE_LENGTH..];
         }
-        suffix = &suffix[SURROGATE_LENGTH..];
     }
-    Some(string.ends_with(suffix))
+    string.ends_with(suffix)
 }
 
-pub(in super::super) fn starts_with(
-    string: &[u8],
-    mut prefix: &[u8],
-) -> Option<bool> {
+pub(crate) fn starts_with(string: &[u8], mut prefix: &[u8]) -> bool {
     if let Some(&byte) = string.get(prefix.len()) {
         if is_continuation(byte) {
-            let index = prefix.len().checked_sub(SURROGATE_LENGTH)?;
-            let mut wide_prefix = encode_wide(&prefix[index..]);
-            let prefix_wchar = wide_prefix
+            let index = match prefix.len().checked_sub(SURROGATE_LENGTH) {
+                Some(index) => index,
+                None => return false,
+            };
+            let (substring, surrogate) = prefix.split_at(index);
+            let mut wide_surrogate = encode_wide(surrogate);
+            let surrogate_wchar = wide_surrogate
                 .next()
                 .expect("failed decoding non-empty prefix");
 
-            if prefix_wchar.is_err()
-                || wide_prefix.next().is_some()
-                || prefix_wchar != encode_wide(&string[index..]).next()?
+            if surrogate_wchar.is_err()
+                || wide_surrogate.next().is_some()
+                || encode_wide(&string[index..])
+                    .next()
+                    .expect("failed decoding non-empty substring")
+                    != surrogate_wchar
             {
-                return None;
+                return false;
             }
-            prefix = &prefix[..index];
+            prefix = substring;
         }
     }
-    Some(string.starts_with(prefix))
+    string.starts_with(prefix)
 }

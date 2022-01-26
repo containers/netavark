@@ -35,15 +35,6 @@ pub(crate) fn assert_arg(arg: &Arg) {
         );
     }
 
-    // Positionals should not have multiple_occurrences
-    if arg.is_positional() {
-        assert!(
-            !arg.is_set(ArgSettings::MultipleOccurrences),
-            "Argument '{}' is a positional argument and can't be set as multiple occurrences",
-            arg.name
-        );
-    }
-
     if arg.is_set(ArgSettings::Required) {
         assert!(
             arg.default_vals.is_empty(),
@@ -52,10 +43,10 @@ pub(crate) fn assert_arg(arg: &Arg) {
         );
     }
 
-    assert_app_flags(arg);
+    assert_arg_flags(arg);
 }
 
-fn assert_app_flags(arg: &Arg) {
+fn assert_arg_flags(arg: &Arg) {
     use ArgSettings::*;
 
     macro_rules! checker {
@@ -65,12 +56,12 @@ fn assert_app_flags(arg: &Arg) {
 
                 $(
                     if !arg.is_set($b) {
-                        s.push_str(&format!("\nArgSettings::{} is required when ArgSettings::{} is set.\n", std::stringify!($b), std::stringify!($a)));
+                        s.push_str(&format!("  ArgSettings::{} is required when ArgSettings::{} is set.\n", std::stringify!($b), std::stringify!($a)));
                     }
                 )+
 
                 if !s.is_empty() {
-                    panic!("{}", s)
+                    panic!("Argument {:?}\n{}", arg.get_name(), s)
                 }
             }
         }
@@ -84,9 +75,6 @@ fn assert_app_flags(arg: &Arg) {
     checker!(Last requires TakesValue);
     checker!(HideDefaultValue requires TakesValue);
     checker!(MultipleValues requires TakesValue);
-    #[cfg(feature = "env")]
-    checker!(HideEnv requires TakesValue);
-    #[cfg(feature = "env")]
-    checker!(HideEnvValues requires TakesValue);
     checker!(IgnoreCase requires TakesValue);
+    checker!(AllowInvalidUtf8 requires TakesValue);
 }

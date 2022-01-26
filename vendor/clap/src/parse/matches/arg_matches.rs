@@ -14,17 +14,12 @@ use indexmap::IndexMap;
 // Internal
 use crate::{
     parse::MatchedArg,
-    util::{termcolor::ColorChoice, Id, Key},
+    util::{Id, Key},
     {Error, INVALID_UTF8},
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SubCommand {
-    pub(crate) id: Id,
-    pub(crate) name: String,
-    pub(crate) matches: ArgMatches,
-}
-
+/// Container for parse results.
+///
 /// Used to get information about the arguments that were supplied to the program at runtime by
 /// the user. New instances of this struct are obtained by using the [`App::get_matches`] family of
 /// methods.
@@ -72,28 +67,27 @@ pub(crate) struct SubCommand {
 /// }
 /// ```
 /// [`App::get_matches`]: crate::App::get_matches()
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ArgMatches {
+    #[cfg(debug_assertions)]
+    pub(crate) valid_args: Vec<Id>,
+    #[cfg(debug_assertions)]
+    pub(crate) valid_subcommands: Vec<Id>,
+    #[cfg(debug_assertions)]
+    pub(crate) disable_asserts: bool,
     pub(crate) args: IndexMap<Id, MatchedArg>,
     pub(crate) subcommand: Option<Box<SubCommand>>,
 }
 
-impl Default for ArgMatches {
-    fn default() -> Self {
-        ArgMatches {
-            args: IndexMap::new(),
-            subcommand: None,
-        }
-    }
-}
-
 impl ArgMatches {
-    /// Gets the value of a specific [option] or [positional] argument (i.e. an argument that takes
-    /// an additional value at runtime). If the option wasn't present at runtime
-    /// it returns `None`.
+    /// Gets the value of a specific option or positional argument.
     ///
-    /// *NOTE:* If getting a value for an option or positional argument that allows multiples,
-    /// prefer [`ArgMatches::values_of`] as `ArgMatches::value_of` will only return the *first*
+    /// i.e. an argument that [takes an additional value][crate::Arg::takes_value] at runtime.
+    ///
+    /// Returns `None` if the option wasn't present.
+    ///
+    /// *NOTE:* Prefer [`ArgMatches::values_of`] if getting a value for an option or positional
+    /// argument that allows multiples as `ArgMatches::value_of` will only return the *first*
     /// value.
     ///
     /// *NOTE:* This will always return `Some(value)` if [`default_value`] has been set.
@@ -101,7 +95,10 @@ impl ArgMatches {
     ///
     /// # Panics
     ///
-    /// This method will [`panic!`] if the value contains invalid UTF-8 code points.
+    /// If the value is invalid UTF-8.  See
+    /// [`Arg::allow_invalid_utf8`][crate::Arg::allow_invalid_utf8].
+    ///
+    /// If `id` is is not a valid argument or group name.
     ///
     /// # Examples
     ///
@@ -120,34 +117,46 @@ impl ArgMatches {
     /// [`default_value`]: crate::Arg::default_value()
     /// [`occurrences_of`]: crate::ArgMatches::occurrences_of()
     pub fn value_of<T: Key>(&self, id: T) -> Option<&str> {
-        if let Some(arg) = self.args.get(&Id::from(id)) {
-            if let Some(v) = arg.first() {
-                return Some(v.to_str().expect(INVALID_UTF8));
-            }
-        }
-        None
+        let id = Id::from(id);
+        let arg = self.get_arg(&id)?;
+        assert_utf8_validation(arg, &id);
+        let v = arg.first()?;
+        Some(v.to_str().expect(INVALID_UTF8))
     }
 
-    /// Gets the lossy value of a specific argument. If the argument wasn't present at runtime
-    /// it returns `None`. A lossy value is one which contains invalid UTF-8 code points, those
-    /// invalid points will be replaced with `\u{FFFD}`
+    /// Gets the lossy value of a specific option or positional argument.
     ///
-    /// *NOTE:* If getting a value for an option or positional argument that allows multiples,
-    /// prefer [`Arg::values_of_lossy`] as `value_of_lossy()` will only return the *first* value.
+    /// i.e. an argument that [takes an additional value][crate::Arg::takes_value] at runtime.
+    ///
+    /// A lossy value is one which contains invalid UTF-8, those invalid points will be replaced
+    /// with `\u{FFFD}`
+    ///
+    /// Returns `None` if the option wasn't present.
+    ///
+    /// *NOTE:* Recommend having set [`Arg::allow_invalid_utf8`][crate::Arg::allow_invalid_utf8].
+    ///
+    /// *NOTE:* Prefer [`ArgMatches::values_of_lossy`] if getting a value for an option or positional
+    /// argument that allows multiples as `ArgMatches::value_of_lossy` will only return the *first*
+    /// value.
     ///
     /// *NOTE:* This will always return `Some(value)` if [`default_value`] has been set.
     /// [`occurrences_of`] can be used to check if a value is present at runtime.
+    ///
+    /// # Panics
+    ///
+    /// If `id` is is not a valid argument or group name.
     ///
     /// # Examples
     ///
     #[cfg_attr(not(unix), doc = " ```ignore")]
     #[cfg_attr(unix, doc = " ```")]
-    /// # use clap::{App, Arg};
+    /// # use clap::{App, arg};
     /// use std::ffi::OsString;
     /// use std::os::unix::ffi::{OsStrExt,OsStringExt};
     ///
     /// let m = App::new("utf8")
-    ///     .arg(Arg::from("<arg> 'some arg'"))
+    ///     .arg(arg!(<arg> "some arg")
+    ///         .allow_invalid_utf8(true))
     ///     .get_matches_from(vec![OsString::from("myprog"),
     ///                             // "Hi {0xe9}!"
     ///                             OsString::from_vec(vec![b'H', b'i', b' ', 0xe9, b'!'])]);
@@ -156,38 +165,49 @@ impl ArgMatches {
     /// [`default_value`]: crate::Arg::default_value()
     /// [`occurrences_of`]: ArgMatches::occurrences_of()
     /// [`Arg::values_of_lossy`]: ArgMatches::values_of_lossy()
+    #[cfg_attr(debug_assertions, track_caller)]
     pub fn value_of_lossy<T: Key>(&self, id: T) -> Option<Cow<'_, str>> {
-        if let Some(arg) = self.args.get(&Id::from(id)) {
-            if let Some(v) = arg.first() {
-                return Some(v.to_string_lossy());
-            }
-        }
-        None
+        let id = Id::from(id);
+        let arg = self.get_arg(&id)?;
+        assert_no_utf8_validation(arg, &id);
+        let v = arg.first()?;
+        Some(v.to_string_lossy())
     }
 
-    /// Gets the OS version of a string value of a specific argument. If the option wasn't present
-    /// at runtime it returns `None`. An OS value on Unix-like systems is any series of bytes,
-    /// regardless of whether or not they contain valid UTF-8 code points. Since [`String`]s in
-    /// Rust are guaranteed to be valid UTF-8, a valid filename on a Unix system as an argument
-    /// value may contain invalid UTF-8 code points.
+    /// Get the `OsStr` value of a specific option or positional argument.
     ///
-    /// *NOTE:* If getting a value for an option or positional argument that allows multiples,
-    /// prefer [`ArgMatches::values_of_os`] as `Arg::value_of_os` will only return the *first*
+    /// i.e. an argument that [takes an additional value][crate::Arg::takes_value] at runtime.
+    ///
+    /// An `OsStr` on Unix-like systems is any series of bytes, regardless of whether or not they
+    /// contain valid UTF-8. Since [`String`]s in Rust are guaranteed to be valid UTF-8, a valid
+    /// filename on a Unix system as an argument value may contain invalid UTF-8.
+    ///
+    /// Returns `None` if the option wasn't present.
+    ///
+    /// *NOTE:* Recommend having set [`Arg::allow_invalid_utf8`][crate::Arg::allow_invalid_utf8].
+    ///
+    /// *NOTE:* Prefer [`ArgMatches::values_of_os`] if getting a value for an option or positional
+    /// argument that allows multiples as `ArgMatches::value_of_os` will only return the *first*
     /// value.
     ///
     /// *NOTE:* This will always return `Some(value)` if [`default_value`] has been set.
     /// [`occurrences_of`] can be used to check if a value is present at runtime.
     ///
+    /// # Panics
+    ///
+    /// If `id` is is not a valid argument or group name.
+    ///
     /// # Examples
     ///
     #[cfg_attr(not(unix), doc = " ```ignore")]
     #[cfg_attr(unix, doc = " ```")]
-    /// # use clap::{App, Arg};
+    /// # use clap::{App, arg};
     /// use std::ffi::OsString;
     /// use std::os::unix::ffi::{OsStrExt,OsStringExt};
     ///
     /// let m = App::new("utf8")
-    ///     .arg(Arg::from("<arg> 'some arg'"))
+    ///     .arg(arg!(<arg> "some arg")
+    ///         .allow_invalid_utf8(true))
     ///     .get_matches_from(vec![OsString::from("myprog"),
     ///                             // "Hi {0xe9}!"
     ///                             OsString::from_vec(vec![b'H', b'i', b' ', 0xe9, b'!'])]);
@@ -196,19 +216,27 @@ impl ArgMatches {
     /// [`default_value`]: crate::Arg::default_value()
     /// [`occurrences_of`]: ArgMatches::occurrences_of()
     /// [`ArgMatches::values_of_os`]: ArgMatches::values_of_os()
+    #[cfg_attr(debug_assertions, track_caller)]
     pub fn value_of_os<T: Key>(&self, id: T) -> Option<&OsStr> {
-        self.args
-            .get(&Id::from(id))
-            .and_then(|arg| arg.first().map(OsString::as_os_str))
+        let id = Id::from(id);
+        let arg = self.get_arg(&id)?;
+        assert_no_utf8_validation(arg, &id);
+        let v = arg.first()?;
+        Some(v.as_os_str())
     }
 
-    /// Gets a [`Values`] struct which implements [`Iterator`] for values of a specific argument
-    /// (i.e. an argument that takes multiple values at runtime). If the option wasn't present at
-    /// runtime it returns `None`
+    /// Get an [`Iterator`] over [values] of a specific option or positional argument.
+    ///
+    /// i.e. an argument that takes multiple values at runtime.
+    ///
+    /// Returns `None` if the option wasn't present.
     ///
     /// # Panics
     ///
-    /// This method will panic if any of the values contain invalid UTF-8 code points.
+    /// If the value is invalid UTF-8.  See
+    /// [`Arg::allow_invalid_utf8`][crate::Arg::allow_invalid_utf8].
+    ///
+    /// If `id` is is not a valid argument or group name.
     ///
     /// # Examples
     ///
@@ -216,60 +244,72 @@ impl ArgMatches {
     /// # use clap::{App, Arg};
     /// let m = App::new("myprog")
     ///     .arg(Arg::new("output")
-    ///         .multiple_values(true)
+    ///         .multiple_occurrences(true)
     ///         .short('o')
     ///         .takes_value(true))
     ///     .get_matches_from(vec![
-    ///         "myprog", "-o", "val1", "val2", "val3"
+    ///         "myprog", "-o", "val1", "-o", "val2", "-o", "val3"
     ///     ]);
     /// let vals: Vec<&str> = m.values_of("output").unwrap().collect();
     /// assert_eq!(vals, ["val1", "val2", "val3"]);
     /// ```
+    /// [values]: Values
     /// [`Iterator`]: std::iter::Iterator
     pub fn values_of<T: Key>(&self, id: T) -> Option<Values> {
-        self.args.get(&Id::from(id)).map(|arg| {
-            fn to_str_slice(o: &OsString) -> &str {
-                o.to_str().expect(INVALID_UTF8)
-            }
-
-            Values {
-                iter: arg.vals_flatten().map(to_str_slice),
-            }
-        })
+        let id = Id::from(id);
+        let arg = self.get_arg(&id)?;
+        assert_utf8_validation(arg, &id);
+        fn to_str_slice(o: &OsString) -> &str {
+            o.to_str().expect(INVALID_UTF8)
+        }
+        let v = Values {
+            iter: arg.vals_flatten().map(to_str_slice),
+            len: arg.num_vals(),
+        };
+        Some(v)
     }
 
     /// Placeholder documentation.
+    #[cfg(feature = "unstable-grouped")]
     pub fn grouped_values_of<T: Key>(&self, id: T) -> Option<GroupedValues> {
-        #[allow(clippy::type_complexity)]
-        let arg_values: for<'a> fn(
-            &'a MatchedArg,
-        ) -> Map<
-            Iter<'a, Vec<OsString>>,
-            fn(&Vec<OsString>) -> Vec<&str>,
-        > = |arg| {
-            arg.vals()
-                .map(|g| g.iter().map(|x| x.to_str().expect(INVALID_UTF8)).collect())
+        let id = Id::from(id);
+        let arg = self.get_arg(&id)?;
+        assert_utf8_validation(arg, &id);
+        let v = GroupedValues {
+            iter: arg
+                .vals()
+                .map(|g| g.iter().map(|x| x.to_str().expect(INVALID_UTF8)).collect()),
+            len: arg.vals().len(),
         };
-        self.args
-            .get(&Id::from(id))
-            .map(arg_values)
-            .map(|iter| GroupedValues { iter })
+        Some(v)
     }
 
-    /// Gets the lossy values of a specific argument. If the option wasn't present at runtime
-    /// it returns `None`. A lossy value is one where if it contains invalid UTF-8 code points,
-    /// those invalid points will be replaced with `\u{FFFD}`
+    /// Get the lossy values of a specific option or positional argument.
+    ///
+    /// i.e. an argument that takes multiple values at runtime.
+    ///
+    /// A lossy value is one which contains invalid UTF-8, those invalid points will be replaced
+    /// with `\u{FFFD}`
+    ///
+    /// Returns `None` if the option wasn't present.
+    ///
+    /// *NOTE:* Recommend having set [`Arg::allow_invalid_utf8`][crate::Arg::allow_invalid_utf8].
+    ///
+    /// # Panics
+    ///
+    /// If `id` is is not a valid argument or group name.
     ///
     /// # Examples
     ///
     #[cfg_attr(not(unix), doc = " ```ignore")]
     #[cfg_attr(unix, doc = " ```")]
-    /// # use clap::{App, Arg};
+    /// # use clap::{App, arg};
     /// use std::ffi::OsString;
     /// use std::os::unix::ffi::OsStringExt;
     ///
     /// let m = App::new("utf8")
-    ///     .arg(Arg::from("<arg>... 'some arg'"))
+    ///     .arg(arg!(<arg> ... "some arg")
+    ///         .allow_invalid_utf8(true))
     ///     .get_matches_from(vec![OsString::from("myprog"),
     ///                             // "Hi"
     ///                             OsString::from_vec(vec![b'H', b'i']),
@@ -280,30 +320,45 @@ impl ArgMatches {
     /// assert_eq!(&itr.next().unwrap()[..], "\u{FFFD}!");
     /// assert_eq!(itr.next(), None);
     /// ```
+    #[cfg_attr(debug_assertions, track_caller)]
     pub fn values_of_lossy<T: Key>(&self, id: T) -> Option<Vec<String>> {
-        self.args.get(&Id::from(id)).map(|arg| {
-            arg.vals_flatten()
-                .map(|v| v.to_string_lossy().into_owned())
-                .collect()
-        })
+        let id = Id::from(id);
+        let arg = self.get_arg(&id)?;
+        assert_no_utf8_validation(arg, &id);
+        let v = arg
+            .vals_flatten()
+            .map(|v| v.to_string_lossy().into_owned())
+            .collect();
+        Some(v)
     }
 
-    /// Gets a [`OsValues`] struct which is implements [`Iterator`] for [`OsString`] values of a
-    /// specific argument. If the option wasn't present at runtime it returns `None`. An OS value
-    /// on Unix-like systems is any series of bytes, regardless of whether or not they contain
-    /// valid UTF-8 code points. Since [`String`]s in Rust are guaranteed to be valid UTF-8, a valid
-    /// filename as an argument value on Linux (for example) may contain invalid UTF-8 code points.
+    /// Get an [`Iterator`] over [`OsStr`] [values] of a specific option or positional argument.
+    ///
+    /// i.e. an argument that takes multiple values at runtime.
+    ///
+    /// An `OsStr` on Unix-like systems is any series of bytes, regardless of whether or not they
+    /// contain valid UTF-8. Since [`String`]s in Rust are guaranteed to be valid UTF-8, a valid
+    /// filename on a Unix system as an argument value may contain invalid UTF-8.
+    ///
+    /// Returns `None` if the option wasn't present.
+    ///
+    /// *NOTE:* Recommend having set [`Arg::allow_invalid_utf8`][crate::Arg::allow_invalid_utf8].
+    ///
+    /// # Panics
+    ///
+    /// If `id` is is not a valid argument or group name.
     ///
     /// # Examples
     ///
     #[cfg_attr(not(unix), doc = " ```ignore")]
     #[cfg_attr(unix, doc = " ```")]
-    /// # use clap::{App, Arg};
+    /// # use clap::{App, arg};
     /// use std::ffi::{OsStr,OsString};
     /// use std::os::unix::ffi::{OsStrExt,OsStringExt};
     ///
     /// let m = App::new("utf8")
-    ///     .arg(Arg::from("<arg>... 'some arg'"))
+    ///     .arg(arg!(<arg> ... "some arg")
+    ///         .allow_invalid_utf8(true))
     ///     .get_matches_from(vec![OsString::from("myprog"),
     ///                                 // "Hi"
     ///                                 OsString::from_vec(vec![b'H', b'i']),
@@ -316,20 +371,25 @@ impl ArgMatches {
     /// assert_eq!(itr.next(), None);
     /// ```
     /// [`Iterator`]: std::iter::Iterator
-    /// [`OsString`]: std::ffi::OsString
+    /// [`OsSt`]: std::ffi::OsStr
+    /// [values]: OsValues
     /// [`String`]: std::string::String
+    #[cfg_attr(debug_assertions, track_caller)]
     pub fn values_of_os<T: Key>(&self, id: T) -> Option<OsValues> {
+        let id = Id::from(id);
+        let arg = self.get_arg(&id)?;
+        assert_no_utf8_validation(arg, &id);
         fn to_str_slice(o: &OsString) -> &OsStr {
             o
         }
-
-        self.args.get(&Id::from(id)).map(|arg| OsValues {
+        let v = OsValues {
             iter: arg.vals_flatten().map(to_str_slice),
-        })
+            len: arg.num_vals(),
+        };
+        Some(v)
     }
 
-    /// Gets the value of a specific argument (i.e. an argument that takes an additional
-    /// value at runtime) and then converts it into the result type using [`std::str::FromStr`].
+    /// Parse the value (with [`FromStr`]) of a specific option or positional argument.
     ///
     /// There are two types of errors, parse failures and those where the argument wasn't present
     /// (such as a non-required argument). Check [`ErrorKind`] to distinguish them.
@@ -340,15 +400,17 @@ impl ArgMatches {
     ///
     /// # Panics
     ///
-    /// This method will [`panic!`] if the value contains invalid UTF-8 code points.
+    /// If the value is invalid UTF-8.  See
+    /// [`Arg::allow_invalid_utf8`][crate::Arg::allow_invalid_utf8].
+    ///
+    /// If `id` is is not a valid argument or group name.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate clap;
-    /// # use clap::App;
+    /// # use clap::{App, arg};
     /// let matches = App::new("myapp")
-    ///               .arg("[length] 'Set the length to use as a pos whole num, i.e. 20'")
+    ///               .arg(arg!([length] "Set the length to use as a pos whole num i.e. 20"))
     ///               .get_matches_from(&["test", "12"]);
     ///
     /// // Specify the type explicitly (or use turbofish)
@@ -361,49 +423,44 @@ impl ArgMatches {
     /// let _: u32 = also_len;
     /// ```
     ///
+    /// [`FromStr]: std::str::FromStr
     /// [`ArgMatches::values_of_t`]: ArgMatches::values_of_t()
-    /// [`panic!`]: https://doc.rust-lang.org/std/macro.panic!.html
     /// [`ErrorKind`]: crate::ErrorKind
     pub fn value_of_t<R>(&self, name: &str) -> Result<R, Error>
     where
         R: FromStr,
         <R as FromStr>::Err: Display,
     {
-        if let Some(v) = self.value_of(name) {
-            v.parse::<R>().map_err(|e| {
-                let message = format!(
-                    "The argument '{}' isn't a valid value for '{}': {}",
-                    v, name, e
-                );
+        let v = self
+            .value_of(name)
+            .ok_or_else(|| Error::argument_not_found_auto(name.to_string()))?;
+        v.parse::<R>().map_err(|e| {
+            let message = format!(
+                "The argument '{}' isn't a valid value for '{}': {}",
+                v, name, e
+            );
 
-                Error::value_validation(
-                    name.to_string(),
-                    v.to_string(),
-                    message.into(),
-                    ColorChoice::Auto,
-                )
-            })
-        } else {
-            Err(Error::argument_not_found_auto(name.to_string()))
-        }
+            Error::value_validation_without_app(name.to_string(), v.to_string(), message.into())
+        })
     }
 
-    /// Gets the value of a specific argument (i.e. an argument that takes an additional
-    /// value at runtime) and then converts it into the result type using [`std::str::FromStr`].
+    /// Parse the value (with [`FromStr`]) of a specific option or positional argument.
     ///
     /// If either the value is not present or parsing failed, exits the program.
     ///
     /// # Panics
     ///
-    /// This method will [`panic!`] if the value contains invalid UTF-8 code points.
+    /// If the value is invalid UTF-8.  See
+    /// [`Arg::allow_invalid_utf8`][crate::Arg::allow_invalid_utf8].
+    ///
+    /// If `id` is is not a valid argument or group name.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate clap;
-    /// # use clap::App;
+    /// # use clap::{App, arg};
     /// let matches = App::new("myapp")
-    ///               .arg("[length] 'Set the length to use as a pos whole num, i.e. 20'")
+    ///               .arg(arg!([length] "Set the length to use as a pos whole num i.e. 20"))
     ///               .get_matches_from(&["test", "12"]);
     ///
     /// // Specify the type explicitly (or use turbofish)
@@ -416,7 +473,7 @@ impl ArgMatches {
     /// let _: u32 = also_len;
     /// ```
     ///
-    /// [`panic!`]: https://doc.rust-lang.org/std/macro.panic!.html
+    /// [`FromStr][std::str::FromStr]
     pub fn value_of_t_or_exit<R>(&self, name: &str) -> R
     where
         R: FromStr,
@@ -425,22 +482,28 @@ impl ArgMatches {
         self.value_of_t(name).unwrap_or_else(|e| e.exit())
     }
 
-    /// Gets the typed values of a specific argument (i.e. an argument that takes multiple
-    /// values at runtime) and then converts them into the result type using [`std::str::FromStr`].
+    /// Parse the values (with [`FromStr`]) of a specific option or positional argument.
     ///
-    /// If parsing (of any value) has failed, returns Err.
+    /// There are two types of errors, parse failures and those where the argument wasn't present
+    /// (such as a non-required argument). Check [`ErrorKind`] to distinguish them.
+    ///
+    /// *NOTE:* If getting a value for an option or positional argument that allows multiples,
+    /// prefer [`ArgMatches::values_of_t`] as this method will only return the *first*
+    /// value.
     ///
     /// # Panics
     ///
-    /// This method will [`panic!`] if any of the values contains invalid UTF-8 code points.
+    /// If the value is invalid UTF-8.  See
+    /// [`Arg::allow_invalid_utf8`][crate::Arg::allow_invalid_utf8].
+    ///
+    /// If `id` is is not a valid argument or group name.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate clap;
-    /// # use clap::App;
+    /// # use clap::{App, arg};
     /// let matches = App::new("myapp")
-    ///               .arg("[length]... 'A sequence of integers because integers are neat!'")
+    ///               .arg(arg!([length] ... "A sequence of integers because integers are neat!"))
     ///               .get_matches_from(&["test", "12", "77", "40"]);
     ///
     /// // Specify the type explicitly (or use turbofish)
@@ -452,48 +515,42 @@ impl ArgMatches {
     /// // Something that expects Vec<u32>
     /// let _: Vec<u32> = also_len;
     /// ```
-    ///
-    /// [`panic!`]: https://doc.rust-lang.org/std/macro.panic!.html
+    /// [`ErrorKind`]: crate::ErrorKind
     pub fn values_of_t<R>(&self, name: &str) -> Result<Vec<R>, Error>
     where
         R: FromStr,
         <R as FromStr>::Err: Display,
     {
-        if let Some(vals) = self.values_of(name) {
-            vals.map(|v| {
-                v.parse::<R>().map_err(|e| {
-                    let message = format!("The argument '{}' isn't a valid value: {}", v, e);
+        let v = self
+            .values_of(name)
+            .ok_or_else(|| Error::argument_not_found_auto(name.to_string()))?;
+        v.map(|v| {
+            v.parse::<R>().map_err(|e| {
+                let message = format!("The argument '{}' isn't a valid value: {}", v, e);
 
-                    Error::value_validation(
-                        name.to_string(),
-                        v.to_string(),
-                        message.into(),
-                        ColorChoice::Auto,
-                    )
-                })
+                Error::value_validation_without_app(name.to_string(), v.to_string(), message.into())
             })
-            .collect()
-        } else {
-            Err(Error::argument_not_found_auto(name.to_string()))
-        }
+        })
+        .collect()
     }
 
-    /// Gets the typed values of a specific argument (i.e. an argument that takes multiple
-    /// values at runtime) and then converts them into the result type using [`std::str::FromStr`].
+    /// Parse the values (with [`FromStr`]) of a specific option or positional argument.
     ///
     /// If parsing (of any value) has failed, exits the program.
     ///
     /// # Panics
     ///
-    /// This method will [`panic!`] if any of the values contains invalid UTF-8 code points.
+    /// If the value is invalid UTF-8.  See
+    /// [`Arg::allow_invalid_utf8`][crate::Arg::allow_invalid_utf8].
+    ///
+    /// If `id` is is not a valid argument or group name.
     ///
     /// # Examples
     ///
     /// ```
-    /// # extern crate clap;
-    /// # use clap::App;
+    /// # use clap::{App, arg};
     /// let matches = App::new("myapp")
-    ///               .arg("[length]... 'A sequence of integers because integers are neat!'")
+    ///               .arg(arg!([length] ... "A sequence of integers because integers are neat!"))
     ///               .get_matches_from(&["test", "12", "77", "40"]);
     ///
     /// // Specify the type explicitly (or use turbofish)
@@ -505,8 +562,6 @@ impl ArgMatches {
     /// // Something that expects Vec<u32>
     /// let _: Vec<u32> = also_len;
     /// ```
-    ///
-    /// [`panic!`]: https://doc.rust-lang.org/std/macro.panic!.html
     pub fn values_of_t_or_exit<R>(&self, name: &str) -> Vec<R>
     where
         R: FromStr,
@@ -515,10 +570,14 @@ impl ArgMatches {
         self.values_of_t(name).unwrap_or_else(|e| e.exit())
     }
 
-    /// Returns `true` if an argument was present at runtime, otherwise `false`.
+    /// Check if an argument was present at runtime.
     ///
     /// *NOTE:* This will always return `true` if [`default_value`] has been set.
     /// [`occurrences_of`] can be used to check if a value is present at runtime.
+    ///
+    /// # Panics
+    ///
+    /// If `id` is is not a valid argument or group name.
     ///
     /// # Examples
     ///
@@ -538,24 +597,33 @@ impl ArgMatches {
     /// [`occurrences_of`]: ArgMatches::occurrences_of()
     pub fn is_present<T: Key>(&self, id: T) -> bool {
         let id = Id::from(id);
+
+        #[cfg(debug_assertions)]
+        self.get_arg(&id);
+
         self.args.contains_key(&id)
     }
 
-    /// Returns the number of times an argument was used at runtime. If an argument isn't present
-    /// it will return `0`.
+    /// The number of times an argument was used at runtime.
+    ///
+    /// If an argument isn't present it will return `0`.
     ///
     /// **NOTE:** This returns the number of times the argument was used, *not* the number of
     /// values. For example, `-o val1 val2 val3 -o val4` would return `2` (2 occurrences, but 4
-    /// values).
+    /// values).  See [Arg::multiple_occurrences][crate::Arg::multiple_occurrences].
+    ///
+    /// # Panics
+    ///
+    /// If `id` is is not a valid argument or group name.
     ///
     /// # Examples
     ///
     /// ```rust
-    /// # use clap::{App, Arg, ArgSettings};
+    /// # use clap::{App, Arg};
     /// let m = App::new("myprog")
     ///     .arg(Arg::new("debug")
     ///         .short('d')
-    ///         .setting(ArgSettings::MultipleOccurrences))
+    ///         .multiple_occurrences(true))
     ///     .get_matches_from(vec![
     ///         "myprog", "-d", "-d", "-d"
     ///     ]);
@@ -566,11 +634,11 @@ impl ArgMatches {
     /// This next example shows that counts actual uses of the argument, not just `-`'s
     ///
     /// ```rust
-    /// # use clap::{App, Arg, ArgSettings};
+    /// # use clap::{App, Arg};
     /// let m = App::new("myprog")
     ///     .arg(Arg::new("debug")
     ///         .short('d')
-    ///         .setting(ArgSettings::MultipleOccurrences))
+    ///         .multiple_occurrences(true))
     ///     .arg(Arg::new("flag")
     ///         .short('f'))
     ///     .get_matches_from(vec![
@@ -581,25 +649,30 @@ impl ArgMatches {
     /// assert_eq!(m.occurrences_of("flag"), 1);
     /// ```
     pub fn occurrences_of<T: Key>(&self, id: T) -> u64 {
-        self.args.get(&Id::from(id)).map_or(0, |a| a.occurs)
+        self.get_arg(&Id::from(id)).map_or(0, |a| a.occurs)
     }
 
-    /// Gets the starting index of the argument in respect to all other arguments. Indices are
-    /// similar to argv indices, but are not exactly 1:1.
+    /// The first index of that an argument showed up.
+    ///
+    /// Indices are similar to argv indices, but are not exactly 1:1.
     ///
     /// For flags (i.e. those arguments which don't have an associated value), indices refer
     /// to occurrence of the switch, such as `-f`, or `--flag`. However, for options the indices
     /// refer to the *values* `-o val` would therefore not represent two distinct indices, only the
     /// index for `val` would be recorded. This is by design.
     ///
-    /// Besides the flag/option descrepancy, the primary difference between an argv index and clap
+    /// Besides the flag/option discrepancy, the primary difference between an argv index and clap
     /// index, is that clap continues counting once all arguments have properly separated, whereas
     /// an argv index does not.
     ///
     /// The examples should clear this up.
     ///
     /// *NOTE:* If an argument is allowed multiple times, this method will only give the *first*
-    /// index.
+    /// index.  See [`ArgMatches::indices_of`].
+    ///
+    /// # Panics
+    ///
+    /// If `id` is is not a valid argument or group name.
     ///
     /// # Examples
     ///
@@ -616,8 +689,8 @@ impl ArgMatches {
     ///         .short('o')
     ///         .takes_value(true))
     ///     .get_matches_from(vec!["myapp", "-f", "-o", "val"]);
-    ///             // ARGV idices: ^0       ^1    ^2    ^3
-    ///             // clap idices:          ^1          ^3
+    ///            // ARGV indices: ^0       ^1    ^2    ^3
+    ///            // clap indices:          ^1          ^3
     ///
     /// assert_eq!(m.index_of("flag"), Some(1));
     /// assert_eq!(m.index_of("option"), Some(3));
@@ -634,8 +707,8 @@ impl ArgMatches {
     ///         .short('o')
     ///         .takes_value(true))
     ///     .get_matches_from(vec!["myapp", "-f", "-o=val"]);
-    ///             // ARGV idices: ^0       ^1    ^2
-    ///             // clap idices:          ^1       ^3
+    ///            // ARGV indices: ^0       ^1    ^2
+    ///            // clap indices:          ^1       ^3
     ///
     /// assert_eq!(m.index_of("flag"), Some(1));
     /// assert_eq!(m.index_of("option"), Some(3));
@@ -657,11 +730,11 @@ impl ArgMatches {
     ///         .short('o')
     ///         .takes_value(true))
     ///     .get_matches_from(vec!["myapp", "-fzF", "-oval"]);
-    ///             // ARGV idices: ^0      ^1       ^2
-    ///             // clap idices:         ^1,2,3    ^5
-    ///             //
-    ///             // clap sees the above as 'myapp -f -z -F -o val'
-    ///             //                         ^0    ^1 ^2 ^3 ^4 ^5
+    ///            // ARGV indices: ^0      ^1       ^2
+    ///            // clap indices:         ^1,2,3    ^5
+    ///            //
+    ///            // clap sees the above as 'myapp -f -z -F -o val'
+    ///            //                         ^0    ^1 ^2 ^3 ^4 ^5
     /// assert_eq!(m.index_of("flag"), Some(1));
     /// assert_eq!(m.index_of("flag2"), Some(3));
     /// assert_eq!(m.index_of("flag3"), Some(2));
@@ -683,11 +756,11 @@ impl ArgMatches {
     ///         .short('o')
     ///         .takes_value(true))
     ///     .get_matches_from(vec!["myapp", "-fzFoval"]);
-    ///             // ARGV idices: ^0       ^1
-    ///             // clap idices:          ^1,2,3^5
-    ///             //
-    ///             // clap sees the above as 'myapp -f -z -F -o val'
-    ///             //                         ^0    ^1 ^2 ^3 ^4 ^5
+    ///            // ARGV indices: ^0       ^1
+    ///            // clap indices:          ^1,2,3^5
+    ///            //
+    ///            // clap sees the above as 'myapp -f -z -F -o val'
+    ///            //                         ^0    ^1 ^2 ^3 ^4 ^5
     /// assert_eq!(m.index_of("flag"), Some(1));
     /// assert_eq!(m.index_of("flag2"), Some(3));
     /// assert_eq!(m.index_of("flag3"), Some(2));
@@ -704,34 +777,36 @@ impl ArgMatches {
     ///         .use_delimiter(true)
     ///         .multiple_values(true))
     ///     .get_matches_from(vec!["myapp", "-o=val1,val2,val3"]);
-    ///             // ARGV idices: ^0       ^1
-    ///             // clap idices:             ^2   ^3   ^4
-    ///             //
-    ///             // clap sees the above as 'myapp -o val1 val2 val3'
-    ///             //                         ^0    ^1 ^2   ^3   ^4
+    ///            // ARGV indices: ^0       ^1
+    ///            // clap indices:             ^2   ^3   ^4
+    ///            //
+    ///            // clap sees the above as 'myapp -o val1 val2 val3'
+    ///            //                         ^0    ^1 ^2   ^3   ^4
     /// assert_eq!(m.index_of("option"), Some(2));
     /// assert_eq!(m.indices_of("option").unwrap().collect::<Vec<_>>(), &[2, 3, 4]);
     /// ```
     /// [delimiter]: crate::Arg::value_delimiter()
-    pub fn index_of<T: Key>(&self, name: T) -> Option<usize> {
-        if let Some(arg) = self.args.get(&Id::from(name)) {
-            if let Some(i) = arg.get_index(0) {
-                return Some(i);
-            }
-        }
-        None
+    pub fn index_of<T: Key>(&self, id: T) -> Option<usize> {
+        let arg = self.get_arg(&Id::from(id))?;
+        let i = arg.get_index(0)?;
+        Some(i)
     }
 
-    /// Gets all indices of the argument in respect to all other arguments. Indices are
-    /// similar to argv indices, but are not exactly 1:1.
+    /// All indices an argument appeared at when parsing.
+    ///
+    /// Indices are similar to argv indices, but are not exactly 1:1.
     ///
     /// For flags (i.e. those arguments which don't have an associated value), indices refer
     /// to occurrence of the switch, such as `-f`, or `--flag`. However, for options the indices
     /// refer to the *values* `-o val` would therefore not represent two distinct indices, only the
     /// index for `val` would be recorded. This is by design.
     ///
-    /// *NOTE:* For more information about how clap indices compare to argv indices, see
+    /// *NOTE:* For more information about how clap indices compared to argv indices, see
     /// [`ArgMatches::index_of`]
+    ///
+    /// # Panics
+    ///
+    /// If `id` is is not a valid argument or group name.
     ///
     /// # Examples
     ///
@@ -743,11 +818,11 @@ impl ArgMatches {
     ///         .use_delimiter(true)
     ///         .multiple_values(true))
     ///     .get_matches_from(vec!["myapp", "-o=val1,val2,val3"]);
-    ///             // ARGV idices: ^0       ^1
-    ///             // clap idices:             ^2   ^3   ^4
-    ///             //
-    ///             // clap sees the above as 'myapp -o val1 val2 val3'
-    ///             //                         ^0    ^1 ^2   ^3   ^4
+    ///            // ARGV indices: ^0       ^1
+    ///            // clap indices:             ^2   ^3   ^4
+    ///            //
+    ///            // clap sees the above as 'myapp -o val1 val2 val3'
+    ///            //                         ^0    ^1 ^2   ^3   ^4
     /// assert_eq!(m.indices_of("option").unwrap().collect::<Vec<_>>(), &[2, 3, 4]);
     /// ```
     ///
@@ -764,8 +839,8 @@ impl ArgMatches {
     ///         .short('f')
     ///         .multiple_occurrences(true))
     ///     .get_matches_from(vec!["myapp", "-o", "val1", "-f", "-o", "val2", "-f"]);
-    ///             // ARGV idices: ^0       ^1    ^2      ^3    ^4    ^5      ^6
-    ///             // clap idices:                ^2      ^3          ^5      ^6
+    ///            // ARGV indices: ^0       ^1    ^2      ^3    ^4    ^5      ^6
+    ///            // clap indices:                ^2      ^3          ^5      ^6
     ///
     /// assert_eq!(m.indices_of("option").unwrap().collect::<Vec<_>>(), &[2, 5]);
     /// assert_eq!(m.indices_of("flag").unwrap().collect::<Vec<_>>(), &[3, 6]);
@@ -784,125 +859,29 @@ impl ArgMatches {
     ///         .takes_value(true)
     ///         .multiple_values(true))
     ///     .get_matches_from(vec!["myapp", "-o=val1,val2,val3"]);
-    ///             // ARGV idices: ^0       ^1
-    ///             // clap idices:             ^2
-    ///             //
-    ///             // clap sees the above as 'myapp -o "val1,val2,val3"'
-    ///             //                         ^0    ^1  ^2
+    ///            // ARGV indices: ^0       ^1
+    ///            // clap indices:             ^2
+    ///            //
+    ///            // clap sees the above as 'myapp -o "val1,val2,val3"'
+    ///            //                         ^0    ^1  ^2
     /// assert_eq!(m.indices_of("option").unwrap().collect::<Vec<_>>(), &[2]);
     /// ```
     /// [`ArgMatches::index_of`]: ArgMatches::index_of()
     /// [delimiter]: Arg::value_delimiter()
     pub fn indices_of<T: Key>(&self, id: T) -> Option<Indices<'_>> {
-        self.args.get(&Id::from(id)).map(|arg| Indices {
+        let arg = self.get_arg(&Id::from(id))?;
+        let i = Indices {
             iter: arg.indices(),
-        })
+            len: arg.num_vals(),
+        };
+        Some(i)
     }
 
-    /// Because [`Subcommand`]s are essentially "sub-[`App`]s" they have their own [`ArgMatches`]
-    /// as well. This method returns the [`ArgMatches`] for a particular subcommand or `None` if
-    /// the subcommand wasn't present at runtime.
+    /// The name and `ArgMatches` of the current [subcommand].
     ///
-    /// # Examples
+    /// Subcommand values are put in a child [`ArgMatches`]
     ///
-    /// ```rust
-    /// # use clap::{App, Arg, };
-    /// let app_m = App::new("myprog")
-    ///     .arg(Arg::new("debug")
-    ///         .short('d'))
-    ///     .subcommand(App::new("test")
-    ///         .arg(Arg::new("opt")
-    ///             .long("option")
-    ///             .takes_value(true)))
-    ///     .get_matches_from(vec![
-    ///         "myprog", "-d", "test", "--option", "val"
-    ///     ]);
-    ///
-    /// // Both parent commands, and child subcommands can have arguments present at the same times
-    /// assert!(app_m.is_present("debug"));
-    ///
-    /// // Get the subcommand's ArgMatches instance
-    /// if let Some(sub_m) = app_m.subcommand_matches("test") {
-    ///     // Use the struct like normal
-    ///     assert_eq!(sub_m.value_of("opt"), Some("val"));
-    /// }
-    /// ```
-    ///
-    /// [`Subcommand`]: crate::Subcommand
-    /// [`App`]: crate::App
-    pub fn subcommand_matches<T: Key>(&self, id: T) -> Option<&ArgMatches> {
-        if let Some(ref s) = self.subcommand {
-            if s.id == id.into() {
-                return Some(&s.matches);
-            }
-        }
-        None
-    }
-
-    /// Because [`Subcommand`]s are essentially "sub-[`App`]s" they have their own [`ArgMatches`]
-    /// as well.But simply getting the sub-[`ArgMatches`] doesn't help much if we don't also know
-    /// which subcommand was actually used. This method returns the name of the subcommand that was
-    /// used at runtime, or `None` if one wasn't.
-    ///
-    /// *NOTE*: Subcommands form a hierarchy, where multiple subcommands can be used at runtime,
-    /// but only a single subcommand from any group of sibling commands may used at once.
-    ///
-    /// An ASCII art depiction may help explain this better...Using a fictional version of `git` as
-    /// the demo subject. Imagine the following are all subcommands of `git` (note, the author is
-    /// aware these aren't actually all subcommands in the real `git` interface, but it makes
-    /// explanation easier)
-    ///
-    /// ```notrust
-    ///              Top Level App (git)                         TOP
-    ///                              |
-    ///       -----------------------------------------
-    ///      /             |                \          \
-    ///   clone          push              add       commit      LEVEL 1
-    ///     |           /    \            /    \       |
-    ///    url      origin   remote    ref    name   message     LEVEL 2
-    ///             /                  /\
-    ///          path            remote  local                   LEVEL 3
-    /// ```
-    ///
-    /// Given the above fictional subcommand hierarchy, valid runtime uses would be (not an all
-    /// inclusive list, and not including argument options per command for brevity and clarity):
-    ///
-    /// ```sh
-    /// $ git clone url
-    /// $ git push origin path
-    /// $ git add ref local
-    /// $ git commit message
-    /// ```
-    ///
-    /// Notice only one command per "level" may be used. You could not, for example, do `$ git
-    /// clone url push origin path`
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # use clap::{App, Arg, };
-    ///  let app_m = App::new("git")
-    ///      .subcommand(App::new("clone"))
-    ///      .subcommand(App::new("push"))
-    ///      .subcommand(App::new("commit"))
-    ///      .get_matches();
-    ///
-    /// match app_m.subcommand_name() {
-    ///     Some("clone")  => {}, // clone was used
-    ///     Some("push")   => {}, // push was used
-    ///     Some("commit") => {}, // commit was used
-    ///     _              => {}, // Either no subcommand or one not tested for...
-    /// }
-    /// ```
-    /// [`Subcommand`]: crate::Subcommand
-    /// [`App`]: crate::App
-    #[inline]
-    pub fn subcommand_name(&self) -> Option<&str> {
-        self.subcommand.as_ref().map(|sc| &*sc.name)
-    }
-
-    /// This brings together [`ArgMatches::subcommand_matches`] and [`ArgMatches::subcommand_name`]
-    /// by returning a tuple with both pieces of information.
+    /// Returns `None` if the subcommand wasn't present at runtime,
     ///
     /// # Examples
     ///
@@ -946,12 +925,180 @@ impl ArgMatches {
     ///     _ => {},
     /// }
     /// ```
-    /// [`ArgMatches::subcommand_matches`]: ArgMatches::subcommand_matches()
-    /// [`ArgMatches::subcommand_name`]: ArgMatches::subcommand_name()
+    /// [subcommand]: crate::App::subcommand
     #[inline]
     pub fn subcommand(&self) -> Option<(&str, &ArgMatches)> {
         self.subcommand.as_ref().map(|sc| (&*sc.name, &sc.matches))
     }
+
+    /// The `ArgMatches` for the current [subcommand].
+    ///
+    /// Subcommand values are put in a child [`ArgMatches`]
+    ///
+    /// Returns `None` if the subcommand wasn't present at runtime,
+    ///
+    /// # Panics
+    ///
+    /// If `id` is is not a valid subcommand.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # use clap::{App, Arg, };
+    /// let app_m = App::new("myprog")
+    ///     .arg(Arg::new("debug")
+    ///         .short('d'))
+    ///     .subcommand(App::new("test")
+    ///         .arg(Arg::new("opt")
+    ///             .long("option")
+    ///             .takes_value(true)))
+    ///     .get_matches_from(vec![
+    ///         "myprog", "-d", "test", "--option", "val"
+    ///     ]);
+    ///
+    /// // Both parent commands, and child subcommands can have arguments present at the same times
+    /// assert!(app_m.is_present("debug"));
+    ///
+    /// // Get the subcommand's ArgMatches instance
+    /// if let Some(sub_m) = app_m.subcommand_matches("test") {
+    ///     // Use the struct like normal
+    ///     assert_eq!(sub_m.value_of("opt"), Some("val"));
+    /// }
+    /// ```
+    ///
+    /// [subcommand]: crate::App::subcommand
+    /// [`App`]: crate::App
+    pub fn subcommand_matches<T: Key>(&self, id: T) -> Option<&ArgMatches> {
+        self.get_subcommand(&id.into()).map(|sc| &sc.matches)
+    }
+
+    /// The name of the current [subcommand].
+    ///
+    /// Returns `None` if the subcommand wasn't present at runtime,
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use clap::{App, Arg, };
+    ///  let app_m = App::new("git")
+    ///      .subcommand(App::new("clone"))
+    ///      .subcommand(App::new("push"))
+    ///      .subcommand(App::new("commit"))
+    ///      .get_matches();
+    ///
+    /// match app_m.subcommand_name() {
+    ///     Some("clone")  => {}, // clone was used
+    ///     Some("push")   => {}, // push was used
+    ///     Some("commit") => {}, // commit was used
+    ///     _              => {}, // Either no subcommand or one not tested for...
+    /// }
+    /// ```
+    /// [subcommand]: crate::App::subcommand
+    /// [`App`]: crate::App
+    #[inline]
+    pub fn subcommand_name(&self) -> Option<&str> {
+        self.subcommand.as_ref().map(|sc| &*sc.name)
+    }
+
+    /// Check if an arg can be queried
+    ///
+    /// By default, `ArgMatches` functions assert on undefined `Id`s to help catch programmer
+    /// mistakes.  In some context, this doesn't work, so users can use this function to check
+    /// before they do a query on `ArgMatches`.
+    #[inline]
+    #[doc(hidden)]
+    pub fn is_valid_arg(&self, _id: impl Key) -> bool {
+        #[cfg(debug_assertions)]
+        {
+            let id = Id::from(_id);
+            self.disable_asserts || id == Id::empty_hash() || self.valid_args.contains(&id)
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            true
+        }
+    }
+
+    /// Check if a subcommand can be queried
+    ///
+    /// By default, `ArgMatches` functions assert on undefined `Id`s to help catch programmer
+    /// mistakes.  In some context, this doesn't work, so users can use this function to check
+    /// before they do a query on `ArgMatches`.
+    #[inline]
+    #[doc(hidden)]
+    pub fn is_valid_subcommand(&self, _id: impl Key) -> bool {
+        #[cfg(debug_assertions)]
+        {
+            let id = Id::from(_id);
+            self.disable_asserts || id == Id::empty_hash() || self.valid_subcommands.contains(&id)
+        }
+        #[cfg(not(debug_assertions))]
+        {
+            true
+        }
+    }
+}
+
+// Private methods
+impl ArgMatches {
+    #[inline]
+    #[cfg_attr(debug_assertions, track_caller)]
+    fn get_arg(&self, arg: &Id) -> Option<&MatchedArg> {
+        #[cfg(debug_assertions)]
+        {
+            if self.disable_asserts || *arg == Id::empty_hash() || self.valid_args.contains(arg) {
+            } else if self.valid_subcommands.contains(arg) {
+                panic!(
+                    "Subcommand `{:?}` used where an argument or group name was expected.",
+                    arg
+                );
+            } else {
+                panic!(
+                    "`{:?}` is not a name of an argument or a group.\n\
+                     Make sure you're using the name of the argument itself \
+                     and not the name of short or long flags.",
+                    arg
+                );
+            }
+        }
+
+        self.args.get(arg)
+    }
+
+    #[inline]
+    #[cfg_attr(debug_assertions, track_caller)]
+    fn get_subcommand(&self, id: &Id) -> Option<&SubCommand> {
+        #[cfg(debug_assertions)]
+        {
+            if self.disable_asserts
+                || *id == Id::empty_hash()
+                || self.valid_subcommands.contains(id)
+            {
+            } else if self.valid_args.contains(id) {
+                panic!(
+                    "Argument or group `{:?}` used where a subcommand name was expected.",
+                    id
+                );
+            } else {
+                panic!("`{:?}` is not a name of a subcommand.", id);
+            }
+        }
+
+        if let Some(ref sc) = self.subcommand {
+            if sc.id == *id {
+                return Some(sc);
+            }
+        }
+
+        None
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SubCommand {
+    pub(crate) id: Id,
+    pub(crate) name: String,
+    pub(crate) matches: ArgMatches,
 }
 
 // The following were taken and adapted from vec_map source
@@ -959,8 +1106,7 @@ impl ArgMatches {
 // commit: be5e1fa3c26e351761b33010ddbdaf5f05dbcc33
 // license: MIT - Copyright (c) 2015 The Rust Project Developers
 
-/// An iterator for getting multiple values out of an argument via the [`ArgMatches::values_of`]
-/// method.
+/// Iterate over multiple values for an argument via [`ArgMatches::values_of`].
 ///
 /// # Examples
 ///
@@ -969,9 +1115,9 @@ impl ArgMatches {
 /// let m = App::new("myapp")
 ///     .arg(Arg::new("output")
 ///         .short('o')
-///         .multiple_values(true)
+///         .multiple_occurrences(true)
 ///         .takes_value(true))
-///     .get_matches_from(vec!["myapp", "-o", "val1", "val2"]);
+///     .get_matches_from(vec!["myapp", "-o", "val1", "-o", "val2"]);
 ///
 /// let mut values = m.values_of("output").unwrap();
 ///
@@ -985,6 +1131,7 @@ impl ArgMatches {
 pub struct Values<'a> {
     #[allow(clippy::type_complexity)]
     iter: Map<Flatten<Iter<'a, Vec<OsString>>>, for<'r> fn(&'r OsString) -> &'r str>,
+    len: usize,
 }
 
 impl<'a> Iterator for Values<'a> {
@@ -994,7 +1141,7 @@ impl<'a> Iterator for Values<'a> {
         self.iter.next()
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
+        (self.len, Some(self.len))
     }
 }
 
@@ -1012,6 +1159,7 @@ impl<'a> Default for Values<'a> {
         static EMPTY: [Vec<OsString>; 0] = [];
         Values {
             iter: EMPTY[..].iter().flatten().map(|_| unreachable!()),
+            len: 0,
         }
     }
 }
@@ -1021,6 +1169,7 @@ impl<'a> Default for Values<'a> {
 pub struct GroupedValues<'a> {
     #[allow(clippy::type_complexity)]
     iter: Map<Iter<'a, Vec<OsString>>, fn(&Vec<OsString>) -> Vec<&str>>,
+    len: usize,
 }
 
 impl<'a> Iterator for GroupedValues<'a> {
@@ -1030,7 +1179,7 @@ impl<'a> Iterator for GroupedValues<'a> {
         self.iter.next()
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
+        (self.len, Some(self.len))
     }
 }
 
@@ -1048,24 +1197,24 @@ impl<'a> Default for GroupedValues<'a> {
         static EMPTY: [Vec<OsString>; 0] = [];
         GroupedValues {
             iter: EMPTY[..].iter().map(|_| unreachable!()),
+            len: 0,
         }
     }
 }
 
-/// An iterator for getting multiple values out of an argument via the [`ArgMatches::values_of_os`]
-/// method. Usage of this iterator allows values which contain invalid UTF-8 code points unlike
-/// [`Values`].
+/// Iterate over multiple values for an argument via [`ArgMatches::values_of_os`].
 ///
 /// # Examples
 ///
 #[cfg_attr(not(unix), doc = " ```ignore")]
 #[cfg_attr(unix, doc = " ```")]
-/// # use clap::{App, Arg};
+/// # use clap::{App, arg};
 /// use std::ffi::OsString;
 /// use std::os::unix::ffi::{OsStrExt,OsStringExt};
 ///
 /// let m = App::new("utf8")
-///     .arg(Arg::from("<arg> 'some arg'"))
+///     .arg(arg!(<arg> "some arg")
+///         .allow_invalid_utf8(true))
 ///     .get_matches_from(vec![OsString::from("myprog"),
 ///                             // "Hi {0xe9}!"
 ///                             OsString::from_vec(vec![b'H', b'i', b' ', 0xe9, b'!'])]);
@@ -1077,6 +1226,7 @@ impl<'a> Default for GroupedValues<'a> {
 pub struct OsValues<'a> {
     #[allow(clippy::type_complexity)]
     iter: Map<Flatten<Iter<'a, Vec<OsString>>>, fn(&OsString) -> &OsStr>,
+    len: usize,
 }
 
 impl<'a> Iterator for OsValues<'a> {
@@ -1086,7 +1236,7 @@ impl<'a> Iterator for OsValues<'a> {
         self.iter.next()
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
+        (self.len, Some(self.len))
     }
 }
 
@@ -1104,12 +1254,12 @@ impl Default for OsValues<'_> {
         static EMPTY: [Vec<OsString>; 0] = [];
         OsValues {
             iter: EMPTY[..].iter().flatten().map(|_| unreachable!()),
+            len: 0,
         }
     }
 }
 
-/// An iterator for getting multiple indices out of an argument via the [`ArgMatches::indices_of`]
-/// method.
+/// Iterate over indices for where an argument appeared when parsing, via [`ArgMatches::indices_of`]
 ///
 /// # Examples
 ///
@@ -1133,6 +1283,7 @@ impl Default for OsValues<'_> {
 #[allow(missing_debug_implementations)]
 pub struct Indices<'a> {
     iter: Cloned<Iter<'a, usize>>,
+    len: usize,
 }
 
 impl<'a> Iterator for Indices<'a> {
@@ -1142,7 +1293,7 @@ impl<'a> Iterator for Indices<'a> {
         self.iter.next()
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
+        (self.len, Some(self.len))
     }
 }
 
@@ -1161,8 +1312,29 @@ impl<'a> Default for Indices<'a> {
         // This is never called because the iterator is empty:
         Indices {
             iter: EMPTY[..].iter().cloned(),
+            len: 0,
         }
     }
+}
+
+#[cfg_attr(debug_assertions, track_caller)]
+#[inline]
+fn assert_utf8_validation(arg: &MatchedArg, id: &Id) {
+    debug_assert!(
+        matches!(arg.is_invalid_utf8_allowed(), None | Some(false)),
+        "Must use `_os` lookups with `Arg::allow_invalid_utf8` at `{:?}`",
+        id
+    );
+}
+
+#[cfg_attr(debug_assertions, track_caller)]
+#[inline]
+fn assert_no_utf8_validation(arg: &MatchedArg, id: &Id) {
+    debug_assert!(
+        matches!(arg.is_invalid_utf8_allowed(), None | Some(true)),
+        "Must use `Arg::allow_invalid_utf8` with `_os` lookups at `{:?}`",
+        id
+    );
 }
 
 #[cfg(test)]
@@ -1206,5 +1378,57 @@ mod tests {
         let matches = ArgMatches::default();
         let mut indices = matches.indices_of("").unwrap_or_default();
         assert_eq!(indices.next(), None);
+    }
+
+    #[test]
+    fn values_exact_size() {
+        let l = crate::App::new("test")
+            .arg(
+                crate::Arg::new("POTATO")
+                    .takes_value(true)
+                    .multiple_values(true)
+                    .required(true),
+            )
+            .try_get_matches_from(["test", "one"])
+            .unwrap()
+            .values_of("POTATO")
+            .expect("present")
+            .len();
+        assert_eq!(l, 1);
+    }
+
+    #[test]
+    fn os_values_exact_size() {
+        let l = crate::App::new("test")
+            .arg(
+                crate::Arg::new("POTATO")
+                    .takes_value(true)
+                    .multiple_values(true)
+                    .allow_invalid_utf8(true)
+                    .required(true),
+            )
+            .try_get_matches_from(["test", "one"])
+            .unwrap()
+            .values_of_os("POTATO")
+            .expect("present")
+            .len();
+        assert_eq!(l, 1);
+    }
+
+    #[test]
+    fn indices_exact_size() {
+        let l = crate::App::new("test")
+            .arg(
+                crate::Arg::new("POTATO")
+                    .takes_value(true)
+                    .multiple_values(true)
+                    .required(true),
+            )
+            .try_get_matches_from(["test", "one"])
+            .unwrap()
+            .indices_of("POTATO")
+            .expect("present")
+            .len();
+        assert_eq!(l, 1);
     }
 }

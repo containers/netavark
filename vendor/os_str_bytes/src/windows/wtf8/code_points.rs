@@ -1,11 +1,12 @@
 use std::iter::Peekable;
 use std::mem;
 
-use super::is_continuation;
+use crate::util::is_continuation;
+use crate::util::BYTE_SHIFT;
+use crate::util::CONT_MASK;
+
 use super::EncodingError;
 use super::Result;
-use super::BYTE_SHIFT;
-use super::CONT_MASK;
 
 pub(in super::super) struct CodePoints<I>
 where
@@ -19,7 +20,7 @@ impl<I> CodePoints<I>
 where
     I: Iterator<Item = u8>,
 {
-    pub(super) fn new<S>(string: S) -> Self
+    pub(in super::super) fn new<S>(string: S) -> Self
     where
         S: IntoIterator<IntoIter = I, Item = I::Item>,
     {
@@ -27,6 +28,25 @@ where
             iter: string.into_iter().peekable(),
             surrogate: false,
         }
+    }
+
+    fn consume_next(&mut self, code_point: &mut u32) -> Result<()> {
+        if let Some(&byte) = self.iter.peek() {
+            if !is_continuation(byte) {
+                self.surrogate = false;
+                // Not consuming this byte will be useful if this crate ever
+                // offers a way to encode lossily.
+                return Err(EncodingError::Byte(byte));
+            }
+            *code_point =
+                (*code_point << BYTE_SHIFT) | u32::from(byte & CONT_MASK);
+
+            let removed = self.iter.next();
+            debug_assert_eq!(Some(byte), removed);
+        } else {
+            return Err(EncodingError::End());
+        }
+        Ok(())
     }
 
     pub(super) fn inner_size_hint(&self) -> (usize, Option<usize>) {
@@ -44,24 +64,12 @@ where
         let byte = self.iter.next()?;
         let mut code_point: u32 = byte.into();
 
-        macro_rules! r#continue {
-            () => {
-                if let Some(&byte) = self.iter.peek() {
-                    if !is_continuation(byte) {
-                        self.surrogate = false;
-                        // Not consuming this byte will be useful if this crate
-                        // ever offers a way to encode lossily.
-                        return Some(Err(EncodingError::Byte(byte)));
-                    }
-                    code_point = (code_point << BYTE_SHIFT)
-                        | u32::from(byte & CONT_MASK);
-
-                    let removed = self.iter.next();
-                    debug_assert_eq!(Some(byte), removed);
-                } else {
-                    return Some(Err(EncodingError::End()));
-                };
-            };
+        macro_rules! consume_next {
+            () => {{
+                if let Err(error) = self.consume_next(&mut code_point) {
+                    return Some(Err(error));
+                }
+            }};
         }
 
         let prev_surrogate = mem::replace(&mut self.surrogate, false);
@@ -76,13 +84,13 @@ where
                 code_point &= 0x1F;
             } else {
                 code_point &= 0x0F;
-                r#continue!();
+                consume_next!();
 
                 if byte >= 0xF0 {
-                    if code_point.wrapping_sub(0x10) > 0x100 {
+                    if code_point.wrapping_sub(0x10) >= 0x100 {
                         invalid = true;
                     }
-                    r#continue!();
+                    consume_next!();
 
                 // This condition is optimized to detect surrogate code points.
                 } else if code_point & 0xFE0 == 0x360 {
@@ -98,7 +106,7 @@ where
                     invalid = true;
                 }
             }
-            r#continue!();
+            consume_next!();
         }
         if invalid {
             return Some(Err(EncodingError::CodePoint(code_point)));

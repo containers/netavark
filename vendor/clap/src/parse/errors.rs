@@ -1,9 +1,10 @@
 // Std
 use std::{
+    borrow::Cow,
     convert::From,
     error,
     fmt::{self, Debug, Display, Formatter},
-    io,
+    io::{self, BufRead},
     result::Result as StdResult,
 };
 
@@ -12,7 +13,8 @@ use crate::{
     build::Arg,
     output::fmt::Colorizer,
     parse::features::suggestions,
-    util::{safe_exit, termcolor::ColorChoice, SUCCESS_CODE, USAGE_CODE},
+    util::{color::ColorChoice, safe_exit, SUCCESS_CODE, USAGE_CODE},
+    App, AppSettings,
 };
 
 /// Short hand for [`Result`] type
@@ -22,6 +24,7 @@ pub type Result<T> = StdResult<T, Error>;
 
 /// Command line argument parser kind of error
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum ErrorKind {
     /// Occurs when an [`Arg`] has a set of possible values,
     /// and the user provides a value which isn't in that set.
@@ -45,9 +48,9 @@ pub enum ErrorKind {
     /// # Examples
     ///
     /// ```rust
-    /// # use clap::{App, Arg, ErrorKind};
+    /// # use clap::{App, arg, ErrorKind};
     /// let result = App::new("prog")
-    ///     .arg(Arg::from("--flag 'some flag'"))
+    ///     .arg(arg!(--flag "some flag"))
     ///     .try_get_matches_from(vec!["prog", "--other"]);
     /// assert!(result.is_err());
     /// assert_eq!(result.unwrap_err().kind, ErrorKind::UnknownArgument);
@@ -68,7 +71,7 @@ pub enum ErrorKind {
     ///     .subcommand(App::new("config")
     ///         .about("Used for configuration")
     ///         .arg(Arg::new("config_file")
-    ///             .about("The configuration file to use")
+    ///             .help("The configuration file to use")
     ///             .index(1)))
     ///     .try_get_matches_from(vec!["prog", "confi"]);
     /// assert!(result.is_err());
@@ -95,7 +98,7 @@ pub enum ErrorKind {
     ///     .subcommand(App::new("config")
     ///         .about("Used for configuration")
     ///         .arg(Arg::new("config_file")
-    ///             .about("The configuration file to use")
+    ///             .help("The configuration file to use")
     ///             .index(1)))
     ///     .try_get_matches_from(vec!["prog", "help", "nothing"]);
     /// assert!(result.is_err());
@@ -113,11 +116,11 @@ pub enum ErrorKind {
     /// # Examples
     ///
     /// ```rust
-    /// # use clap::{App, Arg, ErrorKind, ArgSettings};
+    /// # use clap::{App, Arg, ErrorKind};
     /// let res = App::new("prog")
     ///     .arg(Arg::new("color")
-    ///          .setting(ArgSettings::TakesValue)
-    ///          .setting(ArgSettings::ForbidEmptyValues)
+    ///          .takes_value(true)
+    ///          .forbid_empty_values(true)
     ///          .long("color"))
     ///     .try_get_matches_from(vec!["prog", "--color="]);
     /// assert!(res.is_err());
@@ -125,15 +128,15 @@ pub enum ErrorKind {
     /// ```
     EmptyValue,
 
-    /// Occurs when the user doesn't use equals for an option that requres equal
+    /// Occurs when the user doesn't use equals for an option that requires equal
     /// sign to provide values.
     ///
     /// ```rust
-    /// # use clap::{App, Arg, ErrorKind, ArgSettings};
+    /// # use clap::{App, Arg, ErrorKind};
     /// let res = App::new("prog")
     ///     .arg(Arg::new("color")
-    ///          .setting(ArgSettings::TakesValue)
-    ///          .setting(ArgSettings::RequireEquals)
+    ///          .takes_value(true)
+    ///          .require_equals(true)
     ///          .long("color"))
     ///     .try_get_matches_from(vec!["prog", "--color", "red"]);
     /// assert!(res.is_err());
@@ -310,8 +313,12 @@ pub enum ErrorKind {
     /// ```
     UnexpectedMultipleUsage,
 
-    /// Occurs when the user provides a value containing invalid UTF-8 for an argument and
-    /// [`AppSettings::StrictUtf8`] is set.
+    /// Occurs when the user provides a value containing invalid UTF-8.
+    ///
+    /// To allow arbitrary data
+    /// - Set [`Arg::allow_invalid_utf8`] for argument values
+    /// - Set [`AppSettings::AllowInvalidUtf8ForExternalSubcommands`] for external-subcommand
+    ///   values
     ///
     /// # Platform Specific
     ///
@@ -325,7 +332,6 @@ pub enum ErrorKind {
     /// # use std::os::unix::ffi::OsStringExt;
     /// # use std::ffi::OsString;
     /// let result = App::new("prog")
-    ///     .setting(AppSettings::StrictUtf8)
     ///     .arg(Arg::new("utf8")
     ///         .short('u')
     ///         .takes_value(true))
@@ -336,7 +342,8 @@ pub enum ErrorKind {
     /// assert_eq!(result.unwrap_err().kind, ErrorKind::InvalidUtf8);
     /// ```
     ///
-    /// [`AppSettings::StrictUtf8`]: crate::AppSettings::StrictUtf8
+    /// [`Arg::allow_invalid_utf8`]: crate::Arg::allow_invalid_utf8
+    /// [`AppSettings::AllowInvalidUtf8ForExternalSubcommands`]: crate::AppSettings::AllowInvalidUtf8ForExternalSubcommands
     InvalidUtf8,
 
     /// Not a true "error" as it means `--help` or similar was used.
@@ -370,7 +377,7 @@ pub enum ErrorKind {
     ///     .subcommand(App::new("config")
     ///         .about("Used for configuration")
     ///         .arg(Arg::new("config_file")
-    ///             .about("The configuration file to use")))
+    ///             .help("The configuration file to use")))
     ///     .try_get_matches_from(vec!["prog"]);
     /// assert!(result.is_err());
     /// assert_eq!(result.unwrap_err().kind, ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand);
@@ -389,6 +396,7 @@ pub enum ErrorKind {
     /// ```rust
     /// # use clap::{App, Arg, ErrorKind};
     /// let result = App::new("prog")
+    ///     .version("3.0")
     ///     .try_get_matches_from(vec!["prog", "--version"]);
     /// assert!(result.is_err());
     /// assert_eq!(result.unwrap_err().kind, ErrorKind::DisplayVersion);
@@ -417,72 +425,77 @@ pub enum ErrorKind {
 }
 
 /// Command Line Argument Parser Error
+///
+/// See [`App::error`] to create an error.
+///
+/// [`App::error`]: crate::App::error
 #[derive(Debug)]
 pub struct Error {
     /// Formatted error message, enhancing the cause message with extra information
-    pub(crate) message: Colorizer,
+    pub(crate) message: Message,
     /// The type of error
     pub kind: ErrorKind,
     /// Additional information depending on the error kind, like values and argument names.
     /// Useful when you want to render an error of your own.
     pub info: Vec<String>,
-    pub(crate) source: Option<Box<dyn error::Error>>,
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        Display::fmt(&self.message, f)
-    }
-}
-
-fn start_error(c: &mut Colorizer, msg: impl Into<String>) {
-    c.error("error:");
-    c.none(" ");
-    c.none(msg);
-}
-
-fn put_usage(c: &mut Colorizer, usage: impl Into<String>) {
-    c.none("\n\n");
-    c.none(usage);
-}
-
-fn try_help(c: &mut Colorizer) {
-    c.none("\n\nFor more information try ");
-    c.good("--help");
-    c.none("\n");
+    pub(crate) source: Option<Box<dyn error::Error + Send + Sync>>,
+    wait_on_exit: bool,
+    backtrace: Option<Backtrace>,
 }
 
 impl Error {
-    /// Returns the singular or plural form on the verb to be based on the argument's value.
-    fn singular_or_plural(n: usize) -> String {
-        if n > 1 {
-            String::from("were")
-        } else {
-            String::from("was")
-        }
+    /// Create an unformatted error
+    ///
+    /// This is for you need to pass the error up to
+    /// a place that has access to the `App` at which point you can call [`Error::format`].
+    ///
+    /// Prefer [`App::error`] for generating errors.
+    ///
+    /// [`App::error`]: crate::App::error
+    pub fn raw(kind: ErrorKind, message: impl std::fmt::Display) -> Self {
+        Self::new(message.to_string(), kind, false)
     }
 
-    /// Should the message be written to `stdout` or not
+    /// Format the existing message with the App's context
+    #[must_use]
+    pub fn format(mut self, app: &mut App) -> Self {
+        app._build();
+        let usage = app.render_usage();
+        self.message.format(app, usage);
+        self.wait_on_exit = app.settings.is_set(AppSettings::WaitOnError);
+        self
+    }
+
+    /// Should the message be written to `stdout` or not?
     #[inline]
     pub fn use_stderr(&self) -> bool {
         !matches!(
             self.kind,
-            ErrorKind::DisplayHelp
-                | ErrorKind::DisplayVersion
-                | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+            ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
         )
     }
 
-    /// Prints the error and exits. Depending on the error kind, this
-    /// either prints to `stderr` and exits with a status of `1`
+    /// Prints the error and exits.
+    ///
+    /// Depending on the error kind, this either prints to `stderr` and exits with a status of `2`
     /// or prints to `stdout` and exits with a status of `0`.
     pub fn exit(&self) -> ! {
         if self.use_stderr() {
-            self.message.print().expect("Error writing Error to stderr");
+            // Swallow broken pipe errors
+            let _ = self.print();
+
+            if self.wait_on_exit {
+                wlnerr!("\nPress [ENTER] / [RETURN] to continue...");
+                let mut s = String::new();
+                let i = io::stdin();
+                i.lock().read_line(&mut s).unwrap();
+            }
+
             safe_exit(USAGE_CODE);
         }
 
-        self.message.print().expect("Error writing Error to stdout");
+        // Swallow broken pipe errors
+        let _ = self.print();
         safe_exit(SUCCESS_CODE)
     }
 
@@ -503,96 +516,131 @@ impl Error {
     /// };
     /// ```
     pub fn print(&self) -> io::Result<()> {
-        self.message.print()
+        self.message.formatted().print()
+    }
+
+    /// Deprecated, replaced with [`App::error`]
+    ///
+    /// [`App::error`]: crate::App::error
+    #[deprecated(since = "3.0.0", note = "Replaced with `App::error`")]
+    pub fn with_description(description: String, kind: ErrorKind) -> Self {
+        Error::raw(kind, description)
+    }
+
+    pub(crate) fn new(message: impl Into<Message>, kind: ErrorKind, wait_on_exit: bool) -> Self {
+        Self {
+            message: message.into(),
+            kind,
+            info: vec![],
+            source: None,
+            wait_on_exit,
+            backtrace: Backtrace::new(),
+        }
+    }
+
+    pub(crate) fn set_info(mut self, info: Vec<String>) -> Self {
+        self.info = info;
+        self
+    }
+
+    pub(crate) fn set_source(mut self, source: Box<dyn error::Error + Send + Sync>) -> Self {
+        self.source = Some(source);
+        self
     }
 
     pub(crate) fn argument_conflict(
+        app: &App,
         arg: &Arg,
-        other: Option<String>,
+        others: Vec<String>,
         usage: String,
-        color: ColorChoice,
     ) -> Self {
-        let mut c = Colorizer::new(true, color);
+        let mut c = Colorizer::new(true, app.get_color());
         let arg = arg.to_string();
 
         start_error(&mut c, "The argument '");
-        c.warning(arg.clone());
-        c.none("' cannot be used with ");
+        c.warning(arg);
+        c.none("' cannot be used with");
 
-        match other {
-            Some(ref name) => {
-                c.none("'");
-                c.warning(name);
-                c.none("'");
+        let mut info = vec![];
+        match others.len() {
+            0 => {
+                c.none(" one or more of the other specified arguments");
             }
-            None => {
-                c.none("one or more of the other specified arguments");
+            1 => {
+                let v = &others[0];
+                c.none(" '");
+                c.warning(v.clone());
+                c.none("'");
+                info.push(v.clone());
             }
-        };
+            _ => {
+                c.none(":");
+                for v in others {
+                    c.none("\n    ");
+                    c.warning(v.to_string());
+                    info.push(v.to_string());
+                }
+            }
+        }
 
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
-        let mut info = vec![arg];
-        if let Some(other) = other {
-            info.push(other);
-        }
-
-        Error {
-            message: c,
-            kind: ErrorKind::ArgumentConflict,
-            info,
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::ArgumentConflict,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
+        .set_info(info)
     }
 
-    pub(crate) fn empty_value(arg: &Arg, usage: String, color: ColorChoice) -> Self {
-        let mut c = Colorizer::new(true, color);
+    pub(crate) fn empty_value(app: &App, arg: &Arg, usage: String) -> Self {
+        let mut c = Colorizer::new(true, app.get_color());
         let arg = arg.to_string();
 
         start_error(&mut c, "The argument '");
         c.warning(arg.clone());
         c.none("' requires a value but none was supplied");
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::EmptyValue,
-            info: vec![arg],
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::EmptyValue,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
+        .set_info(vec![arg])
     }
 
-    pub(crate) fn no_equals(arg: String, usage: String, color: ColorChoice) -> Self {
-        let mut c = Colorizer::new(true, color);
+    pub(crate) fn no_equals(app: &App, arg: String, usage: String) -> Self {
+        let mut c = Colorizer::new(true, app.get_color());
 
         start_error(&mut c, "Equal sign is needed when assigning values to '");
         c.warning(&arg);
         c.none("'.");
 
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::NoEquals,
-            info: vec![arg],
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::NoEquals,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
+        .set_info(vec![arg])
     }
 
     pub(crate) fn invalid_value<G>(
+        app: &App,
         bad_val: String,
         good_vals: &[G],
         arg: &Arg,
         usage: String,
-        color: ColorChoice,
     ) -> Self
     where
         G: AsRef<str> + Display,
     {
-        let mut c = Colorizer::new(true, color);
+        let mut c = Colorizer::new(true, app.get_color());
         let suffix = suggestions::did_you_mean(&bad_val, good_vals.iter()).pop();
 
         let mut sorted: Vec<String> = good_vals
@@ -632,27 +680,27 @@ impl Error {
         }
 
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
         let mut info = vec![arg.to_string(), bad_val];
         info.extend(sorted);
 
-        Error {
-            message: c,
-            kind: ErrorKind::InvalidValue,
-            info,
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::InvalidValue,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
+        .set_info(info)
     }
 
     pub(crate) fn invalid_subcommand(
+        app: &App,
         subcmd: String,
         did_you_mean: String,
         name: String,
         usage: String,
-        color: ColorChoice,
     ) -> Self {
-        let mut c = Colorizer::new(true, color);
+        let mut c = Colorizer::new(true, app.get_color());
 
         start_error(&mut c, "The subcommand '");
         c.warning(subcmd.clone());
@@ -666,44 +714,40 @@ impl Error {
         c.good("--");
         c.none(format!(" {}'", subcmd));
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::InvalidSubcommand,
-            info: vec![subcmd],
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::InvalidSubcommand,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
+        .set_info(vec![subcmd])
     }
 
-    pub(crate) fn unrecognized_subcommand(
-        subcmd: String,
-        name: String,
-        color: ColorChoice,
-    ) -> Self {
-        let mut c = Colorizer::new(true, color);
+    pub(crate) fn unrecognized_subcommand(app: &App, subcmd: String, name: String) -> Self {
+        let mut c = Colorizer::new(true, app.get_color());
 
         start_error(&mut c, " The subcommand '");
         c.warning(subcmd.clone());
         c.none("' wasn't recognized\n\n");
         c.warning("USAGE:");
-        c.none(format!("\n\t{} help <subcommands>...", name));
-        try_help(&mut c);
+        c.none(format!("\n    {} <subcommands>", name));
+        try_help(app, &mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::UnrecognizedSubcommand,
-            info: vec![subcmd],
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::UnrecognizedSubcommand,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
+        .set_info(vec![subcmd])
     }
 
     pub(crate) fn missing_required_argument(
+        app: &App,
         required: Vec<String>,
         usage: String,
-        color: ColorChoice,
     ) -> Self {
-        let mut c = Colorizer::new(true, color);
+        let mut c = Colorizer::new(true, app.get_color());
 
         start_error(
             &mut c,
@@ -718,59 +762,57 @@ impl Error {
         }
 
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::MissingRequiredArgument,
-            info,
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::MissingRequiredArgument,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
+        .set_info(info)
     }
 
-    pub(crate) fn missing_subcommand(name: String, usage: String, color: ColorChoice) -> Self {
-        let mut c = Colorizer::new(true, color);
+    pub(crate) fn missing_subcommand(app: &App, name: String, usage: String) -> Self {
+        let mut c = Colorizer::new(true, app.get_color());
 
         start_error(&mut c, "'");
         c.warning(name);
         c.none("' requires a subcommand, but one was not provided");
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::MissingSubcommand,
-            info: vec![],
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::MissingSubcommand,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
     }
 
-    pub(crate) fn invalid_utf8(usage: String, color: ColorChoice) -> Self {
-        let mut c = Colorizer::new(true, color);
+    pub(crate) fn invalid_utf8(app: &App, usage: String) -> Self {
+        let mut c = Colorizer::new(true, app.get_color());
 
         start_error(
             &mut c,
             "Invalid UTF-8 was detected in one or more arguments",
         );
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::InvalidUtf8,
-            info: vec![],
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::InvalidUtf8,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
     }
 
     pub(crate) fn too_many_occurrences(
+        app: &App,
         arg: &Arg,
         max_occurs: usize,
         curr_occurs: usize,
         usage: String,
-        color: ColorChoice,
     ) -> Self {
-        let mut c = Colorizer::new(true, color);
+        let mut c = Colorizer::new(true, app.get_color());
         let verb = Error::singular_or_plural(curr_occurs);
 
         start_error(&mut c, "The argument '");
@@ -781,27 +823,22 @@ impl Error {
         c.warning(curr_occurs.to_string());
         c.none(format!(" {} provided", verb));
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::TooManyOccurrences,
-            info: vec![
-                arg.to_string(),
-                curr_occurs.to_string(),
-                max_occurs.to_string(),
-            ],
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::TooManyOccurrences,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
+        .set_info(vec![
+            arg.to_string(),
+            curr_occurs.to_string(),
+            max_occurs.to_string(),
+        ])
     }
 
-    pub(crate) fn too_many_values(
-        val: String,
-        arg: String,
-        usage: String,
-        color: ColorChoice,
-    ) -> Self {
-        let mut c = Colorizer::new(true, color);
+    pub(crate) fn too_many_values(app: &App, val: String, arg: String, usage: String) -> Self {
+        let mut c = Colorizer::new(true, app.get_color());
 
         start_error(&mut c, "The value '");
         c.warning(val.clone());
@@ -809,24 +846,24 @@ impl Error {
         c.warning(&arg);
         c.none("' but it wasn't expecting any more values");
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::TooManyValues,
-            info: vec![arg, val],
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::TooManyValues,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
+        .set_info(vec![arg, val])
     }
 
     pub(crate) fn too_few_values(
+        app: &App,
         arg: &Arg,
         min_vals: usize,
         curr_vals: usize,
         usage: String,
-        color: ColorChoice,
     ) -> Self {
-        let mut c = Colorizer::new(true, color);
+        let mut c = Colorizer::new(true, app.get_color());
         let verb = Error::singular_or_plural(curr_vals);
 
         start_error(&mut c, "The argument '");
@@ -837,21 +874,65 @@ impl Error {
         c.warning(curr_vals.to_string());
         c.none(format!(" {} provided", verb));
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::TooFewValues,
-            info: vec![arg.to_string(), curr_vals.to_string(), min_vals.to_string()],
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::TooFewValues,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
+        .set_info(vec![
+            arg.to_string(),
+            curr_vals.to_string(),
+            min_vals.to_string(),
+        ])
     }
 
     pub(crate) fn value_validation(
+        app: &App,
         arg: String,
         val: String,
-        err: Box<dyn error::Error>,
+        err: Box<dyn error::Error + Send + Sync>,
+    ) -> Self {
+        let mut err = Self::value_validation_with_color(
+            arg,
+            val,
+            err,
+            app.get_color(),
+            app.settings.is_set(AppSettings::WaitOnError),
+        );
+        match &mut err.message {
+            Message::Raw(_) => {
+                unreachable!("`value_validation_with_color` only deals in formatted errors")
+            }
+            Message::Formatted(c) => try_help(app, c),
+        }
+        err
+    }
+
+    pub(crate) fn value_validation_without_app(
+        arg: String,
+        val: String,
+        err: Box<dyn error::Error + Send + Sync>,
+    ) -> Self {
+        let mut err = Self::value_validation_with_color(arg, val, err, ColorChoice::Never, false);
+        match &mut err.message {
+            Message::Raw(_) => {
+                unreachable!("`value_validation_with_color` only deals in formatted errors")
+            }
+            Message::Formatted(c) => {
+                c.none("\n");
+            }
+        }
+        err
+    }
+
+    fn value_validation_with_color(
+        arg: String,
+        val: String,
+        err: Box<dyn error::Error + Send + Sync>,
         color: ColorChoice,
+        wait_on_exit: bool,
     ) -> Self {
         let mut c = Colorizer::new(true, color);
 
@@ -862,24 +943,20 @@ impl Error {
         c.none("'");
 
         c.none(format!(": {}", err));
-        try_help(&mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::ValueValidation,
-            info: vec![arg, val, err.to_string()],
-            source: Some(err),
-        }
+        Self::new(c, ErrorKind::ValueValidation, wait_on_exit)
+            .set_info(vec![arg, val, err.to_string()])
+            .set_source(err)
     }
 
     pub(crate) fn wrong_number_of_values(
+        app: &App,
         arg: &Arg,
         num_vals: usize,
         curr_vals: usize,
         usage: String,
-        color: ColorChoice,
     ) -> Self {
-        let mut c = Colorizer::new(true, color);
+        let mut c = Colorizer::new(true, app.get_color());
         let verb = Error::singular_or_plural(curr_vals);
 
         start_error(&mut c, "The argument '");
@@ -890,41 +967,45 @@ impl Error {
         c.warning(curr_vals.to_string());
         c.none(format!(" {} provided", verb));
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::WrongNumberOfValues,
-            info: vec![arg.to_string(), curr_vals.to_string(), num_vals.to_string()],
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::WrongNumberOfValues,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
+        .set_info(vec![
+            arg.to_string(),
+            curr_vals.to_string(),
+            num_vals.to_string(),
+        ])
     }
 
-    pub(crate) fn unexpected_multiple_usage(arg: &Arg, usage: String, color: ColorChoice) -> Self {
-        let mut c = Colorizer::new(true, color);
+    pub(crate) fn unexpected_multiple_usage(app: &App, arg: &Arg, usage: String) -> Self {
+        let mut c = Colorizer::new(true, app.get_color());
         let arg = arg.to_string();
 
         start_error(&mut c, "The argument '");
         c.warning(arg.clone());
         c.none("' was provided more than once, but cannot be used multiple times");
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::UnexpectedMultipleUsage,
-            info: vec![arg],
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::UnexpectedMultipleUsage,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
+        .set_info(vec![arg])
     }
 
     pub(crate) fn unknown_argument(
+        app: &App,
         arg: String,
         did_you_mean: Option<(String, Option<String>)>,
         usage: String,
-        color: ColorChoice,
     ) -> Self {
-        let mut c = Colorizer::new(true, color);
+        let mut c = Colorizer::new(true, app.get_color());
 
         start_error(&mut c, "Found argument '");
         c.warning(arg.clone());
@@ -957,18 +1038,18 @@ impl Error {
         }
 
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::UnknownArgument,
-            info: vec![arg],
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::UnknownArgument,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
+        .set_info(vec![arg])
     }
 
-    pub(crate) fn unnecessary_double_dash(arg: String, usage: String, color: ColorChoice) -> Self {
-        let mut c = Colorizer::new(true, color);
+    pub(crate) fn unnecessary_double_dash(app: &App, arg: String, usage: String) -> Self {
+        let mut c = Colorizer::new(true, app.get_color());
 
         start_error(&mut c, "Found argument '");
         c.warning(arg.clone());
@@ -979,64 +1060,183 @@ impl Error {
             arg
         ));
         put_usage(&mut c, usage);
-        try_help(&mut c);
+        try_help(app, &mut c);
 
-        Error {
-            message: c,
-            kind: ErrorKind::UnknownArgument,
-            info: vec![arg],
-            source: None,
-        }
+        Self::new(
+            c,
+            ErrorKind::UnknownArgument,
+            app.settings.is_set(AppSettings::WaitOnError),
+        )
+        .set_info(vec![arg])
     }
 
     pub(crate) fn argument_not_found_auto(arg: String) -> Self {
-        let mut c = Colorizer::new(true, ColorChoice::Auto);
+        let mut c = Colorizer::new(true, ColorChoice::Never);
 
         start_error(&mut c, "The argument '");
         c.warning(arg.clone());
-        c.none("' wasn't found");
-        try_help(&mut c);
+        c.none("' wasn't found\n");
 
-        Error {
-            message: c,
-            kind: ErrorKind::ArgumentNotFound,
-            info: vec![arg],
-            source: None,
-        }
+        Self::new(c, ErrorKind::ArgumentNotFound, false).set_info(vec![arg])
     }
 
-    /// Create an error with a custom description.
-    ///
-    /// This can be used in combination with `Error::exit` to exit your program
-    /// with a custom error message.
-    pub fn with_description(description: String, kind: ErrorKind) -> Self {
-        let mut c = Colorizer::new(true, ColorChoice::Auto);
-
-        start_error(&mut c, description);
-
-        Error {
-            message: c,
-            kind,
-            info: vec![],
-            source: None,
+    /// Returns the singular or plural form on the verb to be based on the argument's value.
+    fn singular_or_plural(n: usize) -> String {
+        if n > 1 {
+            String::from("were")
+        } else {
+            String::from("was")
         }
     }
 }
 
 impl From<io::Error> for Error {
     fn from(e: io::Error) -> Self {
-        Error::with_description(e.to_string(), ErrorKind::Io)
+        Error::raw(ErrorKind::Io, e)
     }
 }
 
 impl From<fmt::Error> for Error {
     fn from(e: fmt::Error) -> Self {
-        Error::with_description(e.to_string(), ErrorKind::Format)
+        Error::raw(ErrorKind::Format, e)
     }
 }
 
 impl error::Error for Error {
+    #[allow(trivial_casts)]
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        self.source.as_deref()
+        self.source.as_ref().map(|e| e.as_ref() as _)
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        // Assuming `self.message` already has a trailing newline, from `try_help` or similar
+        write!(f, "{}", self.message.formatted())?;
+        if let Some(backtrace) = self.backtrace.as_ref() {
+            writeln!(f)?;
+            writeln!(f, "Backtrace:")?;
+            writeln!(f, "{}", backtrace)?;
+        }
+        Ok(())
+    }
+}
+
+fn start_error(c: &mut Colorizer, msg: impl Into<String>) {
+    c.error("error:");
+    c.none(" ");
+    c.none(msg);
+}
+
+fn put_usage(c: &mut Colorizer, usage: impl Into<String>) {
+    c.none("\n\n");
+    c.none(usage);
+}
+
+fn try_help(app: &App, c: &mut Colorizer) {
+    if !app.settings.is_set(AppSettings::DisableHelpFlag) {
+        c.none("\n\nFor more information try ");
+        c.good("--help");
+        c.none("\n");
+    } else if app.has_subcommands() && !app.settings.is_set(AppSettings::DisableHelpSubcommand) {
+        c.none("\n\nFor more information try ");
+        c.good("help");
+        c.none("\n");
+    } else {
+        c.none("\n");
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) enum Message {
+    Raw(String),
+    Formatted(Colorizer),
+}
+
+impl Message {
+    fn format(&mut self, app: &App, usage: String) {
+        match self {
+            Message::Raw(s) => {
+                let mut c = Colorizer::new(true, app.get_color());
+
+                let mut message = String::new();
+                std::mem::swap(s, &mut message);
+                start_error(&mut c, message);
+                put_usage(&mut c, usage);
+                try_help(app, &mut c);
+                *self = Self::Formatted(c);
+            }
+            Message::Formatted(_) => {}
+        }
+    }
+
+    fn formatted(&self) -> Cow<Colorizer> {
+        match self {
+            Message::Raw(s) => {
+                let mut c = Colorizer::new(true, ColorChoice::Never);
+                start_error(&mut c, s);
+                Cow::Owned(c)
+            }
+            Message::Formatted(c) => Cow::Borrowed(c),
+        }
+    }
+}
+
+impl From<String> for Message {
+    fn from(inner: String) -> Self {
+        Self::Raw(inner)
+    }
+}
+
+impl From<Colorizer> for Message {
+    fn from(inner: Colorizer) -> Self {
+        Self::Formatted(inner)
+    }
+}
+
+#[cfg(feature = "debug")]
+#[derive(Debug)]
+struct Backtrace(backtrace::Backtrace);
+
+#[cfg(feature = "debug")]
+impl Backtrace {
+    fn new() -> Option<Self> {
+        Some(Self(backtrace::Backtrace::new()))
+    }
+}
+
+#[cfg(feature = "debug")]
+impl Display for Backtrace {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        // `backtrace::Backtrace` uses `Debug` instead of `Display`
+        write!(f, "{:?}", self.0)
+    }
+}
+
+#[cfg(not(feature = "debug"))]
+#[derive(Debug)]
+struct Backtrace;
+
+#[cfg(not(feature = "debug"))]
+impl Backtrace {
+    fn new() -> Option<Self> {
+        None
+    }
+}
+
+#[cfg(not(feature = "debug"))]
+impl Display for Backtrace {
+    fn fmt(&self, _: &mut Formatter) -> fmt::Result {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Check `clap::Error` impls Send and Sync.
+    mod clap_error_impl_send_sync {
+        use crate::Error;
+        trait Foo: std::error::Error + Send + Sync + 'static {}
+        impl Foo for Error {}
     }
 }

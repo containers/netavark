@@ -1,6 +1,5 @@
 #![allow(clippy::single_component_path_imports)]
 
-mod argstr;
 mod fnv;
 mod graph;
 mod id;
@@ -11,14 +10,9 @@ pub use self::fnv::Key;
 
 #[cfg(feature = "env")]
 pub(crate) use self::str_to_bool::str_to_bool;
-pub(crate) use self::{argstr::ArgStr, graph::ChildGraph, id::Id};
-pub(crate) use vec_map::VecMap;
+pub(crate) use self::{graph::ChildGraph, id::Id};
 
-#[cfg(feature = "color")]
-pub(crate) use termcolor;
-
-#[cfg(not(feature = "color"))]
-pub(crate) mod termcolor;
+pub(crate) mod color;
 
 pub(crate) const SUCCESS_CODE: i32 = 0;
 // While sysexists.h defines EX_USAGE as 64, this doesn't seem to be used much in practice but
@@ -36,3 +30,11 @@ pub(crate) fn safe_exit(code: i32) -> ! {
 
     std::process::exit(code)
 }
+
+#[cfg(not(feature = "unicode"))]
+pub(crate) fn eq_ignore_case(left: &str, right: &str) -> bool {
+    left.eq_ignore_ascii_case(right)
+}
+
+#[cfg(feature = "unicode")]
+pub(crate) use unicase::eq as eq_ignore_case;
