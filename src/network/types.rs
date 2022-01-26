@@ -145,8 +145,8 @@ pub struct StatusBlock {
     // having fewer than ndots dots. So we dont
     // need this as of now.
     // DNS search domains for /etc/resolv.conf
-    // #[serde(rename = "dns_search_domains")]
-    // pub dns_search_domains: Option<Vec<String>>,
+    #[serde(rename = "dns_search_domains")]
+    pub dns_search_domains: Option<Vec<String>>,
 
     // DNS nameservers /etc/resolv.conf will be populated by these
     #[serde(rename = "dns_server_ips")]

@@ -25,6 +25,7 @@ impl Core {
         //  StatusBlock response
         let mut response = types::StatusBlock {
             dns_server_ips: Some(Vec::<IpAddr>::new()),
+            dns_search_domains: Some(Vec::<String>::new()),
             interfaces: Some(HashMap::new()),
         };
         // get bridge name
@@ -178,6 +179,11 @@ impl Core {
         let _ = response.interfaces.insert(interfaces);
         if network.dns_enabled {
             let _ = response.dns_server_ips.insert(nameservers);
+            // Note: this is being added so podman setup is backward compatible with the design
+            // which we had with dnsname/dnsmasq. I belive this can be fixed in later releases.
+            let _ = response
+                .dns_search_domains
+                .insert(vec![constants::PODMAN_DEFAULT_SEARCH_DOMAIN.to_string()]);
         }
         Ok(response)
     }
@@ -314,6 +320,7 @@ impl Core {
         //  StatusBlock response
         let mut response = types::StatusBlock {
             dns_server_ips: Some(Vec::<IpAddr>::new()),
+            dns_search_domains: Some(Vec::<String>::new()),
             interfaces: Some(HashMap::new()),
         };
         // Default MACVLAN_MODE to bridge or get from driver options
