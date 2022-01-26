@@ -8,7 +8,7 @@ use crate::network::core_utils::CoreUtils;
 use crate::network::internal_types::{PortForwardConfig, SetupNetwork};
 use crate::network::types::Subnet;
 use crate::network::{core_utils, types};
-use clap::{self, Clap};
+use clap::Parser;
 use log::debug;
 use std::collections::HashMap;
 use std::error::Error;
@@ -18,7 +18,7 @@ use std::path::Path;
 const IPV4_FORWARD: &str = "net.ipv4.ip_forward";
 const IPV6_FORWARD: &str = "/proc/sys/net/ipv6/conf/all/forwarding";
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 pub struct Setup {
     /// Network namespace path
     #[clap(forbid_empty_values = true, required = true)]

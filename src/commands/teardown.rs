@@ -7,13 +7,13 @@ use crate::network::internal_types::{
 };
 use crate::network::types::Subnet;
 use crate::{firewall, network};
-use clap::{self, Clap};
+use clap::Parser;
 use log::debug;
 use std::error::Error;
 use std::net::IpAddr;
 use std::path::Path;
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 pub struct Teardown {
     /// Network namespace path
     #[clap(forbid_empty_values = true, required = true)]

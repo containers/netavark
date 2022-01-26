@@ -1,9 +1,9 @@
 use std::error::Error;
 
-use clap::Clap;
+use clap::Parser;
 use serde::Serialize;
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 pub struct Version {}
 
 #[derive(Debug, Serialize)]
