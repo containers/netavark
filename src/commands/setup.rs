@@ -230,6 +230,7 @@ impl Setup {
                 if let Err(er) = aardvark_interface.commit_netavark_entries(
                     network_options.container_name,
                     network_options.container_id,
+                    network_options.networks,
                     response.clone(),
                 ) {
                     debug!("Error while applying dns entries {}", er);

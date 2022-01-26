@@ -84,8 +84,8 @@ pub struct PerNetworkOptions {
 
     // DNS is not yet implemented
 
-    // #[serde(rename = "aliases")]
-    // pub aliases: Option<Vec<String>>,
+    #[serde(rename = "aliases")]
+    pub aliases: Option<Vec<String>>,
 
     /// InterfaceName for this container. Required.
     #[serde(rename = "interface_name")]
