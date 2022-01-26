@@ -1,5 +1,8 @@
 //Following module contains all the network constants
 
+// default search domain
+pub static PODMAN_DEFAULT_SEARCH_DOMAIN: &str = "dns.podman";
+
 // Available macvlan modes
 // TODO: remove constants from here after https://github.com/little-dude/netlink/pull/200
 pub const MACVLAN_MODE_PRIVATE: u32 = 1;
