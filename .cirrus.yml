@@ -17,7 +17,7 @@ env:
     # Save a little typing (path relative to $CIRRUS_WORKING_DIR)
     SCRIPT_BASE: "./contrib/cirrus"
     FEDORA_NAME: "fedora-35"
-    IMAGE_SUFFIX: "c4560539387953152"
+    IMAGE_SUFFIX: "c4801636756357120"
     FEDORA_NETAVARK_IMAGE: "fedora-netavark-${IMAGE_SUFFIX}"
 
 
@@ -37,7 +37,7 @@ gce_instance:  &standard_vm
 build_task:
   alias: "build"
   # Compiling is very CPU intensive, make it chooch quicker for this task only
-  gce_instance:
+  gce_instance: &builder_vm
     <<: *standard_vm
     cpu: 8
     memory: "8Gb"
@@ -69,7 +69,7 @@ build_task:
     # Adjust vX if cache schema changes.
     fingerprint_key: "bin_v1_${CIRRUS_BUILD_ID}" # Cache only within same build
     reupload_on_changes: true
-  setup_script: &setup "$SCRIPT_BASE/setup.sh"
+  setup_script: &setup "$SCRIPT_BASE/setup.sh $CIRRUS_TASK_NAME"
   main_script: &main "$SCRIPT_BASE/runner.sh $CIRRUS_TASK_NAME"
   upload_caches: [ "cargo", "targets", "bin" ]
 
@@ -93,6 +93,7 @@ validate_task:
   setup_script: *setup
   main_script: *main
 
+
 verify_vendor_task:
   alias: "verify_vendor"
   depends_on:
@@ -102,6 +103,26 @@ verify_vendor_task:
   bin_cache: *ro_bin_cache
   setup_script: *setup
   main_script: *main
+
+
+cross_task:
+  alias: "cross"
+  depends_on:
+    - "build"
+  gce_instance: *builder_vm
+  env:
+    # Space-separated list of targets to test
+    CROSS_TARGETS: >-
+        x86_64-unknown-linux-gnu
+        aarch64-unknown-linux-gnu
+        powerpc64le-unknown-linux-gnu
+        s390x-unknown-linux-gnu
+  cargo_cache: *ro_cargo_cache
+  targets_cache: *ro_targets_cache
+  bin_cache: *ro_bin_cache
+  setup_script: *setup
+  main_script: *main
+
 
 unit_task:
   alias: "unit"

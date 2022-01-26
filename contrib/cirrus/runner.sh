@@ -45,6 +45,15 @@ _run_verify_vendor() {
     fi
 }
 
+_run_cross() {
+    local cross_target
+    req_env_vars CROSS_TARGETS
+    for cross_target in $CROSS_TARGETS; do
+        msg "Testing build for $cross_target"
+        cargo build --target $cross_target
+    done
+}
+
 _run_unit() {
     make unit
 }
