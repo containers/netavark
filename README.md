@@ -6,13 +6,14 @@ for other OCI container management applications.
 
 ## Overview and scope
 
-Netavark is capable of the following given the proper JSON input:
-* Create, manage, and destroy network interfaces including bridge and macvlan
-* Configure firewall (NAT) and port mapping rules
-* Support IPv4 and IPv6
-
-As this project is in very early development, we will add more capabilities in
-the near future.
+Netavark is a tool for configuring networking for Linux containers. Its features include:
+* Configuration of container networks via JSON configuration file
+* Creation and management of required network interfaces, including MACVLAN networks
+* All required firewall configuration to perform NAT and port forwarding as required for containers
+* Support for iptables and firewalld at present, with support for nftables planned in a future release
+* Support for rootless containers
+* Support for IPv4 and IPv6
+* Support for container DNS resolution via the [aardvark-dns](https://github.com/containers/aardvark-dns) project
 
 ## Requires
 
