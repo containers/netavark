@@ -178,7 +178,7 @@ pub fn get_network_chains(
     hashed_network_chain.create = true;
 
     hashed_network_chain.build_rule(VarkRule::new(
-        format!("-d {} -j {}", network.to_string(), ACCEPT),
+        format!("-d {} -j {}", network, ACCEPT),
         Some(TeardownPolicy::OnComplete),
     ));
 
@@ -196,11 +196,7 @@ pub fn get_network_chains(
     let mut postrouting_chain =
         VarkChain::new(conn, NAT.to_string(), POSTROUTING.to_string(), None);
     postrouting_chain.build_rule(VarkRule::new(
-        format!(
-            "-s {} -j {}",
-            network.to_string(),
-            prefixed_network_hash_name
-        ),
+        format!("-s {} -j {}", network, prefixed_network_hash_name),
         Some(TeardownPolicy::Never),
     ));
     chains.push(postrouting_chain);
@@ -215,7 +211,7 @@ pub fn get_network_chains(
         netavark_forward_chain.build_rule(VarkRule::new(
             format!(
                 "-d {} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
-                network.to_string()
+                network
             ),
             Some(TeardownPolicy::OnComplete),
         ));
@@ -223,7 +219,7 @@ pub fn get_network_chains(
         // Create outgoing traffic rule
         // CNI did this by IP address, this is implemented per subnet
         netavark_forward_chain.build_rule(VarkRule::new(
-            format!("-s {} -j ACCEPT", network.to_string()),
+            format!("-s {} -j ACCEPT", network),
             Some(TeardownPolicy::OnComplete),
         ));
         chains.push(netavark_forward_chain);
@@ -347,9 +343,7 @@ pub fn get_port_forwarding_chains<'a>(
     postrouting.build_rule(VarkRule::new(
         format!(
             "-j {} -s {} {}",
-            netavark_hashed_network_chain_name,
-            container_ip.to_string(),
-            comment_network_cid
+            netavark_hashed_network_chain_name, container_ip, comment_network_cid
         ),
         None,
     ));
@@ -366,11 +360,7 @@ pub fn get_port_forwarding_chains<'a>(
         let is_range = i.range > 1;
         let mut host_port = i.host_port.to_string();
         if is_range {
-            host_port = format!(
-                "{}:{}",
-                i.host_port.to_string(),
-                (i.host_port + (i.range - 1)).to_string()
-            )
+            host_port = format!("{}:{}", i.host_port, (i.host_port + (i.range - 1)))
         }
         netavark_hostport_dn_chain.build_rule(VarkRule::new(
             format!(
@@ -385,10 +375,7 @@ pub fn get_port_forwarding_chains<'a>(
 
         let mut dn_setmark_rule_localhost = format!(
             "-j {} -s {} -p {} --dport {}",
-            NETAVARK_HOSTPORT_SETMARK,
-            network_address.subnet.to_string(),
-            i.protocol,
-            &host_port
+            NETAVARK_HOSTPORT_SETMARK, network_address.subnet, i.protocol, &host_port
         );
 
         let mut dn_setmark_rule_subnet = format!(
@@ -416,9 +403,9 @@ pub fn get_port_forwarding_chains<'a>(
         if is_range {
             container_port = format!(
                 "{}-{}/{}",
-                i.container_port.to_string(),
-                (i.container_port + (i.range - 1)).to_string(),
-                i.host_port.to_string()
+                i.container_port,
+                (i.container_port + (i.range - 1)),
+                i.host_port
             );
         }
         let mut dnat_rule = format!(

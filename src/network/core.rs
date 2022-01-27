@@ -127,7 +127,7 @@ impl Core {
 
             // Build up response information
             let container_address: ipnet::IpNet =
-                match format!("{}/{}", static_ips[idx].to_string(), subnet_mask_cidr).parse() {
+                match format!("{}/{}", static_ips[idx], subnet_mask_cidr).parse() {
                     Ok(i) => i,
                     Err(e) => {
                         return Err(Error::new(std::io::ErrorKind::Other, e));
@@ -414,7 +414,7 @@ impl Core {
 
             // Build up response information
             let container_address: ipnet::IpNet =
-                match format!("{}/{}", static_ips[idx].to_string(), subnet_mask_cidr).parse() {
+                match format!("{}/{}", static_ips[idx], subnet_mask_cidr).parse() {
                     Ok(i) => i,
                     Err(e) => {
                         return Err(Error::new(std::io::ErrorKind::Other, e));
