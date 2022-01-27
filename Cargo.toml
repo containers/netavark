@@ -34,7 +34,7 @@ nix = "0.23.0"
 rand = "0.8.3"
 tokio = { version = "1.15.0", features = ["full"] }
 zvariant = "3.1.1"
-sha2 = "0.10.0"
+sha2 = "0.10.1"
 netlink-packet-route = "0.8.0"
 
 [build-dependencies]
