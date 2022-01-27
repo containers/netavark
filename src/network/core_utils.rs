@@ -183,8 +183,7 @@ impl CoreUtils {
                         std::io::ErrorKind::Other,
                         format!(
                             "Unable to resolve physical address for interface {}: {}",
-                            ifname.to_string(),
-                            err
+                            ifname, err
                         ),
                     ));
                 }
@@ -852,9 +851,8 @@ impl CoreUtils {
                 if ipv6_enabled {
                     // Disable duplicate address detection if ipv6 enabled
                     // Do not accept Router Advertisements if ipv6 is enabled
-                    let br_accept_dad =
-                        format!("/proc/sys/net/ipv6/conf/{}/accept_dad", ifname.to_string());
-                    let br_accept_ra = format!("net/ipv6/conf/{}/accept_ra", ifname.to_string());
+                    let br_accept_dad = format!("/proc/sys/net/ipv6/conf/{}/accept_dad", ifname);
+                    let br_accept_ra = format!("net/ipv6/conf/{}/accept_ra", ifname);
                     if let Err(e) = CoreUtils::apply_sysctl_value(&br_accept_dad, "0") {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::Other,
