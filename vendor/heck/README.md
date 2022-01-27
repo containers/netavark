@@ -30,11 +30,11 @@ indicators are dropped, except insofar as CamelCase capitalizes the first word.
 
 ## Cases contained in this library:
 
-1. CamelCase
-2. snake_case
-3. kebab-case
-4. SHOUTY_SNAKE_CASE
-5. mixedCase
+1. UpperCamelCase
+2. lowerCamelCase
+3. snake_case
+4. kebab-case
+5. SHOUTY_SNAKE_CASE
 6. Title Case
 7. SHOUTY-KEBAB-CASE
 

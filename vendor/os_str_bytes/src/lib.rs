@@ -1,13 +1,17 @@
-//! This crate allows interacting with the data stored internally by [`OsStr`]
-//! and [`OsString`], without resorting to panics or corruption for invalid
-//! UTF-8. Thus, methods can be used that are already defined on
-//! [`[u8]`][slice] and [`Vec<u8>`].
+//! This crate allows interacting with the data stored by [`OsStr`] and
+//! [`OsString`], without resorting to panics or corruption for invalid UTF-8.
+//! Thus, methods can be used that are already defined on [`[u8]`][slice] and
+//! [`Vec<u8>`].
 //!
 //! Typically, the only way to losslessly construct [`OsStr`] or [`OsString`]
 //! from a byte sequence is to use `OsStr::new(str::from_utf8(bytes)?)`, which
 //! requires the bytes to be valid in UTF-8. However, since this crate makes
 //! conversions directly between the platform encoding and raw bytes, even some
 //! strings invalid in UTF-8 can be converted.
+//!
+//! In most cases, [`RawOsStr`] and [`RawOsString`] should be used.
+//! [`OsStrBytes`] and [`OsStringBytes`] provide lower-level APIs that are
+//! easier to misuse.
 //!
 //! # Encoding
 //!
@@ -32,9 +36,12 @@
 //! Additionally, concatenation may yield unexpected results without a UTF-8
 //! separator. If two platform strings need to be concatenated, the only safe
 //! way to do so is using [`OsString::push`]. This limitation also makes it
-//! undesirable to use the bytes in interchange unless absolutely necessary. If
-//! the strings need to be written as output, crate [print\_bytes] can do so
-//! more safely than directly writing the bytes.
+//! undesirable to use the bytes in interchange.
+//!
+//! Since this encoding can change between versions and platforms, it should
+//! not be used for storage. The standard library provides implementations of
+//! [`OsStrExt`] and [`OsStringExt`] for various platforms, which should be
+//! preferred for that use case.
 //!
 //! # User Input
 //!
@@ -57,10 +64,26 @@
 //! These features are optional and can be enabled or disabled in a
 //! "Cargo.toml" file.
 //!
+//! ### Default Features
+//!
+//! - **memchr** -
+//!   Changes the implementation to use crate [memchr] for better performance.
+//!   This feature is useless when "raw\_os\_str" is disabled.
+//!
+//!   For more information, see [`RawOsStr`][memchr complexity].
+//!
+//! - **raw\_os\_str** -
+//!   Enables use of [`RawOsStr`] and [`RawOsString`].
+//!
 //! ### Optional Features
 //!
-//! - **raw** -
-//!   Enables use of the [`raw`] module.
+//! - **print\_bytes** -
+//!   Provides implementations of [`print_bytes::ToBytes`] for [`RawOsStr`] and
+//!   [`RawOsString`].
+//!
+//! - **uniquote** -
+//!   Provides implementations of [`uniquote::Quote`] for [`RawOsStr`] and
+//!   [`RawOsString`].
 //!
 //! # Implementation
 //!
@@ -75,10 +98,11 @@
 //!
 //! # Complexity
 //!
-//! The time complexities of methods will vary based on what functionality is
-//! available for the platform. At worst, they will all be linear, but some can
-//! take constant time. For example, [`OsStringBytes::from_raw_vec`] might be
-//! able to reuse the allocation for its argument.
+//! The time complexities of trait methods will vary based on what
+//! functionality is available for the platform. At worst, they will all be
+//! linear, but some can take constant time. For example,
+//! [`OsStringBytes::from_raw_vec`] might be able to reuse the allocation for
+//! its argument.
 //!
 //! # Examples
 //!
@@ -115,6 +139,10 @@
 //! [bstr]: https://crates.io/crates/bstr
 //! [`ByteSlice::to_os_str`]: https://docs.rs/bstr/0.2.12/bstr/trait.ByteSlice.html#method.to_os_str
 //! [`ByteVec::into_os_string`]: https://docs.rs/bstr/0.2.12/bstr/trait.ByteVec.html#method.into_os_string
+//! [memchr complexity]: RawOsStr#complexity
+//! [memchr]: https://crates.io/crates/memchr
+//! [`OsStrExt`]: ::std::os::unix::ffi::OsStrExt
+//! [`OsStringExt`]: ::std::os::unix::ffi::OsStringExt
 //! [sealed]: https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
 //! [print\_bytes]: https://crates.io/crates/print_bytes
 
@@ -128,7 +156,7 @@
     all(target_vendor = "fortanix", target_env = "sgx"),
     feature(sgx_platform)
 )]
-#![forbid(unsafe_code)]
+#![forbid(unsafe_op_in_unsafe_fn)]
 #![warn(unused_results)]
 
 use std::borrow::Cow;
@@ -142,37 +170,37 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::result;
 
-macro_rules! if_raw {
+macro_rules! if_raw_str {
     ( $($item:item)+ ) => {
         $(
-            #[cfg(feature = "raw")]
+            #[cfg(feature = "raw_os_str")]
             $item
         )+
     };
 }
 
 #[cfg_attr(
-    all(
-        target_arch = "wasm32",
-        any(target_os = "emscripten", target_os = "unknown"),
-    ),
+    all(target_arch = "wasm32", target_os = "unknown"),
     path = "wasm32/mod.rs"
 )]
 #[cfg_attr(windows, path = "windows/mod.rs")]
 #[cfg_attr(
-    not(any(
-        all(
-            target_arch = "wasm32",
-            any(target_os = "emscripten", target_os = "unknown"),
-        ),
-        windows,
-    )),
+    not(any(all(target_arch = "wasm32", target_os = "unknown"), windows)),
     path = "common/mod.rs"
 )]
 mod imp;
 
-if_raw! {
-    pub mod raw;
+mod util;
+
+if_raw_str! {
+    pub mod iter;
+
+    mod pattern;
+    pub use pattern::Pattern;
+
+    mod raw_str;
+    pub use raw_str::RawOsStr;
+    pub use raw_str::RawOsString;
 }
 
 /// The error that occurs when a byte sequence is not representable in the
@@ -214,6 +242,9 @@ type Result<T> = result::Result<T, EncodingError>;
 pub trait OsStrBytes: private::Sealed + ToOwned {
     /// Converts a byte slice into an equivalent platform-native string.
     ///
+    /// Provided byte strings should always be valid for the [unspecified
+    /// encoding] used by this crate.
+    ///
     /// # Errors
     ///
     /// See documentation for [`EncodingError`].
@@ -233,11 +264,15 @@ pub trait OsStrBytes: private::Sealed + ToOwned {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
+    ///
+    /// [unspecified encoding]: self#encoding
     fn from_raw_bytes<'a, S>(string: S) -> Result<Cow<'a, Self>>
     where
         S: Into<Cow<'a, [u8]>>;
 
     /// Converts a platform-native string into an equivalent byte slice.
+    ///
+    /// The returned bytes string will use an [unspecified encoding].
     ///
     /// # Examples
     ///
@@ -252,6 +287,8 @@ pub trait OsStrBytes: private::Sealed + ToOwned {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
+    ///
+    /// [unspecified encoding]: self#encoding
     #[must_use]
     fn to_raw_bytes(&self) -> Cow<'_, [u8]>;
 }
@@ -305,6 +342,9 @@ impl OsStrBytes for Path {
 pub trait OsStringBytes: private::Sealed + Sized {
     /// Converts a byte vector into an equivalent platform-native string.
     ///
+    /// Provided byte strings should always be valid for the [unspecified
+    /// encoding] used by this crate.
+    ///
     /// # Errors
     ///
     /// See documentation for [`EncodingError`].
@@ -324,9 +364,13 @@ pub trait OsStringBytes: private::Sealed + Sized {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
+    ///
+    /// [unspecified encoding]: self#encoding
     fn from_raw_vec(string: Vec<u8>) -> Result<Self>;
 
     /// Converts a platform-native string into an equivalent byte vector.
+    ///
+    /// The returned byte string will use an [unspecified encoding].
     ///
     /// # Examples
     ///
@@ -341,6 +385,8 @@ pub trait OsStringBytes: private::Sealed + Sized {
     /// #
     /// # Ok::<_, io::Error>(())
     /// ```
+    ///
+    /// [unspecified encoding]: self#encoding
     #[must_use]
     fn into_raw_vec(self) -> Vec<u8>;
 }
@@ -376,8 +422,11 @@ mod private {
     use std::path::PathBuf;
 
     pub trait Sealed {}
+    impl Sealed for char {}
     impl Sealed for OsStr {}
     impl Sealed for OsString {}
     impl Sealed for Path {}
     impl Sealed for PathBuf {}
+    impl Sealed for &str {}
+    impl Sealed for &String {}
 }

@@ -1,6 +1,6 @@
 //! The preprocessing we apply to doc comments.
 //!
-//! #[derive(Clap)] works in terms of "paragraphs". Paragraph is a sequence of
+//! #[derive(Parser)] works in terms of "paragraphs". Paragraph is a sequence of
 //! non-empty adjacent lines, delimited by sequences of blank (whitespace only) lines.
 
 use crate::attrs::Method;
@@ -61,7 +61,10 @@ pub fn process_doc_comment(lines: Vec<String>, name: &str, preprocess: bool) -> 
             lines.join("\n")
         };
 
-        vec![Method::new(short_name, quote!(#short))]
+        vec![
+            Method::new(short_name, quote!(#short)),
+            Method::new(long_name, quote!(None)),
+        ]
     }
 }
 
@@ -75,7 +78,7 @@ fn split_paragraphs(lines: &[&str]) -> Vec<String> {
         let len = slice
             .iter()
             .position(|s| is_blank(s))
-            .unwrap_or_else(|| slice.len());
+            .unwrap_or(slice.len());
 
         last_line += start + len;
 

@@ -4,16 +4,16 @@ use proc_macro2::Ident;
 use proc_macro_error::append_dummy;
 use quote::quote;
 
-pub fn clap_struct(name: &Ident) {
+pub fn parser_struct(name: &Ident) {
     into_app(name);
     args(name);
-    append_dummy(quote!( impl clap::Clap for #name {} ));
+    append_dummy(quote!( impl clap::Parser for #name {} ));
 }
 
-pub fn clap_enum(name: &Ident) {
+pub fn parser_enum(name: &Ident) {
     into_app(name);
     subcommand(name);
-    append_dummy(quote!( impl clap::Clap for #name {} ));
+    append_dummy(quote!( impl clap::Parser for #name {} ));
 }
 
 pub fn into_app(name: &Ident) {
@@ -32,10 +32,10 @@ pub fn into_app(name: &Ident) {
 pub fn from_arg_matches(name: &Ident) {
     append_dummy(quote! {
         impl clap::FromArgMatches for #name {
-            fn from_arg_matches(_m: &clap::ArgMatches) -> Option<Self> {
+            fn from_arg_matches(_m: &clap::ArgMatches) -> ::std::result::Result<Self, clap::Error> {
                 unimplemented!()
             }
-            fn update_from_arg_matches(&mut self, matches: &clap::ArgMatches) {
+            fn update_from_arg_matches(&mut self, matches: &clap::ArgMatches) -> ::std::result::Result<(), clap::Error>{
                 unimplemented!()
             }
         }
@@ -76,11 +76,13 @@ pub fn args(name: &Ident) {
 pub fn arg_enum(name: &Ident) {
     append_dummy(quote! {
         impl clap::ArgEnum for #name {
-            const VARIANTS: &'static [&'static str] = &[];
-            fn from_str(_input: &str, _case_insensitive: bool) -> Result<Self, String> {
+            fn value_variants<'a>() -> &'a [Self]{
                 unimplemented!()
             }
-            fn as_arg(&self) -> Option<&'static str> {
+            fn from_str(_input: &str, _ignore_case: bool) -> ::std::result::Result<Self, String> {
+                unimplemented!()
+            }
+            fn to_possible_value<'a>(&self) -> ::std::option::Option<clap::PossibleValue<'a>>{
                 unimplemented!()
             }
         }

@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{capitalize, transform};
 
 /// This trait defines a title case conversion.
@@ -8,25 +10,43 @@ use crate::{capitalize, transform};
 /// ## Example:
 ///
 /// ```rust
-/// use heck::TitleCase;
+/// use heck::ToTitleCase;
 ///
 /// let sentence = "We have always lived in slums and holes in the wall.";
 /// assert_eq!(sentence.to_title_case(), "We Have Always Lived In Slums And Holes In The Wall");
 /// ```
-pub trait TitleCase: ToOwned {
+pub trait ToTitleCase: ToOwned {
     /// Convert this type to title case.
     fn to_title_case(&self) -> Self::Owned;
 }
 
-impl TitleCase for str {
+impl ToTitleCase for str {
     fn to_title_case(&self) -> String {
-        transform(self, capitalize, |s| s.push(' '))
+        AsTitleCase(self).to_string()
+    }
+}
+
+/// This wrapper performs a title case conversion in [`fmt::Display`].
+///
+/// ## Example:
+///
+/// ```
+/// use heck::AsTitleCase;
+///
+/// let sentence = "We have always lived in slums and holes in the wall.";
+/// assert_eq!(format!("{}", AsTitleCase(sentence)), "We Have Always Lived In Slums And Holes In The Wall");
+/// ```
+pub struct AsTitleCase<T: AsRef<str>>(pub T);
+
+impl<T: AsRef<str>> fmt::Display for AsTitleCase<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        transform(self.0.as_ref(), capitalize, |f| write!(f, " "), f)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::TitleCase;
+    use super::ToTitleCase;
 
     macro_rules! t {
         ($t:ident : $s1:expr => $s2:expr) => {
@@ -45,6 +65,7 @@ mod tests {
     t!(test6: "SHOUTY_SNAKE_CASE" => "Shouty Snake Case");
     t!(test7: "snake_case" => "Snake Case");
     t!(test8: "this-contains_ ALLKinds OfWord_Boundaries" => "This Contains All Kinds Of Word Boundaries");
+    #[cfg(feature = "unicode")]
     t!(test9: "XΣXΣ baﬄe" => "Xσxς Baﬄe");
     t!(test10: "XMLHttpRequest" => "Xml Http Request");
 }

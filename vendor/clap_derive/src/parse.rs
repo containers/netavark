@@ -9,7 +9,19 @@ use syn::{
     Attribute, Expr, ExprLit, Ident, Lit, LitBool, LitStr, Token,
 };
 
+pub fn parse_clap_attributes(all_attrs: &[Attribute]) -> Vec<ClapAttr> {
+    all_attrs
+        .iter()
+        .filter(|attr| attr.path.is_ident("clap") || attr.path.is_ident("structopt"))
+        .flat_map(|attr| {
+            attr.parse_args_with(Punctuated::<ClapAttr, Token![,]>::parse_terminated)
+                .unwrap_or_abort()
+        })
+        .collect()
+}
+
 #[allow(clippy::large_enum_variant)]
+#[derive(Clone)]
 pub enum ClapAttr {
     // single-identifier attributes
     Short(Ident),
@@ -41,6 +53,8 @@ pub enum ClapAttr {
     // ident = arbitrary_expr
     NameExpr(Ident, Expr),
     DefaultValueT(Ident, Option<Expr>),
+    DefaultValueOsT(Ident, Option<Expr>),
+    HelpHeading(Ident, Expr),
 
     // ident(arbitrary_expr,*)
     MethodCall(Ident, Vec<Expr>),
@@ -100,6 +114,15 @@ impl Parse for ClapAttr {
                         Ok(Skip(name, Some(expr)))
                     }
 
+                    "help_heading" => {
+                        let expr = ExprLit {
+                            attrs: vec![],
+                            lit: Lit::Str(lit),
+                        };
+                        let expr = Expr::Lit(expr);
+                        Ok(HelpHeading(name, expr))
+                    }
+
                     _ => Ok(NameLitStr(name, lit)),
                 }
             } else {
@@ -107,6 +130,8 @@ impl Parse for ClapAttr {
                     Ok(expr) => match &*name_str {
                         "skip" => Ok(Skip(name, Some(expr))),
                         "default_value_t" => Ok(DefaultValueT(name, Some(expr))),
+                        "default_value_os_t" => Ok(DefaultValueOsT(name, Some(expr))),
+                        "help_heading" => Ok(HelpHeading(name, expr)),
                         _ => Ok(NameExpr(name, expr)),
                     },
 
@@ -180,6 +205,7 @@ impl Parse for ClapAttr {
                     )
                 }
                 "default_value_t" => Ok(DefaultValueT(name, None)),
+                "default_value_os_t" => Ok(DefaultValueOsT(name, None)),
                 "about" => (Ok(About(name, None))),
                 "author" => (Ok(Author(name, None))),
                 "version" => Ok(Version(name, None)),
@@ -229,8 +255,8 @@ fn raw_method_suggestion(ts: ParseBuffer) -> String {
     fn to_string<T: ToTokens>(val: &T) -> String {
         val.to_token_stream()
             .to_string()
-            .replace(" ", "")
-            .replace(",", ", ")
+            .replace(' ', "")
+            .replace(',', ", ")
     }
 
     if let Ok((name, exprs)) = do_parse() {
@@ -255,18 +281,7 @@ fn raw_method_suggestion(ts: ParseBuffer) -> String {
     } else {
         "if you need to call some method from `clap::Arg/App` \
          you should use raw method, see \
-         https://docs.rs/structopt/0.3/structopt/#raw-methods"
+         https://github.com/clap-rs/clap/blob/master/examples/derive_ref/README.md#raw-attributes"
             .into()
     }
-}
-
-pub fn parse_clap_attributes(all_attrs: &[Attribute]) -> Vec<ClapAttr> {
-    all_attrs
-        .iter()
-        .filter(|attr| attr.path.is_ident("clap"))
-        .flat_map(|attr| {
-            attr.parse_args_with(Punctuated::<ClapAttr, Token![,]>::parse_terminated)
-                .unwrap_or_abort()
-        })
-        .collect()
 }

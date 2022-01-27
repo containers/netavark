@@ -1,6 +1,6 @@
 // Copyright 2018 Guillaume Pinot (@TeXitoi) <texitoi@texitoi.eu>,
 // Kevin Knapp (@kbknapp) <kbknapp@gmail.com>, and
-// Andrew Hobden (@hoverbear) <andrew@hoverbear.org>
+// Ana Hobden (@hoverbear) <operator@hoverbear.org>
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -12,13 +12,8 @@
 // commit#ea76fa1b1b273e65e3b0b1046643715b49bec51f which is licensed under the
 // MIT/Apache 2.0 license.
 
-#![doc(html_logo_url = "https://clap.rs/images/media/clap.png")]
-#![doc(html_root_url = "https://docs.rs/clap_derive/3.0.0-beta.4")]
-
-//! This crate is custom derive for clap. It should not be used
-//! directly. See [clap documentation](clap)
-//! for the usage of `#[derive(Clap)]`.
-
+#![doc(html_logo_url = "https://raw.githubusercontent.com/clap-rs/clap/master/assets/clap.png")]
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
 
 extern crate proc_macro;
@@ -41,25 +36,17 @@ pub fn arg_enum(input: TokenStream) -> TokenStream {
     derives::derive_arg_enum(&input).into()
 }
 
-/// Generates the `Clap` implementation.
+/// Generates the `Parser` implementation.
 ///
 /// This is far less verbose than defining the `clap::App` struct manually,
 /// receiving an instance of `clap::ArgMatches` from conducting parsing, and then
 /// implementing a conversion code to instantiate an instance of the user
 /// context struct.
-#[proc_macro_derive(Clap, attributes(clap))]
+#[proc_macro_derive(Parser, attributes(clap, structopt))]
 #[proc_macro_error]
-pub fn clap(input: TokenStream) -> TokenStream {
+pub fn parser(input: TokenStream) -> TokenStream {
     let input: DeriveInput = parse_macro_input!(input);
-    derives::derive_clap(&input).into()
-}
-
-/// Generates the `IntoApp` impl.
-#[proc_macro_derive(IntoApp, attributes(clap))]
-#[proc_macro_error]
-pub fn into_app(input: TokenStream) -> TokenStream {
-    let input: DeriveInput = parse_macro_input!(input);
-    derives::derive_into_app(&input).into()
+    derives::derive_parser(&input).into()
 }
 
 /// Generates the `Subcommand` impl.

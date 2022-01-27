@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{transform, uppercase};
 
 /// This trait defines a shouty kebab case conversion.
@@ -8,25 +10,43 @@ use crate::{transform, uppercase};
 /// ## Example:
 ///
 /// ```rust
-/// use heck::ShoutyKebabCase;
+/// use heck::ToShoutyKebabCase;
 ///
 /// let sentence = "We are going to inherit the earth.";
 /// assert_eq!(sentence.to_shouty_kebab_case(), "WE-ARE-GOING-TO-INHERIT-THE-EARTH");
 /// ```
-pub trait ShoutyKebabCase: ToOwned {
+pub trait ToShoutyKebabCase: ToOwned {
     /// Convert this type to shouty kebab case.
     fn to_shouty_kebab_case(&self) -> Self::Owned;
 }
 
-impl ShoutyKebabCase for str {
+impl ToShoutyKebabCase for str {
     fn to_shouty_kebab_case(&self) -> Self::Owned {
-        transform(self, uppercase, |s| s.push('-'))
+        AsShoutyKebabCase(self).to_string()
+    }
+}
+
+/// This wrapper performs a kebab case conversion in [`fmt::Display`].
+///
+/// ## Example:
+///
+/// ```
+/// use heck::AsShoutyKebabCase;
+///
+/// let sentence = "We are going to inherit the earth.";
+/// assert_eq!(format!("{}", AsShoutyKebabCase(sentence)), "WE-ARE-GOING-TO-INHERIT-THE-EARTH");
+/// ```
+pub struct AsShoutyKebabCase<T: AsRef<str>>(pub T);
+
+impl<T: AsRef<str>> fmt::Display for AsShoutyKebabCase<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        transform(self.0.as_ref(), uppercase, |f| write!(f, "-"), f)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::ShoutyKebabCase;
+    use super::ToShoutyKebabCase;
 
     macro_rules! t {
         ($t:ident : $s1:expr => $s2:expr) => {
@@ -45,6 +65,7 @@ mod tests {
     t!(test6: "SHOUTY_SNAKE_CASE" => "SHOUTY-SNAKE-CASE");
     t!(test7: "snake_case" => "SNAKE-CASE");
     t!(test8: "this-contains_ ALLKinds OfWord_Boundaries" => "THIS-CONTAINS-ALL-KINDS-OF-WORD-BOUNDARIES");
+    #[cfg(feature = "unicode")]
     t!(test9: "XΣXΣ baﬄe" => "XΣXΣ-BAFFLE");
     t!(test10: "XMLHttpRequest" => "XML-HTTP-REQUEST");
     t!(test11: "SHOUTY-KEBAB-CASE" => "SHOUTY-KEBAB-CASE");

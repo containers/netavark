@@ -1,6 +1,6 @@
 // Copyright 2018 Guillaume Pinot (@TeXitoi) <texitoi@texitoi.eu>,
 // Kevin Knapp (@kbknapp) <kbknapp@gmail.com>, and
-// Andrew Hobden (@hoverbear) <andrew@hoverbear.org>
+// Ana Hobden (@hoverbear) <operator@hoverbear.org>
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -13,12 +13,11 @@
 // MIT/Apache 2.0 license.
 mod arg_enum;
 mod args;
-mod clap;
 mod into_app;
+mod parser;
 mod subcommand;
 
-pub use self::clap::derive_clap;
+pub use self::parser::derive_parser;
 pub use arg_enum::derive_arg_enum;
 pub use args::derive_args;
-pub use into_app::derive_into_app;
 pub use subcommand::derive_subcommand;

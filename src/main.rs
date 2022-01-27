@@ -1,10 +1,11 @@
-use clap::{crate_version, Clap};
+use clap::{Parser, Subcommand};
 
 use netavark::commands::setup;
 use netavark::commands::teardown;
+use netavark::commands::version;
 
-#[derive(Clap, Debug)]
-#[clap(version = crate_version!())]
+#[derive(Parser, Debug)]
+#[clap(version = env!("VERGEN_BUILD_SEMVER"))]
 struct Opts {
     /// Instead of reading from STDIN, read the configuration to be applied from the given file.
     #[clap(short, long)]
@@ -23,14 +24,14 @@ struct Opts {
     subcmd: SubCommand,
 }
 
-#[derive(Clap, Debug)]
+#[derive(Subcommand, Debug)]
 enum SubCommand {
-    #[clap(version = crate_version!())]
     /// Configures the given network namespace with the given configuration.
     Setup(setup::Setup),
-    #[clap(version = crate_version!())]
     /// Undo any configuration applied via setup command.
     Teardown(teardown::Teardown),
+    /// Display info about netavark.
+    Version(version::Version),
 }
 
 fn main() {
@@ -47,6 +48,7 @@ fn main() {
     let result = match opts.subcmd {
         SubCommand::Setup(setup) => setup.exec(file, config, aardvark_bin, rootless),
         SubCommand::Teardown(teardown) => teardown.exec(file, config, rootless),
+        SubCommand::Version(version) => version.exec(),
     };
 
     match result {

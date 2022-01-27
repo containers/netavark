@@ -3,21 +3,18 @@
 # When uploading crates to the registry Cargo will automatically
 # "normalize" Cargo.toml files for maximal compatibility
 # with all versions of Cargo and also rewrite `path` dependencies
-# to registry (e.g., crates.io) dependencies
+# to registry (e.g., crates.io) dependencies.
 #
-# If you believe there's an error in this file please file an
-# issue against the rust-lang/cargo repository. If you're
-# editing this file be aware that the upstream Cargo.toml
-# will likely look very different (and much more reasonable)
+# If you are reading this file be aware that the original Cargo.toml
+# will likely look very different (and much more reasonable).
+# See Cargo.toml.orig for the original contents.
 
 [package]
 edition = "2018"
 name = "clap_derive"
-version = "3.0.0-beta.4"
-authors = ["Guillaume Pinot <texitoi@texitoi.eu>", "Clap Maintainers"]
-include = ["src/**/*", "Cargo.toml", "README.md"]
+version = "3.0.12"
+include = ["src/**/*", "Cargo.toml", "LICENSE-*", "README.md"]
 description = "Parse command line argument by defining a struct, derive crate."
-homepage = "https://clap.rs/"
 documentation = "https://docs.rs/clap_derive"
 readme = "README.md"
 keywords = ["clap", "cli", "parse", "derive", "proc_macro"]
@@ -27,11 +24,22 @@ repository = "https://github.com/clap-rs/clap/tree/master/clap_derive"
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
 
+[package.metadata.release]
+shared-version = true
+tag-name = "v{{version}}"
+
+[[package.metadata.release.pre-release-replacements]]
+exactly = 2
+file = "README.md"
+prerelease = true
+replace = "github.com/clap-rs/clap/blob/{{tag_name}}/"
+search = "github.com/clap-rs/clap/blob/[^/]+/"
+
 [lib]
 bench = false
 proc-macro = true
 [dependencies.heck]
-version = "0.3.0"
+version = "0.4.0"
 
 [dependencies.proc-macro-error]
 version = "1"
@@ -45,14 +53,6 @@ version = "1.0.9"
 [dependencies.syn]
 version = "1.0.74"
 features = ["full"]
-[dev-dependencies.rustversion]
-version = "1"
-
-[dev-dependencies.trybuild]
-version = "1.0"
-
-[dev-dependencies.version-sync]
-version = "0.9"
 
 [features]
 debug = []

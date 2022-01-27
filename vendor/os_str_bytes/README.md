@@ -1,6 +1,6 @@
 # OsStr Bytes
 
-This crate allows interacting with the data stored internally by [`OsStr`] and
+This crate allows interacting with the data stored by [`OsStr`] and
 [`OsString`], without resorting to panics or corruption for invalid UTF-8.
 Thus, methods can be used that are already defined on [`[u8]`][slice] and
 [`Vec<u8>`].
@@ -19,7 +19,7 @@ Add the following lines to your "Cargo.toml" file:
 
 ```toml
 [dependencies]
-os_str_bytes = "3.1"
+os_str_bytes = "6.0"
 ```
 
 See the [documentation] for available functionality and examples.
@@ -40,34 +40,36 @@ The minimum supported Rust toolchain version depends on the platform:
         <td>nightly (<a href="https://doc.rust-lang.org/unstable-book/library-features/sgx-platform.html"><code>sgx_platform</code></a>)</td>
     </tr>
     <tr>
-        <td rowspan="2">JavaScript</td>
-        <td><code>wasm32-*-emscripten</code></td>
-        <td rowspan="2">1.34.0</td>
-    </tr>
-    <tr>
-        <td><code>wasm32-*-unknown</code></td>
-    </tr>
-    <tr>
-        <td>Redox</td>
-        <td><code>*-redox</code></td>
-        <td>1.34.0</td>
-    </tr>
-    <tr>
         <td>Unix</td>
         <td>Unix</td>
-        <td>1.34.0</td>
+        <td>1.52.0</td>
     </tr>
     <tr>
         <td>WASI</td>
         <td><code>*-wasi</code></td>
-        <td>1.35.0 (all versions)</td>
+        <td>1.52.0</td>
+    </tr>
+    <tr>
+        <td>WebAssembly</td>
+        <td><code>wasm32-*-unknown</code></td>
+        <td>1.52.0</td>
     </tr>
     <tr>
         <td>Windows</td>
         <td><code>*-windows-*</code></td>
-        <td>1.34.0</td>
+        <td>1.52.0</td>
     </tr>
 </table>
+
+Minor version updates may increase these version requirements. However, the
+previous two Rust releases will always be supported. If the minimum Rust
+version must not be increased, use a tilde requirement to prevent updating this
+crate's minor version:
+
+```toml
+[dependencies]
+os_str_bytes = "~6.0"
+```
 
 ## License
 

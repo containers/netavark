@@ -1,6 +1,6 @@
 // Copyright 2018 Guillaume Pinot (@TeXitoi) <texitoi@texitoi.eu>,
 // Kevin Knapp (@kbknapp) <kbknapp@gmail.com>, and
-// Andrew Hobden (@hoverbear) <andrew@hoverbear.org>
+// Ana Hobden (@hoverbear) <operator@hoverbear.org>
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -15,36 +15,19 @@
 use std::env;
 
 use proc_macro2::{Span, TokenStream};
-use proc_macro_error::abort_call_site;
 use quote::quote;
-use syn::{Attribute, Data, DataStruct, DeriveInput, Fields, Ident};
+use syn::{Attribute, Generics, Ident};
 
 use crate::{
     attrs::{Attrs, Name, DEFAULT_CASING, DEFAULT_ENV_CASING},
-    dummies,
     utils::Sp,
 };
 
-pub fn derive_into_app(input: &DeriveInput) -> TokenStream {
-    let ident = &input.ident;
-
-    dummies::into_app(ident);
-
-    match input.data {
-        Data::Struct(DataStruct {
-            fields: Fields::Named(_),
-            ..
-        }) => gen_for_struct(ident, &input.attrs),
-        Data::Struct(DataStruct {
-            fields: Fields::Unit,
-            ..
-        }) => gen_for_struct(ident, &input.attrs),
-        Data::Enum(_) => gen_for_enum(ident, &input.attrs),
-        _ => abort_call_site!("`#[derive(IntoApp)]` only supports non-tuple structs and enums"),
-    }
-}
-
-pub fn gen_for_struct(struct_name: &Ident, attrs: &[Attribute]) -> TokenStream {
+pub fn gen_for_struct(
+    struct_name: &Ident,
+    generics: &Generics,
+    attrs: &[Attribute],
+) -> TokenStream {
     let app_name = env::var("CARGO_PKG_NAME").ok().unwrap_or_default();
 
     let attrs = Attrs::from_struct(
@@ -55,9 +38,12 @@ pub fn gen_for_struct(struct_name: &Ident, attrs: &[Attribute]) -> TokenStream {
         Sp::call_site(DEFAULT_ENV_CASING),
     );
     let name = attrs.cased_name();
+    let app_var = Ident::new("__clap_app", Span::call_site());
+
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     let tokens = quote! {
-        #[allow(dead_code, unreachable_code, unused_variables)]
+        #[allow(dead_code, unreachable_code, unused_variables, unused_braces)]
         #[allow(
             clippy::style,
             clippy::complexity,
@@ -66,18 +52,19 @@ pub fn gen_for_struct(struct_name: &Ident, attrs: &[Attribute]) -> TokenStream {
             clippy::perf,
             clippy::deprecated,
             clippy::nursery,
-            clippy::cargo
+            clippy::cargo,
+            clippy::suspicious_else_formatting,
         )]
         #[deny(clippy::correctness)]
-        impl clap::IntoApp for #struct_name {
+        impl #impl_generics clap::IntoApp for #struct_name #ty_generics #where_clause {
             fn into_app<'b>() -> clap::App<'b> {
-                let app = clap::App::new(#name);
-                <#struct_name as clap::Args>::augment_args(app)
+                let #app_var = clap::App::new(#name);
+                <Self as clap::Args>::augment_args(#app_var)
             }
 
             fn into_app_for_update<'b>() -> clap::App<'b> {
-                let app = clap::App::new(#name);
-                <#struct_name as clap::Args>::augment_args_for_update(app)
+                let #app_var = clap::App::new(#name);
+                <Self as clap::Args>::augment_args_for_update(#app_var)
             }
         }
     };
@@ -85,7 +72,7 @@ pub fn gen_for_struct(struct_name: &Ident, attrs: &[Attribute]) -> TokenStream {
     tokens
 }
 
-pub fn gen_for_enum(enum_name: &Ident, attrs: &[Attribute]) -> TokenStream {
+pub fn gen_for_enum(enum_name: &Ident, generics: &Generics, attrs: &[Attribute]) -> TokenStream {
     let app_name = env::var("CARGO_PKG_NAME").ok().unwrap_or_default();
 
     let attrs = Attrs::from_struct(
@@ -96,9 +83,12 @@ pub fn gen_for_enum(enum_name: &Ident, attrs: &[Attribute]) -> TokenStream {
         Sp::call_site(DEFAULT_ENV_CASING),
     );
     let name = attrs.cased_name();
+    let app_var = Ident::new("__clap_app", Span::call_site());
+
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     quote! {
-        #[allow(dead_code, unreachable_code, unused_variables)]
+        #[allow(dead_code, unreachable_code, unused_variables, unused_braces)]
         #[allow(
             clippy::style,
             clippy::complexity,
@@ -107,19 +97,20 @@ pub fn gen_for_enum(enum_name: &Ident, attrs: &[Attribute]) -> TokenStream {
             clippy::perf,
             clippy::deprecated,
             clippy::nursery,
-            clippy::cargo
+            clippy::cargo,
+            clippy::suspicious_else_formatting,
         )]
         #[deny(clippy::correctness)]
-        impl clap::IntoApp for #enum_name {
+        impl #impl_generics clap::IntoApp for #enum_name #ty_generics #where_clause {
             fn into_app<'b>() -> clap::App<'b> {
-                let app = clap::App::new(#name)
+                let #app_var = clap::App::new(#name)
                     .setting(clap::AppSettings::SubcommandRequiredElseHelp);
-                <#enum_name as clap::Subcommand>::augment_subcommands(app)
+                <Self as clap::Subcommand>::augment_subcommands(#app_var)
             }
 
             fn into_app_for_update<'b>() -> clap::App<'b> {
-                let app = clap::App::new(#name);
-                <#enum_name as clap::Subcommand>::augment_subcommands_for_update(app)
+                let #app_var = clap::App::new(#name);
+                <Self as clap::Subcommand>::augment_subcommands_for_update(#app_var)
             }
         }
     }

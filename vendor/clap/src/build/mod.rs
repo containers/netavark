@@ -8,7 +8,7 @@ mod arg_group;
 mod usage_parser;
 
 pub use self::{
-    app::{App, AppSettings},
-    arg::{Arg, ArgSettings, ValueHint},
+    app::{App, AppFlags, AppSettings},
+    arg::{Arg, ArgFlags, ArgSettings, PossibleValue, ValueHint},
     arg_group::ArgGroup,
 };

@@ -1,6 +1,6 @@
 // Copyright 2018 Guillaume Pinot (@TeXitoi) <texitoi@texitoi.eu>,
 // Kevin Knapp (@kbknapp) <kbknapp@gmail.com>, and
-// Andrew Hobden (@hoverbear) <andrew@hoverbear.org>
+// Ana Hobden (@hoverbear) <operator@hoverbear.org>
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -15,15 +15,15 @@
 use crate::{
     attrs::{Attrs, Kind, Name, ParserKind, DEFAULT_CASING, DEFAULT_ENV_CASING},
     dummies,
-    utils::{sub_type, subty_if_name, Sp, Ty},
+    utils::{inner_type, sub_type, Sp, Ty},
 };
 
 use proc_macro2::{Ident, Span, TokenStream};
 use proc_macro_error::{abort, abort_call_site};
-use quote::{quote, quote_spanned};
+use quote::{format_ident, quote, quote_spanned};
 use syn::{
     punctuated::Punctuated, spanned::Spanned, token::Comma, Attribute, Data, DataStruct,
-    DeriveInput, Field, Fields, Type,
+    DeriveInput, Field, Fields, Generics, Type,
 };
 
 pub fn derive_args(input: &DeriveInput) -> TokenStream {
@@ -35,21 +35,27 @@ pub fn derive_args(input: &DeriveInput) -> TokenStream {
         Data::Struct(DataStruct {
             fields: Fields::Named(ref fields),
             ..
-        }) => gen_for_struct(ident, &fields.named, &input.attrs),
+        }) => gen_for_struct(ident, &input.generics, &fields.named, &input.attrs),
         Data::Struct(DataStruct {
             fields: Fields::Unit,
             ..
-        }) => gen_for_struct(ident, &Punctuated::<Field, Comma>::new(), &input.attrs),
+        }) => gen_for_struct(
+            ident,
+            &input.generics,
+            &Punctuated::<Field, Comma>::new(),
+            &input.attrs,
+        ),
         _ => abort_call_site!("`#[derive(Args)]` only supports non-tuple structs"),
     }
 }
 
 pub fn gen_for_struct(
     struct_name: &Ident,
+    generics: &Generics,
     fields: &Punctuated<Field, Comma>,
     attrs: &[Attribute],
 ) -> TokenStream {
-    let from_arg_matches = gen_from_arg_matches_for_struct(struct_name, fields, attrs);
+    let from_arg_matches = gen_from_arg_matches_for_struct(struct_name, generics, fields, attrs);
 
     let attrs = Attrs::from_struct(
         Span::call_site(),
@@ -58,14 +64,16 @@ pub fn gen_for_struct(
         Sp::call_site(DEFAULT_CASING),
         Sp::call_site(DEFAULT_ENV_CASING),
     );
-    let app_var = Ident::new("app", Span::call_site());
+    let app_var = Ident::new("__clap_app", Span::call_site());
     let augmentation = gen_augment(fields, &app_var, &attrs, false);
     let augmentation_update = gen_augment(fields, &app_var, &attrs, true);
+
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     quote! {
         #from_arg_matches
 
-        #[allow(dead_code, unreachable_code, unused_variables)]
+        #[allow(dead_code, unreachable_code, unused_variables, unused_braces)]
         #[allow(
             clippy::style,
             clippy::complexity,
@@ -74,10 +82,11 @@ pub fn gen_for_struct(
             clippy::perf,
             clippy::deprecated,
             clippy::nursery,
-            clippy::cargo
+            clippy::cargo,
+            clippy::suspicious_else_formatting,
         )]
         #[deny(clippy::correctness)]
-        impl clap::Args for #struct_name {
+        impl #impl_generics clap::Args for #struct_name #ty_generics #where_clause {
             fn augment_args<'b>(#app_var: clap::App<'b>) -> clap::App<'b> {
                 #augmentation
             }
@@ -90,6 +99,7 @@ pub fn gen_for_struct(
 
 pub fn gen_from_arg_matches_for_struct(
     struct_name: &Ident,
+    generics: &Generics,
     fields: &Punctuated<Field, Comma>,
     attrs: &[Attribute],
 ) -> TokenStream {
@@ -104,8 +114,10 @@ pub fn gen_from_arg_matches_for_struct(
     let constructor = gen_constructor(fields, &attrs);
     let updater = gen_updater(fields, &attrs, true);
 
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
     quote! {
-        #[allow(dead_code, unreachable_code, unused_variables)]
+        #[allow(dead_code, unreachable_code, unused_variables, unused_braces)]
         #[allow(
             clippy::style,
             clippy::complexity,
@@ -114,17 +126,19 @@ pub fn gen_from_arg_matches_for_struct(
             clippy::perf,
             clippy::deprecated,
             clippy::nursery,
-            clippy::cargo
+            clippy::cargo,
+            clippy::suspicious_else_formatting,
         )]
         #[deny(clippy::correctness)]
-        impl clap::FromArgMatches for #struct_name {
-            fn from_arg_matches(arg_matches: &clap::ArgMatches) -> Option<Self> {
+        impl #impl_generics clap::FromArgMatches for #struct_name #ty_generics #where_clause {
+            fn from_arg_matches(__clap_arg_matches: &clap::ArgMatches) -> ::std::result::Result<Self, clap::Error> {
                 let v = #struct_name #constructor;
-                Some(v)
+                ::std::result::Result::Ok(v)
             }
 
-            fn update_from_arg_matches(&mut self, arg_matches: &clap::ArgMatches) {
+            fn update_from_arg_matches(&mut self, __clap_arg_matches: &clap::ArgMatches) -> ::std::result::Result<(), clap::Error> {
                 #updater
+                ::std::result::Result::Ok(())
             }
         }
     }
@@ -198,18 +212,26 @@ pub fn gen_augment(
             | Kind::ExternalSubcommand => None,
             Kind::Flatten => {
                 let ty = &field.ty;
-                Some(quote_spanned! { kind.span()=>
-                    let #app_var = <#ty as clap::Args>::augment_args(#app_var);
-                })
+                let old_heading_var = format_ident!("__clap_old_heading");
+                let help_heading = attrs.help_heading();
+                if override_required {
+                    Some(quote_spanned! { kind.span()=>
+                        let #old_heading_var = #app_var.get_help_heading();
+                        let #app_var = #app_var #help_heading;
+                        let #app_var = <#ty as clap::Args>::augment_args_for_update(#app_var);
+                        let #app_var = #app_var.help_heading(#old_heading_var);
+                    })
+                } else {
+                    Some(quote_spanned! { kind.span()=>
+                        let #old_heading_var = #app_var.get_help_heading();
+                        let #app_var = #app_var #help_heading;
+                        let #app_var = <#ty as clap::Args>::augment_args(#app_var);
+                        let #app_var = #app_var.help_heading(#old_heading_var);
+                    })
+                }
             }
             Kind::Arg(ty) => {
-                let convert_type = match **ty {
-                    Ty::Vec | Ty::Option => sub_type(&field.ty).unwrap_or(&field.ty),
-                    Ty::OptionOption | Ty::OptionVec => {
-                        sub_type(&field.ty).and_then(sub_type).unwrap_or(&field.ty)
-                    }
-                    _ => &field.ty,
-                };
+                let convert_type = inner_type(**ty, &field.ty);
 
                 let occurrences = *attrs.parser().kind == ParserKind::FromOccurrences;
                 let flag = *attrs.parser().kind == ParserKind::FromFlag;
@@ -228,28 +250,41 @@ pub fn gen_augment(
                     ParserKind::TryFromOsStr => quote_spanned! { func.span()=>
                         .validator_os(|s| #func(s).map(|_: #convert_type| ()))
                     },
-                    _ => quote!(),
+                    ParserKind::FromStr
+                    | ParserKind::FromOsStr
+                    | ParserKind::FromFlag
+                    | ParserKind::FromOccurrences => quote!(),
+                };
+                let allow_invalid_utf8 = match *parser.kind {
+                    _ if attrs.is_enum() => quote!(),
+                    ParserKind::FromOsStr | ParserKind::TryFromOsStr => {
+                        quote_spanned! { func.span()=>
+                            .allow_invalid_utf8(true)
+                        }
+                    }
+                    ParserKind::FromStr
+                    | ParserKind::TryFromStr
+                    | ParserKind::FromFlag
+                    | ParserKind::FromOccurrences => quote!(),
                 };
 
                 let value_name = attrs.value_name();
+                let possible_values = if attrs.is_enum() {
+                    gen_arg_enum_possible_values(convert_type)
+                } else {
+                    quote!()
+                };
 
                 let modifier = match **ty {
                     Ty::Bool => quote!(),
 
                     Ty::Option => {
-                        let mut possible_values = quote!();
-
-                        if attrs.is_enum() {
-                            if let Some(subty) = subty_if_name(&field.ty, "Option") {
-                                possible_values = gen_arg_enum_possible_values(subty);
-                            }
-                        };
-
                         quote_spanned! { ty.span()=>
                             .takes_value(true)
                             .value_name(#value_name)
                             #possible_values
                             #validator
+                            #allow_invalid_utf8
                         }
                     }
 
@@ -259,32 +294,28 @@ pub fn gen_augment(
                         .min_values(0)
                         .max_values(1)
                         .multiple_values(false)
+                        #possible_values
                         #validator
+                        #allow_invalid_utf8
                     },
 
                     Ty::OptionVec => quote_spanned! { ty.span()=>
                         .takes_value(true)
                         .value_name(#value_name)
-                        .multiple_values(true)
-                        .min_values(0)
+                        .multiple_occurrences(true)
+                        #possible_values
                         #validator
+                        #allow_invalid_utf8
                     },
 
                     Ty::Vec => {
-                        let mut possible_values = quote!();
-
-                        if attrs.is_enum() {
-                            if let Some(subty) = subty_if_name(&field.ty, "Vec") {
-                                possible_values = gen_arg_enum_possible_values(subty);
-                            }
-                        };
-
                         quote_spanned! { ty.span()=>
                             .takes_value(true)
                             .value_name(#value_name)
-                            .multiple_values(true)
+                            .multiple_occurrences(true)
                             #possible_values
                             #validator
+                            #allow_invalid_utf8
                         }
                     }
 
@@ -294,29 +325,23 @@ pub fn gen_augment(
 
                     Ty::Other if flag => quote_spanned! { ty.span()=>
                         .takes_value(false)
-                        .multiple_values(false)
                     },
 
                     Ty::Other => {
-                        let required = !attrs.has_method("default_value") && !override_required;
-                        let mut possible_values = quote!();
-
-                        if attrs.is_enum() {
-                            possible_values = gen_arg_enum_possible_values(&field.ty);
-                        };
-
+                        let required = attrs.find_default_method().is_none() && !override_required;
                         quote_spanned! { ty.span()=>
                             .takes_value(true)
                             .value_name(#value_name)
                             .required(#required)
                             #possible_values
                             #validator
+                            #allow_invalid_utf8
                         }
                     }
                 };
 
                 let name = attrs.cased_name();
-                let methods = attrs.field_methods();
+                let methods = attrs.field_methods(true);
 
                 Some(quote_spanned! { field.span()=>
                     let #app_var = #app_var.arg(
@@ -329,19 +354,19 @@ pub fn gen_augment(
         }
     });
 
-    let app_methods = parent_attribute.top_level_methods();
-    let version = parent_attribute.version();
+    let initial_app_methods = parent_attribute.initial_top_level_methods();
+    let final_app_methods = parent_attribute.final_top_level_methods();
     quote! {{
+        let #app_var = #app_var #initial_app_methods;
         #( #args )*
-        let #app_var = #app_var#app_methods;
         #subcmd
-        #app_var#version
+        #app_var #final_app_methods
     }}
 }
 
 fn gen_arg_enum_possible_values(ty: &Type) -> TokenStream {
     quote_spanned! { ty.span()=>
-        .possible_values(&<#ty as clap::ArgEnum>::VARIANTS)
+        .possible_values(<#ty as clap::ArgEnum>::value_variants().iter().filter_map(clap::ArgEnum::to_possible_value))
     }
 }
 
@@ -354,7 +379,7 @@ pub fn gen_constructor(fields: &Punctuated<Field, Comma>, parent_attribute: &Att
         );
         let field_name = field.ident.as_ref().unwrap();
         let kind = attrs.kind();
-        let arg_matches = quote! { arg_matches };
+        let arg_matches = format_ident!("__clap_arg_matches");
         match &*kind {
             Kind::ExternalSubcommand => {
                 abort! { kind.span(),
@@ -366,20 +391,30 @@ pub fn gen_constructor(fields: &Punctuated<Field, Comma>, parent_attribute: &Att
                     (Ty::Option, Some(sub_type)) => sub_type,
                     _ => &field.ty,
                 };
-                let unwrapper = match **ty {
-                    Ty::Option => quote!(),
-                    _ => quote_spanned!( ty.span()=> .expect("app should verify subcommand is required") ),
-                };
-                quote_spanned! { kind.span()=>
-                    #field_name: {
-                        <#subcmd_type as clap::FromArgMatches>::from_arg_matches(#arg_matches)
-                        #unwrapper
-                    }
+                match **ty {
+                    Ty::Option => {
+                        quote_spanned! { kind.span()=>
+                            #field_name: {
+                                if #arg_matches.subcommand_name().map(<#subcmd_type as clap::Subcommand>::has_subcommand).unwrap_or(false) {
+                                    Some(<#subcmd_type as clap::FromArgMatches>::from_arg_matches(#arg_matches)?)
+                                } else {
+                                    None
+                                }
+                            }
+                        }
+                    },
+                    _ => {
+                        quote_spanned! { kind.span()=>
+                            #field_name: {
+                                <#subcmd_type as clap::FromArgMatches>::from_arg_matches(#arg_matches)?
+                            }
+                        }
+                    },
                 }
             }
 
             Kind::Flatten => quote_spanned! { kind.span()=>
-                #field_name: clap::FromArgMatches::from_arg_matches(#arg_matches).unwrap()
+                #field_name: clap::FromArgMatches::from_arg_matches(#arg_matches)?
             },
 
             Kind::Skip(val) => match val {
@@ -420,7 +455,7 @@ pub fn gen_updater(
         } else {
             quote!()
         };
-        let arg_matches = quote! { arg_matches };
+        let arg_matches = format_ident!("__clap_arg_matches");
 
         match &*kind {
             Kind::ExternalSubcommand => {
@@ -435,7 +470,7 @@ pub fn gen_updater(
                 };
 
                 let updater = quote_spanned! { ty.span()=>
-                    <#subcmd_type as clap::FromArgMatches>::update_from_arg_matches(#field_name, #arg_matches);
+                    <#subcmd_type as clap::FromArgMatches>::update_from_arg_matches(#field_name, #arg_matches)?;
                 };
 
                 let updater = match **ty {
@@ -443,9 +478,9 @@ pub fn gen_updater(
                         if let Some(#field_name) = #field_name.as_mut() {
                             #updater
                         } else {
-                            *#field_name = <#subcmd_type as clap::FromArgMatches>::from_arg_matches(
+                            *#field_name = Some(<#subcmd_type as clap::FromArgMatches>::from_arg_matches(
                                 #arg_matches
-                            )
+                            )?);
                         }
                     },
                     _ => quote_spanned! { kind.span()=>
@@ -463,7 +498,7 @@ pub fn gen_updater(
 
             Kind::Flatten => quote_spanned! { kind.span()=> {
                     #access
-                    clap::FromArgMatches::update_from_arg_matches(#field_name, #arg_matches);
+                    clap::FromArgMatches::update_from_arg_matches(#field_name, #arg_matches)?;
                 }
             },
 
@@ -490,26 +525,28 @@ fn gen_parsers(
     let parser = attrs.parser();
     let func = &parser.func;
     let span = parser.kind.span();
+    let convert_type = inner_type(**ty, &field.ty);
+    let name = attrs.cased_name();
     let (value_of, values_of, mut parse) = match *parser.kind {
         FromStr => (
             quote_spanned!(span=> value_of),
             quote_spanned!(span=> values_of),
-            func.clone(),
+            quote_spanned!(func.span()=> |s| ::std::result::Result::Ok::<_, clap::Error>(#func(s))),
         ),
         TryFromStr => (
             quote_spanned!(span=> value_of),
             quote_spanned!(span=> values_of),
-            quote_spanned!(func.span()=> |s| #func(s).unwrap()),
+            quote_spanned!(func.span()=> |s| #func(s).map_err(|err| clap::Error::raw(clap::ErrorKind::ValueValidation, format!("Invalid value for {}: {}", #name, err)))),
         ),
         FromOsStr => (
             quote_spanned!(span=> value_of_os),
             quote_spanned!(span=> values_of_os),
-            func.clone(),
+            quote_spanned!(func.span()=> |s| ::std::result::Result::Ok::<_, clap::Error>(#func(s))),
         ),
         TryFromOsStr => (
             quote_spanned!(span=> value_of_os),
             quote_spanned!(span=> values_of_os),
-            quote_spanned!(func.span()=> |s| #func(s).unwrap()),
+            quote_spanned!(func.span()=> |s| #func(s).map_err(|err| clap::Error::raw(clap::ErrorKind::ValueValidation, format!("Invalid value for {}: {}", #name, err)))),
         ),
         FromOccurrences => (
             quote_spanned!(span=> occurrences_of),
@@ -518,14 +555,20 @@ fn gen_parsers(
         ),
         FromFlag => (quote!(), quote!(), func.clone()),
     };
+    if attrs.is_enum() {
+        let ci = attrs.ignore_case();
+
+        parse = quote_spanned! { convert_type.span()=>
+            |s| <#convert_type as clap::ArgEnum>::from_str(s, #ci).map_err(|err| clap::Error::raw(clap::ErrorKind::ValueValidation, format!("Invalid value for {}: {}", #name, err)))
+        }
+    }
 
     let flag = *attrs.parser().kind == ParserKind::FromFlag;
     let occurrences = *attrs.parser().kind == ParserKind::FromOccurrences;
-    let name = attrs.cased_name();
-    // Use `quote!` to give this identifier the same hygiene
+    // Give this identifier the same hygiene
     // as the `arg_matches` parameter definition. This
     // allows us to refer to `arg_matches` within a `quote_spanned` block
-    let arg_matches = quote! { arg_matches };
+    let arg_matches = format_ident!("__clap_arg_matches");
 
     let field_value = match **ty {
         Ty::Bool => {
@@ -541,21 +584,16 @@ fn gen_parsers(
         }
 
         Ty::Option => {
-            if attrs.is_enum() {
-                if let Some(subty) = subty_if_name(&field.ty, "Option") {
-                    parse = gen_arg_enum_parse(subty, attrs);
-                }
-            }
-
             quote_spanned! { ty.span()=>
                 #arg_matches.#value_of(#name)
                     .map(#parse)
+                    .transpose()?
             }
         }
 
         Ty::OptionOption => quote_spanned! { ty.span()=>
             if #arg_matches.is_present(#name) {
-                Some(#arg_matches.#value_of(#name).map(#parse))
+                Some(#arg_matches.#value_of(#name).map(#parse).transpose()?)
             } else {
                 None
             }
@@ -564,23 +602,19 @@ fn gen_parsers(
         Ty::OptionVec => quote_spanned! { ty.span()=>
             if #arg_matches.is_present(#name) {
                 Some(#arg_matches.#values_of(#name)
-                     .map(|v| v.map(#parse).collect())
-                     .unwrap_or_else(Vec::new))
+                    .map(|v| v.map::<::std::result::Result<#convert_type, clap::Error>, _>(#parse).collect::<::std::result::Result<Vec<_>, clap::Error>>())
+                    .transpose()?
+                    .unwrap_or_else(Vec::new))
             } else {
                 None
             }
         },
 
         Ty::Vec => {
-            if attrs.is_enum() {
-                if let Some(subty) = subty_if_name(&field.ty, "Vec") {
-                    parse = gen_arg_enum_parse(subty, attrs);
-                }
-            }
-
             quote_spanned! { ty.span()=>
                 #arg_matches.#values_of(#name)
-                    .map(|v| v.map(#parse).collect())
+                    .map(|v| v.map::<::std::result::Result<#convert_type, clap::Error>, _>(#parse).collect::<::std::result::Result<Vec<_>, clap::Error>>())
+                    .transpose()?
                     .unwrap_or_else(Vec::new)
             }
         }
@@ -594,14 +628,10 @@ fn gen_parsers(
         },
 
         Ty::Other => {
-            if attrs.is_enum() {
-                parse = gen_arg_enum_parse(&field.ty, attrs);
-            }
-
             quote_spanned! { ty.span()=>
                 #arg_matches.#value_of(#name)
-                    .map(#parse)
-                    .expect("app should verify arg is required")
+                    .ok_or_else(|| clap::Error::raw(clap::ErrorKind::MissingRequiredArgument, format!("The following required argument was not provided: {}", #name)))
+                    .and_then(#parse)?
             }
         }
     };
@@ -615,13 +645,5 @@ fn gen_parsers(
         }
     } else {
         quote_spanned!(field.span()=> #field_name: #field_value )
-    }
-}
-
-fn gen_arg_enum_parse(ty: &Type, attrs: &Attrs) -> TokenStream {
-    let ci = attrs.case_insensitive();
-
-    quote_spanned! { ty.span()=>
-        |s| <#ty as clap::ArgEnum>::from_str(s, #ci).expect("app should verify the choice was valid")
     }
 }

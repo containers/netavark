@@ -1,6 +1,8 @@
 // std
 use std::collections::BTreeMap;
 
+use indexmap::IndexSet;
+
 // Internal
 use crate::{
     build::AppSettings as AS,
@@ -60,24 +62,12 @@ impl<'help, 'app, 'parser> Usage<'help, 'app, 'parser> {
             String::new()
         };
 
-        let flags = self.needs_flags_tag();
-        if flags && !self.p.is_set(AS::UnifiedHelpMessage) {
-            usage.push_str(" [FLAGS]");
-        } else if flags {
-            usage.push_str(" [OPTIONS]");
-        }
-        if !self.p.is_set(AS::UnifiedHelpMessage)
-            && self
-                .p
-                .app
-                .get_opts_with_no_heading()
-                .any(|o| !o.is_set(ArgSettings::Required) && !o.is_set(ArgSettings::Hidden))
-        {
+        if self.needs_options_tag() {
             usage.push_str(" [OPTIONS]");
         }
 
-        let allow_mising_positional = self.p.app.is_set(AS::AllowMissingPositional);
-        if !allow_mising_positional {
+        let allow_missing_positional = self.p.app.is_set(AS::AllowMissingPositional);
+        if !allow_missing_positional {
             usage.push_str(&req_string);
         }
 
@@ -91,7 +81,7 @@ impl<'help, 'app, 'parser> Usage<'help, 'app, 'parser> {
         if self
             .p
             .app
-            .get_opts_with_no_heading()
+            .get_non_positionals()
             .any(|o| o.is_set(ArgSettings::MultipleValues))
             && self
                 .p
@@ -145,7 +135,7 @@ impl<'help, 'app, 'parser> Usage<'help, 'app, 'parser> {
             }
         }
 
-        if allow_mising_positional {
+        if allow_missing_positional {
             usage.push_str(&req_string);
         }
 
@@ -153,7 +143,7 @@ impl<'help, 'app, 'parser> Usage<'help, 'app, 'parser> {
         if self.p.app.has_visible_subcommands() && incl_reqs
             || self.p.is_set(AS::AllowExternalSubcommands)
         {
-            let placeholder = self.p.app.subcommand_placeholder.unwrap_or("SUBCOMMAND");
+            let placeholder = self.p.app.subcommand_value_name.unwrap_or("SUBCOMMAND");
             if self.p.is_set(AS::SubcommandsNegateReqs) || self.p.is_set(AS::ArgsNegateSubcommands)
             {
                 usage.push_str("\n    ");
@@ -204,7 +194,7 @@ impl<'help, 'app, 'parser> Usage<'help, 'app, 'parser> {
         usage.push_str(&*r_string);
         if self.p.is_set(AS::SubcommandRequired) {
             usage.push_str(" <");
-            usage.push_str(self.p.app.subcommand_placeholder.unwrap_or("SUBCOMMAND"));
+            usage.push_str(self.p.app.subcommand_value_name.unwrap_or("SUBCOMMAND"));
             usage.push('>');
         }
         usage.shrink_to_fit();
@@ -326,22 +316,28 @@ impl<'help, 'app, 'parser> Usage<'help, 'app, 'parser> {
         }
     }
 
-    // Determines if we need the `[FLAGS]` tag in the usage string
-    fn needs_flags_tag(&self) -> bool {
-        debug!("Usage::needs_flags_tag");
-        'outer: for f in self.p.app.get_flags_with_no_heading() {
-            debug!("Usage::needs_flags_tag:iter: f={}", f.name);
+    // Determines if we need the `[OPTIONS]` tag in the usage string
+    fn needs_options_tag(&self) -> bool {
+        debug!("Usage::needs_options_tag");
+        'outer: for f in self.p.app.get_non_positionals() {
+            debug!("Usage::needs_options_tag:iter: f={}", f.name);
 
-            // Don't print `[FLAGS]` just for help or version
+            // Don't print `[OPTIONS]` just for help or version
             if f.long == Some("help") || f.long == Some("version") {
+                debug!("Usage::needs_options_tag:iter Option is built-in");
                 continue;
             }
 
             if f.is_set(ArgSettings::Hidden) {
+                debug!("Usage::needs_options_tag:iter Option is hidden");
+                continue;
+            }
+            if f.is_set(ArgSettings::Required) {
+                debug!("Usage::needs_options_tag:iter Option is required");
                 continue;
             }
             for grp_s in self.p.app.groups_for_arg(&f.id) {
-                debug!("Usage::needs_flags_tag:iter:iter: grp_s={:?}", grp_s);
+                debug!("Usage::needs_options_tag:iter:iter: grp_s={:?}", grp_s);
                 if self
                     .p
                     .app
@@ -349,16 +345,16 @@ impl<'help, 'app, 'parser> Usage<'help, 'app, 'parser> {
                     .iter()
                     .any(|g| g.id == grp_s && g.required)
                 {
-                    debug!("Usage::needs_flags_tag:iter:iter: Group is required");
+                    debug!("Usage::needs_options_tag:iter:iter: Group is required");
                     continue 'outer;
                 }
             }
 
-            debug!("Usage::needs_flags_tag:iter: [FLAGS] required");
+            debug!("Usage::needs_options_tag:iter: [OPTIONS] required");
             return true;
         }
 
-        debug!("Usage::needs_flags_tag: [FLAGS] not required");
+        debug!("Usage::needs_options_tag: [OPTIONS] not required");
         false
     }
 
@@ -366,8 +362,6 @@ impl<'help, 'app, 'parser> Usage<'help, 'app, 'parser> {
     // `incl_last`: should we include args that are Arg::Last? (i.e. `prog [foo] -- [last]). We
     // can't do that for required usages being built for subcommands because it would look like:
     // `prog [foo] -- [last] <subcommand>` which is totally wrong.
-    // TODO: remove the allow clippy when we update the compiler version.
-    #[allow(clippy::needless_collect)]
     pub(crate) fn get_required_usage_from(
         &self,
         incls: &[Id],
@@ -382,17 +376,19 @@ impl<'help, 'app, 'parser> Usage<'help, 'app, 'parser> {
         );
         let mut ret_val = Vec::new();
 
-        let mut unrolled_reqs = vec![];
+        let mut unrolled_reqs = IndexSet::new();
 
         for a in self.p.required.iter() {
             if let Some(m) = matcher {
                 for aa in self.p.app.unroll_requirements_for_arg(a, m) {
-                    unrolled_reqs.push(aa);
+                    // if we don't check for duplicates here this causes duplicate error messages
+                    // see https://github.com/clap-rs/clap/issues/2770
+                    unrolled_reqs.insert(aa);
                 }
             }
             // always include the required arg itself. it will not be enumerated
             // by unroll_requirements_for_arg.
-            unrolled_reqs.push(a.clone());
+            unrolled_reqs.insert(a.clone());
         }
 
         debug!(

@@ -1,70 +1,18 @@
 // Std
+use std::ops::BitOr;
+#[cfg(feature = "yaml")]
 use std::str::FromStr;
 
 // Third party
 use bitflags::bitflags;
 
-bitflags! {
-    struct Flags: u32 {
-        const REQUIRED         = 1;
-        const MULTIPLE_OCC     = 1 << 1;
-        const NO_EMPTY_VALS    = 1 << 2;
-        const GLOBAL           = 1 << 3;
-        const HIDDEN           = 1 << 4;
-        const TAKES_VAL        = 1 << 5;
-        const USE_DELIM        = 1 << 6;
-        const NEXT_LINE_HELP   = 1 << 7;
-        const R_UNLESS_ALL     = 1 << 8;
-        const REQ_DELIM        = 1 << 9;
-        const DELIM_NOT_SET    = 1 << 10;
-        const HIDE_POS_VALS    = 1 << 11;
-        const ALLOW_TAC_VALS   = 1 << 12;
-        const REQUIRE_EQUALS   = 1 << 13;
-        const LAST             = 1 << 14;
-        const HIDE_DEFAULT_VAL = 1 << 15;
-        const CASE_INSENSITIVE = 1 << 16;
-        #[cfg(feature = "env")]
-        const HIDE_ENV_VALS    = 1 << 17;
-        const HIDDEN_SHORT_H   = 1 << 18;
-        const HIDDEN_LONG_H    = 1 << 19;
-        const MULTIPLE_VALS    = 1 << 20;
-        #[cfg(feature = "env")]
-        const HIDE_ENV         = 1 << 21;
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct ArgFlags(Flags);
-
-// @TODO @p6 @internal: Reorder alphabetically
-impl_settings! { ArgSettings, ArgFlags,
-    Required("required") => Flags::REQUIRED,
-    MultipleOccurrences("multipleoccurrences") => Flags::MULTIPLE_OCC,
-    MultipleValues("multiplevalues") => Flags::MULTIPLE_VALS,
-    ForbidEmptyValues("forbidemptyvalues") => Flags::NO_EMPTY_VALS,
-    Hidden("hidden") => Flags::HIDDEN,
-    TakesValue("takesvalue") => Flags::TAKES_VAL,
-    UseValueDelimiter("usevaluedelimiter") => Flags::USE_DELIM,
-    NextLineHelp("nextlinehelp") => Flags::NEXT_LINE_HELP,
-    RequiredUnlessAll("requiredunlessall") => Flags::R_UNLESS_ALL,
-    RequireDelimiter("requiredelimiter") => Flags::REQ_DELIM,
-    HidePossibleValues("hidepossiblevalues") => Flags::HIDE_POS_VALS,
-    AllowHyphenValues("allowhyphenvalues") => Flags::ALLOW_TAC_VALS,
-    RequireEquals("requireequals") => Flags::REQUIRE_EQUALS,
-    Last("last") => Flags::LAST,
-    IgnoreCase("ignorecase") => Flags::CASE_INSENSITIVE,
-    #[cfg(feature = "env")]
-    HideEnv("hideenv") => Flags::HIDE_ENV,
-    #[cfg(feature = "env")]
-    HideEnvValues("hideenvvalues") => Flags::HIDE_ENV_VALS,
-    HideDefaultValue("hidedefaultvalue") => Flags::HIDE_DEFAULT_VAL,
-    HiddenShortHelp("hiddenshorthelp") => Flags::HIDDEN_SHORT_H,
-    HiddenLongHelp("hiddenlonghelp") => Flags::HIDDEN_LONG_H
-}
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ArgFlags(Flags);
 
 impl Default for ArgFlags {
     fn default() -> Self {
-        ArgFlags(Flags::empty())
+        Self::empty()
     }
 }
 
@@ -77,6 +25,7 @@ impl Default for ArgFlags {
 /// [`Arg::unset_setting`]: crate::Arg::unset_setting()
 /// [`Arg::is_set`]: crate::Arg::is_set()
 #[derive(Debug, PartialEq, Copy, Clone)]
+#[non_exhaustive]
 pub enum ArgSettings {
     /// Specifies that an arg must be used
     Required,
@@ -84,8 +33,17 @@ pub enum ArgSettings {
     MultipleValues,
     /// Allows an arg to appear multiple times
     MultipleOccurrences,
+    /// Deprecated, see [`ArgSettings::MultipleOccurrences`] (most likely what you want) and
+    /// [`ArgSettings::MultipleValues`]
+    #[deprecated(
+        since = "3.0.0",
+        note = "Split into `ArgSettings::MultipleOccurrences` (most likely what you want)  and `ArgSettings::MultipleValues`"
+    )]
+    Multiple,
     /// Forbids an arg from accepting empty values such as `""`
     ForbidEmptyValues,
+    /// Sets an arg to be global (i.e. exist in all subcommands)
+    Global,
     /// Hides an arg from the help message
     Hidden,
     /// Allows an argument to take a value (such as `--option value`)
@@ -101,6 +59,12 @@ pub enum ArgSettings {
     HidePossibleValues,
     /// Allows values that start with a hyphen
     AllowHyphenValues,
+    /// Deprecated, replaced with [`ArgSettings::AllowHyphenValues`]
+    #[deprecated(
+        since = "3.0.0",
+        note = "Replaced with `ArgSettings::AllowHyphenValues`"
+    )]
+    AllowLeadingHyphen,
     /// Requires that an equals be used to provide a value to an option such as `--option=value`
     RequireEquals,
     /// Says that a positional arg will be the last positional, and requires `--` to be accessed.
@@ -110,6 +74,9 @@ pub enum ArgSettings {
     HideDefaultValue,
     /// Possible values become case insensitive
     IgnoreCase,
+    /// Deprecated, replaced with [`ArgSettings::IgnoreCase`]
+    #[deprecated(since = "3.0.0", note = "Replaced with `ArgSettings::IgnoreCase`")]
+    CaseInsensitive,
     /// Hides environment variable arguments from the help message
     #[cfg(feature = "env")]
     HideEnv,
@@ -121,16 +88,122 @@ pub enum ArgSettings {
     HiddenShortHelp,
     /// The argument should **not** be shown in long help text
     HiddenLongHelp,
-    #[doc(hidden)]
-    RequiredUnlessAll,
+    /// Specifies that option values that are invalid UTF-8 should *not* be treated as an error.
+    AllowInvalidUtf8,
+    /// Specifies that option should exist on its own.
+    /// Having any other arguments present at runtime is an error.
+    Exclusive,
+}
+
+bitflags! {
+    struct Flags: u32 {
+        const REQUIRED         = 1;
+        const MULTIPLE_OCC     = 1 << 1;
+        const NO_EMPTY_VALS    = 1 << 2;
+        const GLOBAL           = 1 << 3;
+        const HIDDEN           = 1 << 4;
+        const TAKES_VAL        = 1 << 5;
+        const USE_DELIM        = 1 << 6;
+        const NEXT_LINE_HELP   = 1 << 7;
+        const REQ_DELIM        = 1 << 9;
+        const DELIM_NOT_SET    = 1 << 10;
+        const HIDE_POS_VALS    = 1 << 11;
+        const ALLOW_TAC_VALS   = 1 << 12;
+        const REQUIRE_EQUALS   = 1 << 13;
+        const LAST             = 1 << 14;
+        const HIDE_DEFAULT_VAL = 1 << 15;
+        const CASE_INSENSITIVE = 1 << 16;
+        #[cfg(feature = "env")]
+        const HIDE_ENV_VALS    = 1 << 17;
+        const HIDDEN_SHORT_H   = 1 << 18;
+        const HIDDEN_LONG_H    = 1 << 19;
+        const MULTIPLE_VALS    = 1 << 20;
+        const MULTIPLE         = Self::MULTIPLE_OCC.bits | Self::MULTIPLE_VALS.bits;
+        #[cfg(feature = "env")]
+        const HIDE_ENV         = 1 << 21;
+        const UTF8_NONE        = 1 << 22;
+        const EXCLUSIVE        = 1 << 23;
+        const NO_OP            = 0;
+    }
+}
+
+impl_settings! { ArgSettings, ArgFlags,
+    Required => Flags::REQUIRED,
+    MultipleOccurrences => Flags::MULTIPLE_OCC,
+    MultipleValues => Flags::MULTIPLE_VALS,
+    Multiple => Flags::MULTIPLE,
+    ForbidEmptyValues => Flags::NO_EMPTY_VALS,
+    Global => Flags::GLOBAL,
+    Hidden => Flags::HIDDEN,
+    TakesValue => Flags::TAKES_VAL,
+    UseValueDelimiter => Flags::USE_DELIM,
+    NextLineHelp => Flags::NEXT_LINE_HELP,
+    RequireDelimiter => Flags::REQ_DELIM,
+    HidePossibleValues => Flags::HIDE_POS_VALS,
+    AllowHyphenValues => Flags::ALLOW_TAC_VALS,
+    AllowLeadingHyphen => Flags::ALLOW_TAC_VALS,
+    RequireEquals => Flags::REQUIRE_EQUALS,
+    Last => Flags::LAST,
+    IgnoreCase => Flags::CASE_INSENSITIVE,
+    CaseInsensitive => Flags::CASE_INSENSITIVE,
+    #[cfg(feature = "env")]
+    HideEnv => Flags::HIDE_ENV,
+    #[cfg(feature = "env")]
+    HideEnvValues => Flags::HIDE_ENV_VALS,
+    HideDefaultValue => Flags::HIDE_DEFAULT_VAL,
+    HiddenShortHelp => Flags::HIDDEN_SHORT_H,
+    HiddenLongHelp => Flags::HIDDEN_LONG_H,
+    AllowInvalidUtf8 => Flags::UTF8_NONE,
+    Exclusive => Flags::EXCLUSIVE
+}
+
+/// Deprecated in [Issue #3087](https://github.com/clap-rs/clap/issues/3087), maybe [`clap::Parser`][crate::Parser] would fit your use case?
+#[cfg(feature = "yaml")]
+impl FromStr for ArgSettings {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, <Self as FromStr>::Err> {
+        #[allow(deprecated)]
+        #[allow(unreachable_patterns)]
+        match &*s.to_ascii_lowercase() {
+            "required" => Ok(ArgSettings::Required),
+            "multipleoccurrences" => Ok(ArgSettings::MultipleOccurrences),
+            "multiplevalues" => Ok(ArgSettings::MultipleValues),
+            "multiple" => Ok(ArgSettings::Multiple),
+            "forbidemptyvalues" => Ok(ArgSettings::ForbidEmptyValues),
+            "global" => Ok(ArgSettings::Global),
+            "hidden" => Ok(ArgSettings::Hidden),
+            "takesvalue" => Ok(ArgSettings::TakesValue),
+            "usevaluedelimiter" => Ok(ArgSettings::UseValueDelimiter),
+            "nextlinehelp" => Ok(ArgSettings::NextLineHelp),
+            "requiredelimiter" => Ok(ArgSettings::RequireDelimiter),
+            "hidepossiblevalues" => Ok(ArgSettings::HidePossibleValues),
+            "allowhyphenvalues" => Ok(ArgSettings::AllowHyphenValues),
+            "allowleadinghypyhen" => Ok(ArgSettings::AllowLeadingHyphen),
+            "requireequals" => Ok(ArgSettings::RequireEquals),
+            "last" => Ok(ArgSettings::Last),
+            "ignorecase" => Ok(ArgSettings::IgnoreCase),
+            "caseinsensitive" => Ok(ArgSettings::CaseInsensitive),
+            #[cfg(feature = "env")]
+            "hideenv" => Ok(ArgSettings::HideEnv),
+            #[cfg(feature = "env")]
+            "hideenvvalues" => Ok(ArgSettings::HideEnvValues),
+            "hidedefaultvalue" => Ok(ArgSettings::HideDefaultValue),
+            "hiddenshorthelp" => Ok(ArgSettings::HiddenShortHelp),
+            "hiddenlonghelp" => Ok(ArgSettings::HiddenLongHelp),
+            "allowinvalidutf8" => Ok(ArgSettings::AllowInvalidUtf8),
+            "exclusive" => Ok(ArgSettings::Exclusive),
+            _ => Err(format!("unknown AppSetting: `{}`", s)),
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use super::ArgSettings;
-
     #[test]
+    #[cfg(feature = "yaml")]
     fn arg_settings_fromstr() {
+        use super::ArgSettings;
+
         assert_eq!(
             "allowhyphenvalues".parse::<ArgSettings>().unwrap(),
             ArgSettings::AllowHyphenValues
@@ -150,10 +223,6 @@ mod test {
         assert_eq!(
             "nextlinehelp".parse::<ArgSettings>().unwrap(),
             ArgSettings::NextLineHelp
-        );
-        assert_eq!(
-            "requiredunlessall".parse::<ArgSettings>().unwrap(),
-            ArgSettings::RequiredUnlessAll
         );
         assert_eq!(
             "requiredelimiter".parse::<ArgSettings>().unwrap(),
@@ -201,6 +270,14 @@ mod test {
         assert_eq!(
             "hiddenlonghelp".parse::<ArgSettings>().unwrap(),
             ArgSettings::HiddenLongHelp
+        );
+        assert_eq!(
+            "allowinvalidutf8".parse::<ArgSettings>().unwrap(),
+            ArgSettings::AllowInvalidUtf8
+        );
+        assert_eq!(
+            "exclusive".parse::<ArgSettings>().unwrap(),
+            ArgSettings::Exclusive
         );
         assert!("hahahaha".parse::<ArgSettings>().is_err());
     }

@@ -1,6 +1,6 @@
 // Copyright 2018 Guillaume Pinot (@TeXitoi) <texitoi@texitoi.eu>,
 // Kevin Knapp (@kbknapp) <kbknapp@gmail.com>, and
-// Andrew Hobden (@hoverbear) <andrew@hoverbear.org>
+// Ana Hobden (@hoverbear) <operator@hoverbear.org>
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
@@ -47,12 +47,11 @@ pub fn gen_for_enum(name: &Ident, attrs: &[Attribute], e: &DataEnum) -> TokenStr
     );
 
     let lits = lits(&e.variants, &attrs);
-    let variants = gen_variants(&lits);
-    let from_str = gen_from_str(&lits);
-    let as_arg = gen_as_arg(&lits);
+    let value_variants = gen_value_variants(&lits);
+    let to_possible_value = gen_to_possible_value(&lits);
 
     quote! {
-        #[allow(dead_code, unreachable_code, unused_variables)]
+        #[allow(dead_code, unreachable_code, unused_variables, unused_braces)]
         #[allow(
             clippy::style,
             clippy::complexity,
@@ -61,13 +60,13 @@ pub fn gen_for_enum(name: &Ident, attrs: &[Attribute], e: &DataEnum) -> TokenStr
             clippy::perf,
             clippy::deprecated,
             clippy::nursery,
-            clippy::cargo
+            clippy::cargo,
+            clippy::suspicious_else_formatting,
         )]
         #[deny(clippy::correctness)]
         impl clap::ArgEnum for #name {
-            #variants
-            #from_str
-            #as_arg
+            #value_variants
+            #to_possible_value
         }
     }
 }
@@ -87,54 +86,35 @@ fn lits(
             if let Kind::Skip(_) = &*attrs.kind() {
                 None
             } else {
-                Some((variant, attrs))
+                let fields = attrs.field_methods(false);
+                let name = attrs.cased_name();
+                Some((
+                    quote! {
+                        clap::PossibleValue::new(#name)
+                        #fields
+                    },
+                    variant.ident.clone(),
+                ))
             }
-        })
-        .flat_map(|(variant, attrs)| {
-            let mut ret = vec![(attrs.cased_name(), variant.ident.clone())];
-
-            attrs
-                .enum_aliases()
-                .into_iter()
-                .for_each(|x| ret.push((x, variant.ident.clone())));
-
-            ret
         })
         .collect::<Vec<_>>()
 }
 
-fn gen_variants(lits: &[(TokenStream, Ident)]) -> TokenStream {
-    let lit = lits.iter().map(|l| &l.0).collect::<Vec<_>>();
+fn gen_value_variants(lits: &[(TokenStream, Ident)]) -> TokenStream {
+    let lit = lits.iter().map(|l| &l.1).collect::<Vec<_>>();
 
     quote! {
-        const VARIANTS: &'static [&'static str] = &[#(#lit),*];
-    }
-}
-
-fn gen_from_str(lits: &[(TokenStream, Ident)]) -> TokenStream {
-    let (lit, variant): (Vec<TokenStream>, Vec<Ident>) = lits.iter().cloned().unzip();
-
-    quote! {
-        fn from_str(input: &str, case_insensitive: bool) -> ::std::result::Result<Self, String> {
-            let func = if case_insensitive {
-                ::std::ascii::AsciiExt::eq_ignore_ascii_case
-            } else {
-                str::eq
-            };
-
-            match input {
-                #(val if func(val, #lit) => Ok(Self::#variant),)*
-                e => Err(format!("Invalid variant: {}", e)),
-            }
+        fn value_variants<'a>() -> &'a [Self]{
+            &[#(Self::#lit),*]
         }
     }
 }
 
-fn gen_as_arg(lits: &[(TokenStream, Ident)]) -> TokenStream {
+fn gen_to_possible_value(lits: &[(TokenStream, Ident)]) -> TokenStream {
     let (lit, variant): (Vec<TokenStream>, Vec<Ident>) = lits.iter().cloned().unzip();
 
     quote! {
-        fn as_arg(&self) -> Option<&'static str> {
+        fn to_possible_value<'a>(&self) -> ::std::option::Option<clap::PossibleValue<'a>> {
             match self {
                 #(Self::#variant => Some(#lit),)*
                 _ => None

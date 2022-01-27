@@ -5,24 +5,14 @@ use super::EncodingError;
 use super::Result;
 
 mod code_points;
-use code_points::CodePoints;
+pub(super) use code_points::CodePoints;
 
 mod convert;
 pub(super) use convert::encode_wide;
 pub(super) use convert::DecodeWide;
 
-if_raw! {
+if_raw_str! {
     mod string;
-    pub(super) use string::ends_with;
-    pub(super) use string::starts_with;
-}
-
-const BYTE_SHIFT: u8 = 6;
-
-const CONT_MASK: u8 = (1 << BYTE_SHIFT) - 1;
-
-const CONT_TAG: u8 = 0b1000_0000;
-
-const fn is_continuation(byte: u8) -> bool {
-    byte & !CONT_MASK == CONT_TAG
+    pub(crate) use string::ends_with;
+    pub(crate) use string::starts_with;
 }

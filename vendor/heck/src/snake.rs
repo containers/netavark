@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{lowercase, transform};
 
 /// This trait defines a snake case conversion.
@@ -7,38 +9,56 @@ use crate::{lowercase, transform};
 /// ## Example:
 ///
 /// ```rust
-/// use heck::SnakeCase;
+/// use heck::ToSnakeCase;
 ///
 /// let sentence = "We carry a new world here, in our hearts.";
 /// assert_eq!(sentence.to_snake_case(), "we_carry_a_new_world_here_in_our_hearts");
 /// ```
-pub trait SnakeCase: ToOwned {
+pub trait ToSnakeCase: ToOwned {
     /// Convert this type to snake case.
     fn to_snake_case(&self) -> Self::Owned;
 }
 
-/// Oh heck, SnekCase is an alias for SnakeCase. See SnakeCase for
+/// Oh heck, SnekCase is an alias for ToSnakeCase. See ToSnakeCase for
 /// more documentation.
-pub trait SnekCase: ToOwned {
+pub trait ToSnekCase: ToOwned {
     /// Convert this type to snek case.
     fn to_snek_case(&self) -> Self::Owned;
 }
 
-impl<T: ?Sized + SnakeCase> SnekCase for T {
+impl<T: ?Sized + ToSnakeCase> ToSnekCase for T {
     fn to_snek_case(&self) -> Self::Owned {
         self.to_snake_case()
     }
 }
 
-impl SnakeCase for str {
+impl ToSnakeCase for str {
     fn to_snake_case(&self) -> String {
-        transform(self, lowercase, |s| s.push('_'))
+        AsSnakeCase(self).to_string()
+    }
+}
+
+/// This wrapper performs a snake case conversion in [`fmt::Display`].
+///
+/// ## Example:
+///
+/// ```
+/// use heck::AsSnakeCase;
+///
+/// let sentence = "We carry a new world here, in our hearts.";
+/// assert_eq!(format!("{}", AsSnakeCase(sentence)), "we_carry_a_new_world_here_in_our_hearts");
+/// ```
+pub struct AsSnakeCase<T: AsRef<str>>(pub T);
+
+impl<T: AsRef<str>> fmt::Display for AsSnakeCase<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        transform(self.0.as_ref(), lowercase, |f| write!(f, "_"), f)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::SnakeCase;
+    use super::ToSnakeCase;
 
     macro_rules! t {
         ($t:ident : $s1:expr => $s2:expr) => {
@@ -57,6 +77,7 @@ mod tests {
     t!(test6: "SHOUTY_SNAKE_CASE" => "shouty_snake_case");
     t!(test7: "snake_case" => "snake_case");
     t!(test8: "this-contains_ ALLKinds OfWord_Boundaries" => "this_contains_all_kinds_of_word_boundaries");
+    #[cfg(feature = "unicode")]
     t!(test9: "XΣXΣ baﬄe" => "xσxς_baﬄe");
     t!(test10: "XMLHttpRequest" => "xml_http_request");
     t!(test11: "FIELD_NAME11" => "field_name11");
