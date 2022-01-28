@@ -38,5 +38,5 @@ sha2 = "0.10.0"
 netlink-packet-route = "0.8.0"
 
 [build-dependencies]
-vergen = { version = "=6.0.0", default-features = false, features = ["build", "rustc", "git"] }
+vergen = { version = "=6.0.2", default-features = false, features = ["build", "rustc", "git"] }
 anyhow = "1.0"
