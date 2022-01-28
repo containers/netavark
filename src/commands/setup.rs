@@ -9,9 +9,10 @@ use crate::network::internal_types::{PortForwardConfig, SetupNetwork};
 use crate::network::types::Subnet;
 use crate::network::{core_utils, types};
 use clap::Parser;
-use log::debug;
+use log::{debug, error, info};
 use std::collections::HashMap;
 use std::error::Error;
+use std::fs;
 use std::net::IpAddr;
 use std::path::Path;
 
@@ -215,29 +216,49 @@ impl Setup {
             }
         }
 
-        if Aardvark::check_aardvark_support() {
-            let path = Path::new(&config_dir).join("aardvark-dns".to_string());
+        if Path::new(&aardvark_bin).exists() {
+            let path = Path::new(&config_dir).join("aardvark-dns");
 
-            if let Ok(path_string) = path.into_os_string().into_string() {
-                let mut aardvark_interface = Aardvark::new(path_string, rootless);
-                if let Err(er) = aardvark_interface
-                    .clone()
-                    .start_aardvark_server_if_not_running(&aardvark_bin)
-                {
-                    debug!("Error while trying to start aardvark server {}", er);
+            match fs::create_dir(path.as_path()) {
+                Ok(_) => {}
+                // ignore error when path already exists
+                Err(ref e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(e) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("failed to create aardvark-dns directory: {}", e),
+                    )
+                    .into());
                 }
-
-                if let Err(er) = aardvark_interface.commit_netavark_entries(
-                    network_options.container_name,
-                    network_options.container_id,
-                    network_options.networks,
-                    response.clone(),
-                ) {
-                    debug!("Error while applying dns entries {}", er);
-                }
-            } else {
-                debug!("Unable to parse aardvark config path");
             }
+
+            let path_string = match path.into_os_string().into_string() {
+                Ok(path) => path,
+                Err(_) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "failed to convert path to String",
+                    )
+                    .into());
+                }
+            };
+
+            let mut aardvark_interface = Aardvark::new(path_string, rootless, aardvark_bin);
+
+            if let Err(er) = aardvark_interface.commit_netavark_entries(
+                network_options.container_name,
+                network_options.container_id,
+                network_options.networks,
+                response.clone(),
+            ) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Error while applying dns entries: {}", er),
+                )
+                .into());
+            }
+        } else {
+            info!("dns disabled because aardvark-dns path does not exists");
         }
         debug!("{:#?}", response);
         let response_json = serde_json::to_string(&response)?;

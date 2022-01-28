@@ -32,6 +32,7 @@ impl Teardown {
         &self,
         input_file: String,
         config_dir: String,
+        aardvark_bin: String,
         rootless: bool,
     ) -> Result<(), Box<dyn Error>> {
         debug!("{:?}", "Tearing down..");
@@ -45,11 +46,11 @@ impl Teardown {
             }
         };
 
-        if Aardvark::check_aardvark_support() {
+        if Path::new(&aardvark_bin).exists() {
             // stop dns server first before netavark clears the interface
             let path = Path::new(&config_dir).join("aardvark-dns".to_string());
             if let Ok(path_string) = path.into_os_string().into_string() {
-                let mut aardvark_interface = Aardvark::new(path_string, rootless);
+                let mut aardvark_interface = Aardvark::new(path_string, rootless, aardvark_bin);
                 if let Err(er) =
                     aardvark_interface.delete_from_netavark_entries(network_options.clone())
                 {

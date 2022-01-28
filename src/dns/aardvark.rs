@@ -12,8 +12,6 @@ use std::net::Ipv4Addr;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-const AARDVARK_BINARY: [&str; 1] = ["/usr/libexec/podman/aardvark-dns"];
-
 #[derive(Debug, Clone)]
 pub struct AardvarkEntry {
     pub network_name: String,
@@ -31,21 +29,17 @@ pub struct Aardvark {
     pub config: String,
     // tells if container is rootfull or rootless
     pub rootless: bool,
+    // path to the aardvark-dns binary
+    pub aardvark_bin: String,
 }
 
 impl Aardvark {
-    pub fn new(config: String, rootless: bool) -> Self {
-        Aardvark { config, rootless }
-    }
-
-    pub fn check_aardvark_support() -> bool {
-        for key in AARDVARK_BINARY {
-            if Path::new(key).exists() {
-                return true;
-            }
+    pub fn new(config: String, rootless: bool, aardvark_bin: String) -> Self {
+        Aardvark {
+            config,
+            rootless,
+            aardvark_bin,
         }
-        log::debug!("No aardvark support found");
-        false
     }
 
     // On success retuns aardvark server's pid or returns -1;
@@ -81,27 +75,7 @@ impl Aardvark {
         false
     }
 
-    pub fn start_aardvark_server_if_not_running(&mut self, aardvark_bin: &str) -> Result<()> {
-        let aardvark_pid = self.get_aardvark_pid();
-        if aardvark_pid != -1 {
-            // check if pid is running
-            match signal::kill(Pid::from_raw(aardvark_pid), Signal::SIGWINCH) {
-                Ok(_) => {
-                    log::debug!("Found aardvark server running");
-                    // process is running do nothing
-                    return Ok(());
-                }
-                _ => {
-                    log::debug!("No aardvark server found of pid {}", aardvark_pid);
-                }
-            }
-        }
-
-        if !Path::new(&self.config).exists() {
-            // silently try to create empty config dir if its not there
-            let _ = fs::create_dir(&self.config);
-        }
-
+    pub fn start_aardvark_server(&self) -> Result<()> {
         log::debug!("Spawning aardvark server");
 
         let mut aardvark_args = vec![];
@@ -116,13 +90,15 @@ impl Aardvark {
         }
 
         aardvark_args.extend(vec![
-            aardvark_bin,
+            self.aardvark_bin.as_str(),
             "--config",
             &self.config,
             "-p",
             "53",
             "run",
         ]);
+
+        log::debug!("start aardvark-dns: {:?}", aardvark_args);
 
         Command::new(&aardvark_args[0])
             .args(&aardvark_args[1..])
@@ -133,16 +109,29 @@ impl Aardvark {
         Ok(())
     }
 
-    pub fn notify(&mut self) -> Result<()> {
+    pub fn notify(&mut self, start: bool) -> Result<()> {
         let aardvark_pid = self.get_aardvark_pid();
         if aardvark_pid != -1 {
-            signal::kill(Pid::from_raw(aardvark_pid), Signal::SIGHUP)?;
-        } else {
+            match signal::kill(Pid::from_raw(aardvark_pid), Signal::SIGHUP) {
+                Ok(_) => return Ok(()),
+                Err(err) => {
+                    // ESRCH == process does not exists
+                    if err != nix::errno::Errno::ESRCH {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("failed to send SIGHUP to aardvark: {}",err)
+                        ));
+                    }
+                }
+            }
+        }
+        if !start {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                "Invalid pid to notify",
+                "aardvark pid not found",
             ));
         }
+        self.start_aardvark_server()?;
 
         Ok(())
     }
@@ -222,7 +211,7 @@ impl Aardvark {
             netavark_res,
         );
         self.commit_entries(entries)?;
-        self.notify()?;
+        self.notify(true)?;
         Ok(())
     }
 
@@ -343,7 +332,7 @@ impl Aardvark {
             }
         }
         if modified {
-            self.notify()?;
+            self.notify(false)?;
         }
         Ok(())
     }
