@@ -699,7 +699,7 @@ dependencies = [
 
 [[package]]
 name = "netavark"
-version = "0.0.1"
+version = "1.0.0-dev"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1605,9 +1605,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant"
-version = "3.1.1"
+version = "3.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3e5f0c5e59387ef95e9845837408831545e3fa4960c485550577c74e74a307e"
+checksum = "49ea5dc38b2058fae6a5b79009388143dadce1e91c26a67f984a0fc0381c8033"
 dependencies = [
  "byteorder",
  "enumflags2",
@@ -1619,9 +1619,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant_derive"
-version = "3.1.1"
+version = "3.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc88c5b820f3789337482b6278e2a57c41b8dff6b58950a094229e40de129ea7"
+checksum = "8c2cecc5a61c2a053f7f653a24cd15b3b0195d7f7ddb5042c837fb32e161fb7a"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",

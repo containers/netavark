@@ -33,7 +33,7 @@ futures = "0.3.19"
 nix = "0.23.0"
 rand = "0.8.3"
 tokio = { version = "1.15.0", features = ["full"] }
-zvariant = "3.1.1"
+zvariant = "3.1.2"
 sha2 = "0.10.0"
 netlink-packet-route = "0.8.0"
 
