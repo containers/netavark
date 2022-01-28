@@ -47,7 +47,7 @@ fn main() {
         .unwrap_or_else(|| String::from("/usr/libexec/podman/aardvark-dns"));
     let result = match opts.subcmd {
         SubCommand::Setup(setup) => setup.exec(file, config, aardvark_bin, rootless),
-        SubCommand::Teardown(teardown) => teardown.exec(file, config, rootless),
+        SubCommand::Teardown(teardown) => teardown.exec(file, config, aardvark_bin, rootless),
         SubCommand::Version(version) => version.exec(),
     };
 
