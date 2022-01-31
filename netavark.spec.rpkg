@@ -42,6 +42,7 @@ Source:     {{{ git_dir_pack }}}
 
 BuildRequires: make
 BuildRequires: cargo
+BuildRequires: git-core
 BuildRequires: golang-github-cpuguy83-md2man
 
 ExclusiveArch:  %{rust_arches}
