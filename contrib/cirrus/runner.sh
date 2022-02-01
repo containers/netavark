@@ -22,6 +22,16 @@ _run_build() {
     make all debug=1
     make build_unit  # reuses some debug binaries
     make all  # optimized/non-debug binaries
+    # This will get scooped up and become part of the artifact archive.
+    # Identify where the binary came from to benefit downstream consumers.
+    cat >> bin/netavark.info << EOF
+repo: $CIRRUS_REPO_CLONE_URL
+branch: $CIRRUS_BASE_BRANCH
+title: $CIRRUS_CHANGE_TITLE
+commit: $CIRRUS_CHANGE_IN_REPO
+build: https://cirrus-ci.com/build/$CIRRUS_BUILD_ID
+task: https://cirrus-ci.com/task/$CIRRUS_TASK_ID
+EOF
 }
 
 _run_validate() {
