@@ -26,7 +26,6 @@ const MARK: &str = "MARK";
 const DNAT: &str = "DNAT";
 
 const CONTAINER_DN_CHAIN: &str = "NETAVARK-DN-";
-const CONTAINER_CHAIN: &str = "NETAVARK-";
 
 const HEXMARK: &str = "0x2000";
 
@@ -188,7 +187,7 @@ pub fn get_network_chains(
     }
     hashed_network_chain.build_rule(VarkRule::new(
         format!("! -d {} -j {}", multicast_dest, MASQUERADE),
-        Some(TeardownPolicy::Never),
+        Some(TeardownPolicy::OnComplete),
     ));
     chains.push(hashed_network_chain);
 
@@ -197,7 +196,7 @@ pub fn get_network_chains(
         VarkChain::new(conn, NAT.to_string(), POSTROUTING.to_string(), None);
     postrouting_chain.build_rule(VarkRule::new(
         format!("-s {} -j {}", network, prefixed_network_hash_name),
-        Some(TeardownPolicy::Never),
+        Some(TeardownPolicy::OnComplete),
     ));
     chains.push(postrouting_chain);
     if !is_ipv6 {
@@ -247,7 +246,6 @@ pub fn get_port_forwarding_chains<'a>(
     container_ip: &IpAddr,
     network_address: &Subnet,
     is_ipv6: bool,
-    // portmappings: Vec<PortMapping>,
 ) -> Vec<VarkChain<'a>> {
     let mut localhost_ip = "127.0.0.1";
     if is_ipv6 {
@@ -257,10 +255,6 @@ pub fn get_port_forwarding_chains<'a>(
     // Set up all chains
     let network_dn_chain_name = CONTAINER_DN_CHAIN.to_owned() + &pfwd.network_hash_name;
 
-    let comment_network_cid = format!(
-        "-m comment --comment 'name: {} id: {}'",
-        pfwd.network_name, pfwd.container_id
-    );
     let comment_dn_network_cid = format!(
         "-m comment --comment 'dnat name: {} id: {}'",
         pfwd.network_name, pfwd.container_id
@@ -335,18 +329,13 @@ pub fn get_port_forwarding_chains<'a>(
 
     //  POSTROUTING
     let mut postrouting = VarkChain::new(conn, NAT.to_string(), POSTROUTING.to_string(), None);
-    postrouting.build_rule(VarkRule::new(
-        format!("-j {} ", NETAVARK_HOSTPORT_MASK),
-        Some(Never),
-    ));
-    let netavark_hashed_network_chain_name = CONTAINER_CHAIN.to_string() + &pfwd.network_hash_name;
-    postrouting.build_rule(VarkRule::new(
-        format!(
-            "-j {} -s {} {}",
-            netavark_hashed_network_chain_name, container_ip, comment_network_cid
-        ),
-        None,
-    ));
+    // This rule must be in the first position
+    postrouting.build_rule(VarkRule {
+        rule: format!("-j {} ", NETAVARK_HOSTPORT_MASK),
+        position: Some(1),
+        td_policy: Some(Never),
+    });
+
     chains.push(postrouting);
 
     //  Determine if we need to create chains
