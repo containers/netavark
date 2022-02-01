@@ -27,7 +27,7 @@ Release:    1%{?dist}
 Summary: OCI network stack
 
 # License. We assume GPLv2+ here.
-License:   ASL 2.0
+License:   ASL 2.0 and BSD and MIT
 
 # Home page of the project. Can also point to the public Git repository page.
 URL:        https://github.com/containers/netavark
@@ -58,9 +58,8 @@ OCI network stack.}
 # The following four sections already describe the rpm build process itself.
 # prep will extract the tarball defined as Source above and descend into it.
 %prep
-{{{ git_dir_setup_macro }}}
-sed -i 's/install: docs build/install:/' Makefile
-sed -i 's/\-C install/\-C docs install/' Makefile
+#{{{ git_dir_setup_macro }}}
+%autosetup -Sgit -T -b 0 -n %{name}
 
 # This will invoke `make` command in the directory with the extracted sources.
 %build

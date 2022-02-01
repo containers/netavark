@@ -100,6 +100,10 @@ vendor-rm-windows:
 		rm -fr vendor/winapi*gnu*/lib/*.a; \
 	fi
 
+.PHONY: mock-rpm
+mock-rpm:
+	rpkg local
+
 .PHONY: help
 help:
 	@echo "usage: make $(prog) [debug=1]"
