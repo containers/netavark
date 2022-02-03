@@ -135,8 +135,9 @@ impl Core {
                 };
             // Add the IP to the address_vector
             address_vector.push(container_address);
-            // unwrap is ok here since we already created a new field
-            nameservers.push(subnet.gateway.unwrap());
+            if let Some(gw) = subnet.gateway {
+                nameservers.push(gw);
+            }
             response_net_addresses.push(types::NetAddress {
                 gateway: subnet.gateway,
                 ipnet: container_address,
@@ -263,7 +264,10 @@ impl Core {
                 }
                 let handle = thread::spawn(move || -> Result<String, Error> {
                     if let Err(err) = sched::setns(netns_fd, sched::CloneFlags::CLONE_NEWNET) {
-                        panic!("failed to setns to fd={}: {}", netns_fd, err);
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("failed to setns to fd={}: {}", netns_fd, err),
+                        ));
                     }
 
                     if let Err(err) = core_utils::CoreUtils::configure_netns_interface_async(
@@ -504,7 +508,10 @@ impl Core {
                 }
                 let handle = thread::spawn(move || -> Result<String, Error> {
                     if let Err(err) = sched::setns(netns_fd, sched::CloneFlags::CLONE_NEWNET) {
-                        panic!("failed to setns to fd={}: {}", netns_fd, err);
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("failed to setns to fd={}: {}", netns_fd, err),
+                        ));
                     }
 
                     if let Err(err) = core_utils::CoreUtils::configure_netns_interface_async(
@@ -582,13 +589,13 @@ impl Core {
                 let container_veth: String = ifname.to_owned();
                 let handle = thread::spawn(move || -> Result<(), Error> {
                     if let Err(err) = sched::setns(netns_fd, sched::CloneFlags::CLONE_NEWNET) {
-                        panic!(
-                            "{}",
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
                             format!(
                                 "failed to setns on container network namespace fd={}: {}",
                                 netns_fd, err
-                            )
-                        )
+                            ),
+                        ));
                     }
 
                     if let Err(err) = core_utils::CoreUtils::remove_interface(&container_veth) {
