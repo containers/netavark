@@ -152,14 +152,13 @@ impl Aardvark {
     }
 
     pub fn commit_entry(&mut self, entry: AardvarkEntry) -> Result<()> {
-        let mut file: Option<File> = None;
         let data: String;
         let path = Path::new(&self.config).join(entry.network_name);
+        let file_exists = path.exists();
+        let mut file = OpenOptions::new().append(true).create(true).open(&path)?;
         // check if this is the first container in this network
-        if !path.exists() {
-            // create file
-            // and write first line as gateway ip
-            let create = File::create(&path)?; // return error if fails
+        if !file_exists {
+            // write first line as gateway ip
             let data: String;
             if !entry.network_gateway_v4.is_empty() && !entry.network_gateway_v6.is_empty() {
                 data = format!(
@@ -171,9 +170,7 @@ impl Aardvark {
             } else {
                 data = format!("{}\n", entry.network_gateway_v6);
             }
-
-            file = Some(create);
-            file.as_ref().unwrap().write_all(data.as_bytes())?;
+            file.write_all(data.as_bytes())?;
         }
 
         let container_names = entry
@@ -187,12 +184,7 @@ impl Aardvark {
             entry.container_id, entry.container_ip_v4, entry.container_ip_v6, container_names
         );
 
-        if let Some(mut f) = file {
-            f.write_all(data.as_bytes())?; //return error if write fails
-        } else {
-            let mut f = OpenOptions::new().append(true).open(&path)?; //return error if open fails
-            f.write_all(data.as_bytes())?; // return error if write fails
-        }
+        file.write_all(data.as_bytes())?; // return error if write fails
 
         Ok(())
     }

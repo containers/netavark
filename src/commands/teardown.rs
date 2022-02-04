@@ -63,7 +63,7 @@ impl Teardown {
 
         let firewall_driver = match firewall::get_supported_firewall_driver() {
             Ok(driver) => driver,
-            Err(e) => panic!("{}", e.to_string()),
+            Err(e) => return Err(e),
         };
         for (net_name, network) in network_options.network_info.iter() {
             debug!(

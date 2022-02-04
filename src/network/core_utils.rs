@@ -766,13 +766,13 @@ impl CoreUtils {
                 // up interface
                 let thread_handle = thread::spawn(move || -> Result<(), Error> {
                     if let Err(err) = sched::setns(netns_fd, sched::CloneFlags::CLONE_NEWNET) {
-                        panic!(
-                            "{}",
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
                             format!(
                                 "failed to setns on container network namespace fd={}: {}",
                                 netns_fd, err
-                            )
-                        )
+                            ),
+                        ));
                     }
 
                     if let Err(err) = CoreUtils::rename_macvlan_internal(
@@ -1083,13 +1083,13 @@ impl CoreUtils {
                 let netavark_pid: u32 = process::id();
                 let thread_handle = thread::spawn(move || -> Result<(), Error> {
                     if let Err(err) = sched::setns(netns_fd, sched::CloneFlags::CLONE_NEWNET) {
-                        panic!(
-                            "{}",
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
                             format!(
                                 "failed to setns on container network namespace fd={}: {}",
                                 netns_fd, err
-                            )
-                        )
+                            ),
+                        ));
                     }
 
                     if let Err(err) = CoreUtils::generate_veth_pair_internal(

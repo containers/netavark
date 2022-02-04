@@ -34,7 +34,7 @@ enum FirewallImpl {
 }
 
 // What firewall implementations does this system support?
-fn get_firewall_impl() -> FirewallImpl {
+fn get_firewall_impl() -> Result<FirewallImpl, Box<dyn Error>> {
     // First, check the NETAVARK_FW env var.
     // It respects "firewalld", "iptables", "nftables".
     if let Ok(var) = env::var("NETAVARK_FW") {
@@ -43,22 +43,22 @@ fn get_firewall_impl() -> FirewallImpl {
             "firewalld" => {
                 let conn = match block_on(Connection::system()) {
                     Ok(c) => c,
-                    Err(e) => panic!(
+                    Err(e) => bail!(
                         "Error retrieving dbus connection for requested firewalld backend {}",
                         e
                     ),
                 };
-                return FirewallImpl::Firewalld(conn);
+                return Ok(FirewallImpl::Firewalld(conn));
             }
-            "iptables" => return FirewallImpl::Iptables,
-            "nftables" => return FirewallImpl::Nftables,
-            any => panic!("Must provide a valid firewall backend, got {}", any),
+            "iptables" => return Ok(FirewallImpl::Iptables),
+            "nftables" => return Ok(FirewallImpl::Nftables),
+            any => bail!("Must provide a valid firewall backend, got {}", any),
         }
     }
 
     // Until firewalld 1.1.0 with support for self-port forwarding lands:
     // Just use iptables
-    FirewallImpl::Iptables
+    Ok(FirewallImpl::Iptables)
 
     // Is firewalld running?
     // let conn = match block_on(Connection::system()) {
@@ -81,17 +81,20 @@ fn get_firewall_impl() -> FirewallImpl {
 // configuration.
 pub fn get_supported_firewall_driver() -> Result<Box<dyn FirewallDriver>, Box<dyn Error>> {
     match get_firewall_impl() {
-        FirewallImpl::Iptables => {
-            info!("Using iptables firewall driver");
-            iptables::new()
-        }
-        FirewallImpl::Firewalld(conn) => {
-            info!("Using firewalld firewall driver");
-            firewalld::new(conn)
-        }
-        FirewallImpl::Nftables => {
-            info!("Using nftables firewall driver");
-            bail!("nftables support not presently available");
-        }
+        Ok(fw) => match fw {
+            FirewallImpl::Iptables => {
+                info!("Using iptables firewall driver");
+                iptables::new()
+            }
+            FirewallImpl::Firewalld(conn) => {
+                info!("Using firewalld firewall driver");
+                firewalld::new(conn)
+            }
+            FirewallImpl::Nftables => {
+                info!("Using nftables firewall driver");
+                bail!("nftables support not presently available");
+            }
+        },
+        Err(e) => Err(e),
     }
 }
