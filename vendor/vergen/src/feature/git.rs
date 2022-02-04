@@ -38,10 +38,12 @@ pub enum SemverKind {
 #[cfg(feature = "git")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ShaKind {
-    /// Output the normal 40 digit SHA
+    /// Output the normal 40 digit SHA: `VERGEN_GIT_SHA`
     Normal,
-    /// Output the short 7 digit SHA
+    /// Output the short 7 digit SHA: `VERGEN_GIT_SHA_SHORT`
     Short,
+    /// Output both SHA variants: `VERGEN_GIT_SHA` and `VERGEN_GIT_SHA_SHORT`
+    Both,
 }
 
 /// Configuration for the `VERGEN_GIT_*` instructions
@@ -250,6 +252,20 @@ where
                             );
                         }
                         crate::ShaKind::Short => {
+                            let obj = repo.revparse_single("HEAD")?;
+                            add_entry(
+                                config.cfg_map_mut(),
+                                VergenKey::ShortSha,
+                                obj.short_id()?.as_str().map(str::to_string),
+                            );
+                        }
+                        crate::ShaKind::Both => {
+                            add_entry(
+                                config.cfg_map_mut(),
+                                VergenKey::Sha,
+                                Some(commit.id().to_string()),
+                            );
+
                             let obj = repo.revparse_single("HEAD")?;
                             add_entry(
                                 config.cfg_map_mut(),

@@ -152,9 +152,9 @@
 //! #..
 //!
 //! [build-dependencies]
-//! vergen = "5"
+//! vergen = "6"
 //! # or
-//! vergen = { version = "5", default-features = false, features = ["build", "rustc"] }
+//! vergen = { version = "6", default-features = false, features = ["build", "rustc"] }
 //! # if you wish to disable certain features
 //! ```
 //!
@@ -276,7 +276,6 @@
         unstable_features,
         unstable_name_collisions,
         unsupported_calling_conventions,
-        unsupported_naked_functions,
         unused_allocation,
         unused_assignments,
         unused_attributes,

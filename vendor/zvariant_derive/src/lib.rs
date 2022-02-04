@@ -122,7 +122,7 @@ mod value;
 /// [`Serialize`]: https://docs.serde.rs/serde/trait.Serialize.html
 /// [`Deserialize`]: https://docs.serde.rs/serde/de/trait.Deserialize.html
 /// [serde_repr]: https://crates.io/crates/serde_repr
-#[proc_macro_derive(Type)]
+#[proc_macro_derive(Type, attributes(zvariant))]
 pub fn type_macro_derive(input: TokenStream) -> TokenStream {
     let ast: DeriveInput = syn::parse(input).unwrap();
     r#type::expand_derive(ast)

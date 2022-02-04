@@ -18,25 +18,25 @@ chrono = "0.4.7"
 clap = { version = "3.0.12", features = ["derive"] }
 env_logger = "0.9.0"
 ipnet = { version = "2", features = ["serde"] }
-iptables = "0.4.3"
+iptables = "0.5"
 libc = "0.2"
 log = "0.4.14"
-serde = { version = "1.0.133", features = ["derive"], optional = true }
+serde = { version = "1.0.136", features = ["derive"], optional = true }
 serde-value = "0.7.0"
-serde_json = "1.0.74"
+serde_json = "1.0.78"
 simple-error = "0.2.3"
 sysctl = "0.4.3"
 url = "2.1.0"
 zbus = "2.0.1"
 rtnetlink = { git = "https://github.com/little-dude/netlink", branch = "master" }
 futures = "0.3.19"
-nix = "0.23.0"
+nix = "0.23.1"
 rand = "0.8.3"
-tokio = { version = "1.15.0", features = ["full"] }
-zvariant = "3.1.1"
-sha2 = "0.10.0"
+tokio = { version = "1.16.1", features = ["full"] }
+zvariant = "3.1.2"
+sha2 = "0.10.1"
 netlink-packet-route = "0.8.0"
 
 [build-dependencies]
-vergen = { version = "=6.0.0", default-features = false, features = ["build", "rustc", "git"] }
+vergen = { version = "6.0.2", default-features = false, features = ["build", "rustc", "git"] }
 anyhow = "1.0"

@@ -90,6 +90,9 @@ pub struct IPTables {
 
     /// Indicates if iptables has -w (--wait) option
     pub has_wait: bool,
+
+    /// Indicates if iptables will be run with -n (--numeric) option
+    pub is_numeric: bool,
 }
 
 /// Returns `None` because iptables only works on linux
@@ -133,6 +136,7 @@ pub fn new(is_ipv6: bool) -> Result<IPTables, Box<dyn Error>> {
         has_wait: (v_major > 1)
             || (v_major == 1 && v_minor > 4)
             || (v_major == 1 && v_minor == 4 && v_patch > 19),
+        is_numeric: false,
     })
 }
 
@@ -146,7 +150,10 @@ impl IPTables {
             ));
         }
 
-        let stdout = self.run(&["-t", table, "-L", chain])?.stdout;
+        let stdout = match self.is_numeric {
+            false => self.run(&["-t", table, "-L", chain])?.stdout,
+            true => self.run(&["-t", table, "-L", chain, "-n"])?.stdout,
+        };
         let output = String::from_utf8_lossy(stdout.as_slice());
         for item in output.trim().split('\n') {
             let fields = item.split(' ').collect::<Vec<&str>>();
@@ -194,8 +201,14 @@ impl IPTables {
     /// Returns true if the chain exists.
     #[cfg(target_os = "linux")]
     pub fn chain_exists(&self, table: &str, chain: &str) -> Result<bool, Box<dyn Error>> {
-        self.run(&["-t", table, "-L", chain])
-            .map(|output| output.status.success())
+        match self.is_numeric {
+            false => self
+                .run(&["-t", table, "-L", chain])
+                .map(|output| output.status.success()),
+            true => self
+                .run(&["-t", table, "-L", chain, "-n"])
+                .map(|output| output.status.success()),
+        }
     }
 
     fn exists_old_version(
@@ -204,9 +217,14 @@ impl IPTables {
         chain: &str,
         rule: &str,
     ) -> Result<bool, Box<dyn Error>> {
-        self.run(&["-t", table, "-S"]).map(|output| {
-            String::from_utf8_lossy(&output.stdout).contains(&format!("-A {} {}", chain, rule))
-        })
+        match self.is_numeric {
+            false => self.run(&["-t", table, "-S"]).map(|output| {
+                String::from_utf8_lossy(&output.stdout).contains(&format!("-A {} {}", chain, rule))
+            }),
+            true => self.run(&["-t", table, "-S", "-n"]).map(|output| {
+                String::from_utf8_lossy(&output.stdout).contains(&format!("-A {} {}", chain, rule))
+            }),
+        }
     }
 
     /// Inserts `rule` in the `position` to the table/chain.
@@ -311,12 +329,18 @@ impl IPTables {
 
     /// Lists rules in the table/chain.
     pub fn list(&self, table: &str, chain: &str) -> Result<Vec<String>, Box<dyn Error>> {
-        self.get_list(&["-t", table, "-S", chain])
+        match self.is_numeric {
+            false => self.get_list(&["-t", table, "-S", chain]),
+            true => self.get_list(&["-t", table, "-S", chain, "-n"]),
+        }
     }
 
     /// Lists rules in the table.
     pub fn list_table(&self, table: &str) -> Result<Vec<String>, Box<dyn Error>> {
-        self.get_list(&["-t", table, "-S"])
+        match self.is_numeric {
+            false => self.get_list(&["-t", table, "-S"]),
+            true => self.get_list(&["-t", table, "-S", "-n"]),
+        }
     }
 
     /// Lists the name of each chain in the table.
@@ -376,6 +400,12 @@ impl IPTables {
             .collect())
     }
 
+    /// Set whether iptables is called with the -n (--numeric) option,
+    /// to avoid host name and port name lookups
+    pub fn set_numeric(&mut self, numeric: bool) {
+        self.is_numeric = numeric;
+    }
+
     fn run<S: AsRef<OsStr>>(&self, args: &[S]) -> Result<Output, Box<dyn Error>> {
         let mut file_lock = None;
 
@@ -394,7 +424,7 @@ impl IPTables {
                     FlockArg::LockExclusiveNonblock,
                 ) {
                     Ok(_) => need_retry = false,
-                    Err(nix::Error::Sys(en)) if en == nix::errno::Errno::EAGAIN => {
+                    Err(e) if e == nix::errno::Errno::EAGAIN => {
                         // FIXME: may cause infinite loop
                         need_retry = true;
                     }
