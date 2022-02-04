@@ -3,7 +3,7 @@
 #
 # For help and usage information, simply execute the script w/o any arguments.
 #
-# This script is intended to be run by Red Hat podman developers who need
+# This script is intended to be run by Red Hat developers who need
 # to debug problems specifically related to Cirrus-CI automated testing.
 # It requires that you have been granted prior access to create VMs in
 # google-cloud.  For non-Red Hat contributors, VMs are available as-needed,
@@ -36,8 +36,8 @@ GCLOUD_PROJECT="netavark-2021"
 GCLOUD_IMGPROJECT="libpod-218412"
 GCLOUD_CFG="netavark"
 GCLOUD_ZONE="${GCLOUD_ZONE:-us-central1-c}"
-GCLOUD_CPUS="2"
-GCLOUD_MEMORY="4Gb"
+GCLOUD_CPUS="8"
+GCLOUD_MEMORY="8Gb"
 GCLOUD_DISK="200"
 EOF
 elif [[ "$1" == "--setup" ]]; then
@@ -45,8 +45,10 @@ elif [[ "$1" == "--setup" ]]; then
     # get_ci_vm container entrypoint calls us with this option on the
     # Cirrus-CI environment instance, to perform repo.-specific setup.
     cd $REPO_DIRPATH
+    echo "+ Loading ./contrib/cirrus/lib.sh" > /dev/stderr
+    source ./contrib/cirrus/lib.sh
     echo "+ Running environment setup" > /dev/stderr
-    ./contrib/cirrus/setup.sh
+    ./contrib/cirrus/setup.sh "$CIRRUS_TASK_NAME"
 else
     # Create and access VM for specified Cirrus-CI task
     mkdir -p $HOME/.config/gcloud/ssh
