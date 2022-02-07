@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "zvariant"
-version = "3.1.1"
+version = "3.1.2"
 authors = ["Zeeshan Ali <zeeshanak@gnome.org>"]
 description = "D-Bus & GVariant encoding & decoding"
 readme = "README.md"
@@ -58,7 +58,7 @@ optional = true
 version = "1.1.0"
 
 [dependencies.zvariant_derive]
-version = "=3.1.1"
+version = "=3.1.2"
 [dev-dependencies.criterion]
 version = "0.3"
 

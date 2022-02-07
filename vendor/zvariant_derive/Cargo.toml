@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "zvariant_derive"
-version = "3.1.1"
+version = "3.1.2"
 authors = ["Zeeshan Ali <zeeshanak@gnome.org>"]
 description = "D-Bus & GVariant encoding & decoding"
 readme = "README.md"

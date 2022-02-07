@@ -300,9 +300,10 @@
 //! [macro]: https://docs.serde.rs/serde_json/macro.json.html
 //! [`serde-json-core`]: https://github.com/rust-embedded-community/serde-json-core
 
-#![doc(html_root_url = "https://docs.rs/serde_json/1.0.74")]
+#![doc(html_root_url = "https://docs.rs/serde_json/1.0.78")]
 // Ignored clippy lints
 #![allow(
+    clippy::collapsible_else_if,
     clippy::comparison_chain,
     clippy::deprecated_cfg_attr,
     clippy::doc_markdown,
@@ -321,6 +322,8 @@
 )]
 // Ignored clippy_pedantic lints
 #![allow(
+    // buggy
+    clippy::iter_not_returning_iterator, // https://github.com/rust-lang/rust-clippy/issues/8285
     // Deserializer::from_str, into_iter
     clippy::should_implement_trait,
     // integer and float ser/de requires these sorts of casts

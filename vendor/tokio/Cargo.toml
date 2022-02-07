@@ -13,7 +13,7 @@
 edition = "2018"
 rust-version = "1.46"
 name = "tokio"
-version = "1.15.0"
+version = "1.16.1"
 authors = ["Tokio Contributors <team@tokio.rs>"]
 description = "An event-driven, non-blocking I/O platform for writing asynchronous I/O\nbacked applications.\n"
 homepage = "https://tokio.rs"
@@ -24,7 +24,8 @@ license = "MIT"
 repository = "https://github.com/tokio-rs/tokio"
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "tokio_unstable"]
+rustdoc-args = ["--cfg", "docsrs", "--cfg", "tokio_unstable"]
 
 [package.metadata.playground]
 features = ["full", "test-util"]
@@ -68,15 +69,6 @@ features = ["async-await"]
 [dev-dependencies.mockall]
 version = "0.10.2"
 
-[dev-dependencies.proptest]
-version = "1"
-
-[dev-dependencies.rand]
-version = "0.8.0"
-
-[dev-dependencies.socket2]
-version = "0.4"
-
 [dev-dependencies.tempfile]
 version = "3.1.0"
 
@@ -105,6 +97,16 @@ time = []
 [target."cfg(loom)".dev-dependencies.loom]
 version = "0.5"
 features = ["futures", "checkpoint"]
+[target."cfg(not(target_arch = \"wasm32\"))".dev-dependencies.proptest]
+version = "1"
+
+[target."cfg(not(target_arch = \"wasm32\"))".dev-dependencies.rand]
+version = "0.8.0"
+
+[target."cfg(not(target_arch = \"wasm32\"))".dev-dependencies.socket2]
+version = "0.4"
+[target."cfg(target_arch = \"wasm32\")".dev-dependencies.wasm-bindgen-test]
+version = "0.3.0"
 [target."cfg(target_os = \"freebsd\")".dev-dependencies.mio-aio]
 version = "0.6.0"
 features = ["tokio"]

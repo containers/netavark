@@ -1,4 +1,7 @@
 use crate::error::Error;
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
+use alloc::string::String;
 use core::fmt::{self, Debug, Display};
 use core::mem;
 use serde::de::value::BorrowedStrDeserializer;
@@ -446,9 +449,10 @@ impl<'de> Visitor<'de> for BoxedFromString {
     where
         E: de::Error,
     {
-        self.visit_string(s.to_owned())
+        Ok(RawValue::from_owned(s.to_owned().into_boxed_str()))
     }
 
+    #[cfg(any(feature = "std", feature = "alloc"))]
     fn visit_string<E>(self, s: String) -> Result<Self::Value, E>
     where
         E: de::Error,

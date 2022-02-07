@@ -13,9 +13,8 @@
 edition = "2018"
 rust-version = "1.36"
 name = "serde_json"
-version = "1.0.74"
+version = "1.0.78"
 authors = ["Erick Tryzelaar <erick.tryzelaar@gmail.com>", "David Tolnay <dtolnay@gmail.com>"]
-include = ["build.rs", "src/**/*.rs", "README.md", "LICENSE-APACHE", "LICENSE-MIT"]
 description = "A JSON serialization file format"
 documentation = "https://docs.serde.rs/serde_json/"
 readme = "README.md"
@@ -44,6 +43,9 @@ version = "1.0"
 version = "1.0.100"
 default-features = false
 [dev-dependencies.automod]
+version = "1.0"
+
+[dev-dependencies.ref-cast]
 version = "1.0"
 
 [dev-dependencies.rustversion]

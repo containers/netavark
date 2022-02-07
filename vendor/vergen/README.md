@@ -1,6 +1,10 @@
 # vergen
 Generate `build`, `git`, `rustc`, `cargo`, and `sysinfo` related [`cargo:rustc-env`](https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-env) instructions via [`build.rs`](https://doc.rust-lang.org/cargo/reference/build-scripts.html) for use in your code via the [`env!`](https://doc.rust-lang.org/std/macro.env.html) macro or [`option_env!`](https://doc.rust-lang.org/std/macro.option_env.html) macro.
 
+## Sponsors
+Special thanks to the sponsors of this project
+* [tyretool](https://github.com/tryretool)
+
 ## Release 6.0 Breaking Changes
 * The `Copy` implementation was dropped from the [`Config`](https://github.com/rustyhorde/vergen/blob/24ed6bc2269320ab98962edc8b736fcc6e3c7d64/src/config.rs#L94-L148) struct to allow the base git directory to be specified.  This is a breaking API change necessitating a new major release.
 ## Current Release

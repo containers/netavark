@@ -15,6 +15,7 @@ fn test_old() {
             cmd: "iptables",
             has_wait: false,
             has_check: false,
+            is_numeric: false,
         },
         "NATOLD",
         "NATOLD2",
@@ -25,6 +26,7 @@ fn test_old() {
             cmd: "iptables",
             has_wait: false,
             has_check: false,
+            is_numeric: false,
         },
         "FILTEROLD",
     );
