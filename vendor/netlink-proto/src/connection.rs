@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use std::{
     fmt::Debug,
     io,
@@ -20,23 +22,28 @@ use netlink_packet_core::{
 };
 
 use crate::{
-    codecs::NetlinkCodec,
+    codecs::{NetlinkCodec, NetlinkMessageCodec},
     framed::NetlinkFramed,
-    sys::{Socket, SocketAddr},
+    sys::{AsyncSocket, SocketAddr},
     Protocol,
     Request,
     Response,
 };
 
+#[cfg(feature = "tokio_socket")]
+use netlink_sys::TokioSocket as DefaultSocket;
+#[cfg(not(feature = "tokio_socket"))]
+type DefaultSocket = ();
+
 /// Connection to a Netlink socket, running in the background.
 ///
 /// [`ConnectionHandle`](struct.ConnectionHandle.html) are used to pass new requests to the
 /// `Connection`, that in turn, sends them through the netlink socket.
-pub struct Connection<T>
+pub struct Connection<T, S = DefaultSocket, C = NetlinkCodec>
 where
-    T: Debug + Clone + PartialEq + Eq + NetlinkSerializable<T> + NetlinkDeserializable<T>,
+    T: Debug + NetlinkSerializable + NetlinkDeserializable,
 {
-    socket: NetlinkFramed<NetlinkCodec<NetlinkMessage<T>>>,
+    socket: NetlinkFramed<T, S, C>,
 
     protocol: Protocol<T, UnboundedSender<NetlinkMessage<T>>>,
 
@@ -50,18 +57,20 @@ where
     socket_closed: bool,
 }
 
-impl<T> Connection<T>
+impl<T, S, C> Connection<T, S, C>
 where
-    T: Debug + Clone + PartialEq + Eq + NetlinkSerializable<T> + NetlinkDeserializable<T> + Unpin,
+    T: Debug + NetlinkSerializable + NetlinkDeserializable + Unpin,
+    S: AsyncSocket,
+    C: NetlinkMessageCodec,
 {
     pub(crate) fn new(
         requests_rx: UnboundedReceiver<Request<T>>,
         unsolicited_messages_tx: UnboundedSender<(NetlinkMessage<T>, SocketAddr)>,
         protocol: isize,
     ) -> io::Result<Self> {
-        let socket = Socket::new(protocol)?;
+        let socket = S::new(protocol)?;
         Ok(Connection {
-            socket: NetlinkFramed::new(socket, NetlinkCodec::<NetlinkMessage<T>>::new()),
+            socket: NetlinkFramed::new(socket),
             protocol: Protocol::new(),
             requests_rx: Some(requests_rx),
             unsolicited_messages_tx: Some(unsolicited_messages_tx),
@@ -69,7 +78,7 @@ where
         })
     }
 
-    pub fn socket_mut(&mut self) -> &mut Socket {
+    pub fn socket_mut(&mut self) -> &mut S {
         self.socket.get_mut()
     }
 
@@ -250,9 +259,11 @@ where
     }
 }
 
-impl<T> Future for Connection<T>
+impl<T, S, C> Future for Connection<T, S, C>
 where
-    T: Debug + Clone + PartialEq + Eq + NetlinkSerializable<T> + NetlinkDeserializable<T> + Unpin,
+    T: Debug + NetlinkSerializable + NetlinkDeserializable + Unpin,
+    S: AsyncSocket,
+    C: NetlinkMessageCodec,
 {
     type Output = ();
 

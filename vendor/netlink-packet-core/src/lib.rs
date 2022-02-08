@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 //! `netlink-packet-core` provides a generic netlink message
 //! `NetlinkMessage<T>` that is independant of the sub-protocol. Such
 //! messages are not very useful by themselves, since they are just
@@ -156,7 +158,7 @@
 //! }
 //!
 //! // NetlinkDeserializable implementation
-//! impl NetlinkDeserializable<PingPongMessage> for PingPongMessage {
+//! impl NetlinkDeserializable for PingPongMessage {
 //!     type Error = DeserializeError;
 //!
 //!     fn deserialize(header: &NetlinkHeader, payload: &[u8]) -> Result<Self, Self::Error> {
@@ -171,7 +173,7 @@
 //! }
 //!
 //! // NetlinkSerializable implementation
-//! impl NetlinkSerializable<PingPongMessage> for PingPongMessage {
+//! impl NetlinkSerializable for PingPongMessage {
 //!     fn message_type(&self) -> u16 {
 //!         match self {
 //!             PingPongMessage::Ping(_) => PING_MESSAGE,

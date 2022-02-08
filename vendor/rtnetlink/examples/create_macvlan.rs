@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use futures::stream::TryStreamExt;
 use rtnetlink::{new_connection, Error, Handle};
 use std::env;
@@ -20,11 +22,7 @@ async fn main() -> Result<(), String> {
 }
 
 async fn create_macvlan(handle: Handle, veth_name: String) -> Result<(), Error> {
-    let mut links = handle
-        .link()
-        .get()
-        .set_name_filter(veth_name.clone())
-        .execute();
+    let mut links = handle.link().get().match_name(veth_name.clone()).execute();
     if let Some(link) = links.try_next().await? {
         // hard code mode: 4u32 i.e bridge mode
         let request = handle

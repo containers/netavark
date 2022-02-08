@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use super::{buffer::RuleMessageBuffer, header::RuleHeader, nlas::Nla};
 use crate::{
     utils::{Emitable, Parseable},

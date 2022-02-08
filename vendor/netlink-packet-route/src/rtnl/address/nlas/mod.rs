@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 mod cache_info;
 pub use self::cache_info::*;
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use futures::stream::TryStreamExt;
 use rtnetlink::{
     new_connection,
@@ -104,7 +106,7 @@ async fn get_link(link_name: &str, handle: Handle) -> Result<LinkMessage, Error>
     let mut links = handle
         .link()
         .get()
-        .set_name_filter(link_name.to_string())
+        .match_name(link_name.to_string())
         .execute();
 
     match links.try_next().await? {

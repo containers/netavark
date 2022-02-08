@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: MIT
+
 use futures::{
     future::{self, Either},
-    stream::{StreamExt, TryStream, TryStreamExt},
+    stream::{StreamExt, TryStream},
     FutureExt,
 };
 
@@ -15,12 +17,12 @@ pub struct LinkGetRequest {
     handle: Handle,
     message: LinkMessage,
     // There are two ways to retrieve links: we can either dump them
-    // all and filter the result, or if we already know the index of
-    // the link we're looking for, we can just retrieve that one. If
-    // `dump` is `true`, all the links are fetched. Otherwise, only
-    // the link that match the given index is fetched.
+    // all and filter the result, or if we already know the index or
+    // the name of the link we're looking for, we can just retrieve
+    // that one. If `dump` is `true`, all the links are fetched.
+    // Otherwise, only the link that match the given index or name
+    // is fetched.
     dump: bool,
-    filter_builder: LinkFilterBuilder,
 }
 
 impl LinkGetRequest {
@@ -29,7 +31,6 @@ impl LinkGetRequest {
             handle,
             message: LinkMessage::default(),
             dump: true,
-            filter_builder: LinkFilterBuilder::new(),
         }
     }
 
@@ -46,7 +47,6 @@ impl LinkGetRequest {
             mut handle,
             message,
             dump,
-            filter_builder,
         } = self;
 
         let mut req = NetlinkMessage::from(RtnlMessage::GetLink(message));
@@ -57,13 +57,10 @@ impl LinkGetRequest {
             req.header.flags = NLM_F_REQUEST;
         }
 
-        let filter = filter_builder.build();
         match handle.request(req) {
-            Ok(response) => Either::Left(
-                response
-                    .map(move |msg| Ok(try_rtnl!(msg, RtnlMessage::NewLink)))
-                    .try_filter(move |msg| future::ready(filter(msg))),
-            ),
+            Ok(response) => {
+                Either::Left(response.map(move |msg| Ok(try_rtnl!(msg, RtnlMessage::NewLink))))
+            }
             Err(e) => Either::Right(future::err::<LinkMessage, Error>(e).into_stream()),
         }
     }
@@ -73,42 +70,20 @@ impl LinkGetRequest {
         &mut self.message
     }
 
+    /// Lookup a link by index
     pub fn match_index(mut self, index: u32) -> Self {
         self.dump = false;
         self.message.header.index = index;
         self
     }
 
-    pub fn set_name_filter(mut self, name: String) -> Self {
-        self.filter_builder.name = Some(name);
+    /// Lookup a link by name
+    ///
+    /// This function requires support from your kernel (>= 2.6.33). If yours is
+    /// older, consider filtering the resulting stream of links.
+    pub fn match_name(mut self, name: String) -> Self {
+        self.dump = false;
+        self.message.nlas.push(Nla::IfName(name));
         self
-    }
-}
-
-#[derive(Default)]
-struct LinkFilterBuilder {
-    name: Option<String>,
-}
-
-impl LinkFilterBuilder {
-    fn new() -> Self {
-        Default::default()
-    }
-
-    fn build(self) -> impl Fn(&LinkMessage) -> bool {
-        move |msg: &LinkMessage| {
-            if let Some(name) = &self.name {
-                for nla in msg.nlas.iter() {
-                    if let Nla::IfName(s) = nla {
-                        if s == name {
-                            return true;
-                        }
-                    }
-                }
-                false
-            } else {
-                true
-            }
-        }
     }
 }

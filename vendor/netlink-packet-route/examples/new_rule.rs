@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use netlink_packet_core::{NetlinkHeader, NetlinkMessage, NetlinkPayload};
 use netlink_packet_route::{constants::*, rule, RtnlMessage, RuleHeader, RuleMessage};
 use netlink_sys::{protocols::NETLINK_ROUTE, Socket, SocketAddr};

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 mod handle;
 pub use self::handle::*;
 

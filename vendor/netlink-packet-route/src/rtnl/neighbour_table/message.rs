@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use crate::{
     nlas::neighbour_table::Nla,
     traits::{Emitable, Parseable},

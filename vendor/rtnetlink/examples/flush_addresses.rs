@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use futures::stream::TryStreamExt;
 use rtnetlink::{new_connection, Error, Handle};
 use std::env;
@@ -22,7 +24,7 @@ async fn main() -> Result<(), ()> {
 }
 
 async fn flush_addresses(handle: Handle, link: String) -> Result<(), Error> {
-    let mut links = handle.link().get().set_name_filter(link.clone()).execute();
+    let mut links = handle.link().get().match_name(link.clone()).execute();
     if let Some(link) = links.try_next().await? {
         // We should have received only one message
         assert!(links.try_next().await?.is_none());

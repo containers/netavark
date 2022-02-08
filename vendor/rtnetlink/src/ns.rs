@@ -1,8 +1,4 @@
-#[cfg(feature = "tokio_socket")]
-use tokio::task;
-
-#[cfg(feature = "smol_socket")]
-use async_std::task;
+// SPDX-License-Identifier: MIT
 
 use crate::Error;
 use nix::{
@@ -15,6 +11,43 @@ use nix::{
     unistd::{fork, ForkResult},
 };
 use std::{option::Option, path::Path, process::exit};
+
+// if "only" smol or smol+tokio were enabled, we use smol because
+// it doesn't require an active tokio runtime - just to be sure.
+#[cfg(feature = "smol_socket")]
+async fn try_spawn_blocking<F, R>(fut: F) -> R
+where
+    F: FnOnce() -> R + Send + 'static,
+    R: Send + 'static,
+{
+    async_global_executor::spawn_blocking(fut).await
+}
+
+// only tokio enabled, so use tokio
+#[cfg(all(not(feature = "smol_socket"), feature = "tokio_socket"))]
+async fn try_spawn_blocking<F, R>(fut: F) -> R
+where
+    F: FnOnce() -> R + Send + 'static,
+    R: Send + 'static,
+{
+    match tokio::task::spawn_blocking(fut).await {
+        Ok(v) => v,
+        Err(err) => {
+            std::panic::resume_unwind(err.into_panic());
+        }
+    }
+}
+
+// neither smol nor tokio - just run blocking op directly.
+// hopefully not too blocking...
+#[cfg(all(not(feature = "smol_socket"), not(feature = "tokio_socket")))]
+async fn try_spawn_blocking<F, R>(fut: F) -> R
+where
+    F: FnOnce() -> R + Send + 'static,
+    R: Send + 'static,
+{
+    fut()
+}
 
 pub const NETNS_PATH: &str = "/run/netns/";
 pub const SELF_NS_PATH: &str = "/proc/self/ns/net";
@@ -46,7 +79,7 @@ impl NetworkNamespace {
     /// Remove a network namespace
     /// This is equivalent to `ip netns del NS_NAME`.
     pub async fn del(ns_name: String) -> Result<(), Error> {
-        let res = task::spawn_blocking(move || {
+        try_spawn_blocking(move || {
             let mut netns_path = String::new();
             netns_path.push_str(NETNS_PATH);
             netns_path.push_str(&ns_name);
@@ -62,20 +95,10 @@ impl NetworkNamespace {
                     String::from("Namespace file remove failed (are you running as root?)");
                 return Err(Error::NamespaceError(err_msg));
             }
-            #[cfg(feature = "tokio_socket")]
-            return Ok(());
 
-            #[cfg(feature = "smol_socket")]
-            return Ok(Ok(()));
-        });
-
-        match res.await {
-            Ok(r) => r,
-            Err(e) => {
-                let err_msg = format!("Namespace removal failed: {}", e);
-                Err(Error::NamespaceError(err_msg))
-            }
-        }
+            Ok(())
+        })
+        .await
     }
 
     pub fn prep_for_fork() -> Result<(), Error> {

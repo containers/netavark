@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use crate::DecodeError;
 
 /// A type that implements `Emitable` can be serialized.

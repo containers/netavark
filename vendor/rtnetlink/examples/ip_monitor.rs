@@ -1,7 +1,12 @@
+// SPDX-License-Identifier: MIT
+
 use futures::stream::StreamExt;
 
 use netlink_packet_route::constants::*;
-use rtnetlink::{new_connection, sys::SocketAddr};
+use rtnetlink::{
+    new_connection,
+    sys::{AsyncSocket, SocketAddr},
+};
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
@@ -31,7 +36,10 @@ async fn main() -> Result<(), String> {
         | RTNLGRP_MPLS_NETCONF;
 
     let addr = SocketAddr::new(0, groups);
-    conn.socket_mut().bind(&addr).expect("Failed to bind");
+    conn.socket_mut()
+        .socket_mut()
+        .bind(&addr)
+        .expect("Failed to bind");
 
     // Spawn `Connection` to start polling netlink socket.
     tokio::spawn(conn);

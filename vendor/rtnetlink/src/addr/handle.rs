@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use std::net::IpAddr;
 
 use super::{AddressAddRequest, AddressDelRequest, AddressGetRequest};

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use std::{error::Error, fmt};
 
 use netlink_packet_core::{
@@ -44,7 +46,7 @@ impl fmt::Display for DeserializeError {
 }
 
 // NetlinkDeserializable implementation
-impl NetlinkDeserializable<PingPongMessage> for PingPongMessage {
+impl NetlinkDeserializable for PingPongMessage {
     type Error = DeserializeError;
 
     fn deserialize(header: &NetlinkHeader, payload: &[u8]) -> Result<Self, Self::Error> {
@@ -59,7 +61,7 @@ impl NetlinkDeserializable<PingPongMessage> for PingPongMessage {
 }
 
 // NetlinkSerializable implementation
-impl NetlinkSerializable<PingPongMessage> for PingPongMessage {
+impl NetlinkSerializable for PingPongMessage {
     fn message_type(&self) -> u16 {
         match self {
             PingPongMessage::Ping(_) => PING_MESSAGE,

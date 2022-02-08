@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Build:
 //
 // ```
@@ -22,7 +24,7 @@ use netlink_packet_audit::{
     NLM_F_REQUEST,
 };
 
-use netlink_sys::{protocols::NETLINK_AUDIT, SmolSocket, SocketAddr};
+use netlink_sys::{protocols::NETLINK_AUDIT, AsyncSocket, AsyncSocketExt, SmolSocket, SocketAddr};
 
 const AUDIT_STATUS_ENABLED: u32 = 1;
 const AUDIT_STATUS_PID: u32 = 4;
@@ -50,20 +52,22 @@ async fn main() {
         .await
         .unwrap();
 
-    let mut buf = vec![0; 1024 * 8];
+    let mut buf = bytes::BytesMut::with_capacity(1024 * 8);
     loop {
-        let (n, _addr) = socket.recv_from(&mut buf).await.unwrap();
+        buf.clear();
+        let _addr = socket.recv_from(&mut buf).await.unwrap();
         // This dance with the NetlinkBuffer should not be
         // necessary. It is here to work around a netlink bug. See:
         // https://github.com/mozilla/libaudit-go/issues/24
         // https://github.com/linux-audit/audit-userspace/issues/78
         {
-            let mut nl_buf = NetlinkBuffer::new(&mut buf[0..n]);
+            let n = buf.len();
+            let mut nl_buf = NetlinkBuffer::new(&mut buf);
             if n != nl_buf.length() as usize {
                 nl_buf.set_length(n as u32);
             }
         }
-        let parsed = NetlinkMessage::<AuditMessage>::deserialize(&buf[0..n]).unwrap();
+        let parsed = NetlinkMessage::<AuditMessage>::deserialize(&buf).unwrap();
         println!("<<< {:?}", parsed);
     }
 }

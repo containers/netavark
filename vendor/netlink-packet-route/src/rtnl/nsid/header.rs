@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use super::{NsidMessageBuffer, NSID_HEADER_LEN};
 use crate::{
     traits::{Emitable, Parseable},

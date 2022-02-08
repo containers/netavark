@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use rtnetlink::new_connection;
 
 #[tokio::main]

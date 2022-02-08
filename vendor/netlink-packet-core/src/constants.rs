@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 /// Must be set on all request messages (typically from user space to kernel space)
 pub const NLM_F_REQUEST: u16 = 1;
 ///  Indicates the message is part of a multipart message terminated by NLMSG_DONE

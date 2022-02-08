@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use futures::stream::TryStreamExt;
 use std::env;
 
@@ -31,7 +33,7 @@ async fn add_address(link_name: &str, ip: IpNetwork, handle: Handle) -> Result<(
     let mut links = handle
         .link()
         .get()
-        .set_name_filter(link_name.to_string())
+        .match_name(link_name.to_string())
         .execute();
     if let Some(link) = links.try_next().await? {
         handle

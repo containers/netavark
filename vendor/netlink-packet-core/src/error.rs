@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use std::{fmt, io, mem::size_of};
 
 use byteorder::{ByteOrder, NativeEndian};

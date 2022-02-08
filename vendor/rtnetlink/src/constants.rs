@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 pub const RTMGRP_LINK: u32 = 1;
 pub const RTMGRP_NOTIFY: u32 = 2;
 pub const RTMGRP_NEIGH: u32 = 4;

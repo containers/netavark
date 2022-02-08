@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use futures::stream::StreamExt;
 
 use netlink_packet_route::{
@@ -15,6 +17,7 @@ use std::net::IpAddr;
 pub struct NeighbourAddRequest {
     handle: Handle,
     message: NeighbourMessage,
+    replace: bool,
 }
 
 impl NeighbourAddRequest {
@@ -35,7 +38,28 @@ impl NeighbourAddRequest {
             IpAddr::V6(v6) => v6.octets().to_vec(),
         }));
 
-        NeighbourAddRequest { handle, message }
+        NeighbourAddRequest {
+            handle,
+            message,
+            replace: false,
+        }
+    }
+
+    pub(crate) fn new_bridge(handle: Handle, index: u32, lla: &[u8]) -> Self {
+        let mut message = NeighbourMessage::default();
+
+        message.header.family = AF_BRIDGE as u8;
+        message.header.ifindex = index;
+        message.header.state = NUD_PERMANENT;
+        message.header.ntype = NDA_UNSPEC as u8;
+
+        message.nlas.push(Nla::LinkLocalAddress(lla.to_vec()));
+
+        NeighbourAddRequest {
+            handle,
+            message,
+            replace: false,
+        }
     }
 
     /// Set a bitmask of states for the neighbor cache entry.
@@ -61,8 +85,47 @@ impl NeighbourAddRequest {
 
     /// Set a neighbor cache link layer address (see `NDA_LLADDR` for details).
     pub fn link_local_address(mut self, addr: &[u8]) -> Self {
-        self.message.nlas.push(Nla::LinkLocalAddress(addr.to_vec()));
+        let lla = self.message.nlas.iter_mut().find_map(|nla| match nla {
+            Nla::LinkLocalAddress(lla) => Some(lla),
+            _ => None,
+        });
+
+        if let Some(lla) = lla {
+            *lla = addr.to_vec();
+        } else {
+            self.message.nlas.push(Nla::LinkLocalAddress(addr.to_vec()));
+        }
+
         self
+    }
+
+    /// Set the destination address for the neighbour (see `NDA_DST` for details).
+    pub fn destination(mut self, addr: IpAddr) -> Self {
+        let dst = self.message.nlas.iter_mut().find_map(|nla| match nla {
+            Nla::Destination(dst) => Some(dst),
+            _ => None,
+        });
+
+        let addr = match addr {
+            IpAddr::V4(v4) => v4.octets().to_vec(),
+            IpAddr::V6(v6) => v6.octets().to_vec(),
+        };
+
+        if let Some(dst) = dst {
+            *dst = addr;
+        } else {
+            self.message.nlas.push(Nla::Destination(addr));
+        }
+
+        self
+    }
+
+    /// Replace existing matching neighbor.
+    pub fn replace(self) -> Self {
+        Self {
+            replace: true,
+            ..self
+        }
     }
 
     /// Execute the request.
@@ -70,10 +133,12 @@ impl NeighbourAddRequest {
         let NeighbourAddRequest {
             mut handle,
             message,
+            replace,
         } = self;
 
         let mut req = NetlinkMessage::from(RtnlMessage::NewNeighbour(message));
-        req.header.flags = NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE;
+        let replace = if replace { NLM_F_REPLACE } else { NLM_F_EXCL };
+        req.header.flags = NLM_F_REQUEST | NLM_F_ACK | replace | NLM_F_CREATE;
 
         let mut response = handle.request(req)?;
         while let Some(message) = response.next().await {

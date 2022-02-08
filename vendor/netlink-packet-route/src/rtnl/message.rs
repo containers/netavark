@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use crate::{
     constants::*,
     traits::{Emitable, ParseableParametrized},
@@ -356,7 +358,7 @@ impl Emitable for RtnlMessage {
     }
 }
 
-impl NetlinkSerializable<RtnlMessage> for RtnlMessage {
+impl NetlinkSerializable for RtnlMessage {
     fn message_type(&self) -> u16 {
         self.message_type()
     }
@@ -370,7 +372,7 @@ impl NetlinkSerializable<RtnlMessage> for RtnlMessage {
     }
 }
 
-impl NetlinkDeserializable<RtnlMessage> for RtnlMessage {
+impl NetlinkDeserializable for RtnlMessage {
     type Error = DecodeError;
     fn deserialize(header: &NetlinkHeader, payload: &[u8]) -> Result<Self, Self::Error> {
         let buf = RtnlMessageBuffer::new(payload);

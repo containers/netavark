@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use crate::Socket;
 use std::os::unix::io::AsRawFd;
 

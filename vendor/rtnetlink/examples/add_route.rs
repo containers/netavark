@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use std::env;
 
 use ipnetwork::Ipv4Network;

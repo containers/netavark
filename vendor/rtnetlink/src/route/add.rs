@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use futures::stream::StreamExt;
 use std::{
     marker::PhantomData,
@@ -18,6 +20,7 @@ use crate::{try_nl, Error, Handle};
 pub struct RouteAddRequest<T = ()> {
     handle: Handle,
     message: RouteMessage,
+    replace: bool,
     _phantom: PhantomData<T>,
 }
 
@@ -33,6 +36,7 @@ impl<T> RouteAddRequest<T> {
         RouteAddRequest {
             handle,
             message,
+            replace: false,
             _phantom: Default::default(),
         }
     }
@@ -87,6 +91,7 @@ impl<T> RouteAddRequest<T> {
         RouteAddRequest {
             handle: self.handle,
             message: self.message,
+            replace: false,
             _phantom: Default::default(),
         }
     }
@@ -97,7 +102,16 @@ impl<T> RouteAddRequest<T> {
         RouteAddRequest {
             handle: self.handle,
             message: self.message,
+            replace: false,
             _phantom: Default::default(),
+        }
+    }
+
+    /// Replace existing matching route.
+    pub fn replace(self) -> Self {
+        Self {
+            replace: true,
+            ..self
         }
     }
 
@@ -106,10 +120,12 @@ impl<T> RouteAddRequest<T> {
         let RouteAddRequest {
             mut handle,
             message,
+            replace,
             ..
         } = self;
         let mut req = NetlinkMessage::from(RtnlMessage::NewRoute(message));
-        req.header.flags = NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE;
+        let replace = if replace { NLM_F_REPLACE } else { NLM_F_EXCL };
+        req.header.flags = NLM_F_REQUEST | NLM_F_ACK | replace | NLM_F_CREATE;
 
         let mut response = handle.request(req)?;
         while let Some(message) = response.next().await {

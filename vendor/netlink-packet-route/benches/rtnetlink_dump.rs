@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use std::fs::File;
 
 use criterion::{criterion_group, criterion_main, Criterion};
