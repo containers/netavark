@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 //! This crate provides methods to manipulate networking resources (links, addresses, arp tables,
 //! route tables) via the netlink protocol.
 
@@ -37,7 +39,13 @@ pub mod constants;
 
 pub use netlink_packet_route as packet;
 pub mod proto {
-    pub use netlink_proto::{Connection, ConnectionHandle, Error, ErrorKind};
+    pub use netlink_proto::{
+        packet::{NetlinkMessage, NetlinkPayload},
+        Connection,
+        ConnectionHandle,
+        Error,
+        ErrorKind,
+    };
 }
 pub use netlink_proto::sys;
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 mod stats;
 pub use self::stats::*;
 

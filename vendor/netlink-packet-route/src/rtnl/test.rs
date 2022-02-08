@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #![cfg(test)]
 
 use crate::{

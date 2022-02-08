@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use anyhow::Context;
 use std::fmt::Debug;
 
@@ -18,20 +20,14 @@ use crate::{
 
 /// Represent a netlink message.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct NetlinkMessage<I>
-where
-    I: Debug + PartialEq + Eq + Clone,
-{
+pub struct NetlinkMessage<I> {
     /// Message header (this is common to all the netlink protocols)
     pub header: NetlinkHeader,
     /// Inner message, which depends on the netlink protocol being used.
     pub payload: NetlinkPayload<I>,
 }
 
-impl<I> NetlinkMessage<I>
-where
-    I: Debug + PartialEq + Eq + Clone,
-{
+impl<I> NetlinkMessage<I> {
     /// Create a new netlink message from the given header and payload
     pub fn new(header: NetlinkHeader, payload: NetlinkPayload<I>) -> Self {
         NetlinkMessage { header, payload }
@@ -45,7 +41,7 @@ where
 
 impl<I> NetlinkMessage<I>
 where
-    I: NetlinkDeserializable<I> + Debug + PartialEq + Eq + Clone,
+    I: NetlinkDeserializable,
 {
     /// Parse the given buffer as a netlink message
     pub fn deserialize(buffer: &[u8]) -> Result<Self, DecodeError> {
@@ -56,7 +52,7 @@ where
 
 impl<I> NetlinkMessage<I>
 where
-    I: NetlinkSerializable<I> + Debug + PartialEq + Eq + Clone,
+    I: NetlinkSerializable,
 {
     /// Return the length of this message in bytes
     pub fn buffer_len(&self) -> usize {
@@ -92,7 +88,7 @@ where
 impl<'buffer, B, I> Parseable<NetlinkBuffer<&'buffer B>> for NetlinkMessage<I>
 where
     B: AsRef<[u8]> + 'buffer,
-    I: Debug + PartialEq + Eq + Clone + NetlinkDeserializable<I>,
+    I: NetlinkDeserializable,
 {
     fn parse(buf: &NetlinkBuffer<&'buffer B>) -> Result<Self, DecodeError> {
         use self::NetlinkPayload::*;
@@ -129,7 +125,7 @@ where
 
 impl<I> Emitable for NetlinkMessage<I>
 where
-    I: NetlinkSerializable<I> + Debug + PartialEq + Eq + Clone,
+    I: NetlinkSerializable,
 {
     fn buffer_len(&self) -> usize {
         use self::NetlinkPayload::*;
@@ -163,7 +159,7 @@ where
 
 impl<T> From<T> for NetlinkMessage<T>
 where
-    T: Into<NetlinkPayload<T>> + Debug + Clone + Eq + PartialEq,
+    T: Into<NetlinkPayload<T>>,
 {
     fn from(inner_message: T) -> Self {
         NetlinkMessage {

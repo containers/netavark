@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use crate::{
     constants::*,
     traits::{Emitable, Parseable},

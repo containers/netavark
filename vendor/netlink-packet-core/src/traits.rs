@@ -1,16 +1,17 @@
+// SPDX-License-Identifier: MIT
+
 use crate::NetlinkHeader;
 use std::error::Error;
 
-/// A `NetlinkDeserializable` type can be used to deserialize a buffer
-/// into the target type `T` for which it is implemented.
-pub trait NetlinkDeserializable<T> {
+/// A `NetlinkDeserializable` type can be deserialized from a buffer
+pub trait NetlinkDeserializable: Sized {
     type Error: Error + Send + Sync + 'static;
 
-    /// Deserialize the given buffer into `T`.
-    fn deserialize(header: &NetlinkHeader, payload: &[u8]) -> Result<T, Self::Error>;
+    /// Deserialize the given buffer into `Self`.
+    fn deserialize(header: &NetlinkHeader, payload: &[u8]) -> Result<Self, Self::Error>;
 }
 
-pub trait NetlinkSerializable<T> {
+pub trait NetlinkSerializable {
     fn message_type(&self) -> u16;
 
     /// Return the length of the serialized data.

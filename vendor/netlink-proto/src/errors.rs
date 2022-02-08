@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use std::{
     error::Error as StdError,
     fmt::{self, Debug},
@@ -9,14 +11,14 @@ use netlink_packet_core::NetlinkMessage;
 #[derive(Debug)]
 pub struct Error<T>
 where
-    T: Debug + Eq + PartialEq + Clone,
+    T: Debug,
 {
     kind: ErrorKind<T>,
 }
 
 impl<T> Error<T>
 where
-    T: Debug + Eq + PartialEq + Clone,
+    T: Debug,
 {
     pub fn kind(&self) -> &ErrorKind<T> {
         &self.kind
@@ -30,7 +32,7 @@ where
 #[derive(Debug)]
 pub enum ErrorKind<T>
 where
-    T: Debug + Eq + PartialEq + Clone,
+    T: Debug,
 {
     /// The netlink connection is closed
     ConnectionClosed,
@@ -44,7 +46,7 @@ where
 
 impl<T> From<ErrorKind<T>> for Error<T>
 where
-    T: Debug + Eq + PartialEq + Clone,
+    T: Debug,
 {
     fn from(kind: ErrorKind<T>) -> Error<T> {
         Error { kind }
@@ -53,7 +55,7 @@ where
 
 impl<T> fmt::Display for Error<T>
 where
-    T: Debug + Eq + PartialEq + Clone,
+    T: Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use crate::ErrorKind::*;
@@ -67,7 +69,7 @@ where
 
 impl<T> StdError for Error<T>
 where
-    T: Debug + Eq + PartialEq + Clone,
+    T: Debug,
 {
     fn description(&self) -> &str {
         use crate::ErrorKind::*;

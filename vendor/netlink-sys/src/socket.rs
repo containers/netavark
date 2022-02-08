@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use std::{
     io::{Error, Result},
     mem,
@@ -36,7 +38,7 @@ use crate::SocketAddr;
 /// let mut buf = vec![0; 4096];
 /// loop {
 ///     // receive a datagram
-///     let (n_received, sender_addr) = socket.recv_from(&mut buf[..], 0).unwrap();
+///     let (n_received, sender_addr) = socket.recv_from(&mut &mut buf[..], 0).unwrap();
 ///     assert_eq!(sender_addr, kernel_addr);
 ///     println!("received datagram {:?}", &buf[..n_received]);
 ///     if buf[4] == 2 && buf[5] == 0 {
@@ -165,7 +167,7 @@ impl Socket {
     /// // buffer for receiving the response
     /// let mut buf = vec![0; 4096];
     /// loop {
-    ///     let mut n_received = socket.recv(&mut buf[..], 0).unwrap();
+    ///     let mut n_received = socket.recv(&mut &mut buf[..], 0).unwrap();
     ///     println!("received {:?}", &buf[..n_received]);
     ///     if buf[4] == 2 && buf[5] == 0 {
     ///         println!("the kernel responded with an error");
@@ -224,7 +226,10 @@ impl Socket {
     /// In datagram oriented protocols, `recv` and `recvfrom` receive normally only ONE datagram, but this seems not to
     /// be always true for netlink sockets: with some protocols like `NETLINK_AUDIT`, multiple netlink packets can be
     /// read with a single call.
-    pub fn recv_from(&self, buf: &mut [u8], flags: libc::c_int) -> Result<(usize, SocketAddr)> {
+    pub fn recv_from<B>(&self, buf: &mut B, flags: libc::c_int) -> Result<(usize, SocketAddr)>
+    where
+        B: bytes::BufMut,
+    {
         // Create an empty storage for the address. Note that Rust standard library create a
         // sockaddr_storage so that it works for any address family, but here, we already know that
         // we'll have a Netlink address, so we can create the appropriate storage.
@@ -252,34 +257,51 @@ impl Socket {
         // a pointer to it.
         let addrlen_ptr = &mut addrlen as *mut usize as *mut libc::socklen_t;
 
-        //                      Cast the *mut u8 into *mut void.
-        //               This is equivalent to casting a *char into *void
-        //                                 See [thread]
-        //                                       ^
-        //           Create a *mut u8            |
-        //                   ^                   |
-        //                   |                   |
-        //             +-----+-----+    +--------+-------+
-        //            /             \  /                  \
-        let buf_ptr = buf.as_mut_ptr() as *mut libc::c_void;
-        let buf_len = buf.len() as libc::size_t;
+        let chunk = buf.chunk_mut();
+        //                        Cast the *mut u8 into *mut void.
+        //                 This is equivalent to casting a *char into *void
+        //                                   See [thread]
+        //                                         ^
+        //             Create a *mut u8            |
+        //                    ^                    |
+        //                    |                    |
+        //             +------+-------+   +--------+-------+
+        //            /                \ /                  \
+        let buf_ptr = chunk.as_mut_ptr() as *mut libc::c_void;
+        let buf_len = chunk.len() as libc::size_t;
 
         let res = unsafe { libc::recvfrom(self.0, buf_ptr, buf_len, flags, addr_ptr, addrlen_ptr) };
         if res < 0 {
             return Err(Error::last_os_error());
+        } else {
+            // with `MSG_TRUNC` `res` might exceed `buf_len`
+            let written = std::cmp::min(buf_len, res as usize);
+            unsafe {
+                buf.advance_mut(written);
+            }
         }
         Ok((res as usize, SocketAddr(addr)))
     }
 
     /// For a connected socket, `recv` reads a datagram from the socket. The sender is the remote peer the socket is
     /// connected to (see [`Socket::connect`]). See also [`Socket::recv_from`]
-    pub fn recv(&self, buf: &mut [u8], flags: libc::c_int) -> Result<usize> {
-        let buf_ptr = buf.as_mut_ptr() as *mut libc::c_void;
-        let buf_len = buf.len() as libc::size_t;
+    pub fn recv<B>(&self, buf: &mut B, flags: libc::c_int) -> Result<usize>
+    where
+        B: bytes::BufMut,
+    {
+        let chunk = buf.chunk_mut();
+        let buf_ptr = chunk.as_mut_ptr() as *mut libc::c_void;
+        let buf_len = chunk.len() as libc::size_t;
 
         let res = unsafe { libc::recv(self.0, buf_ptr, buf_len, flags) };
         if res < 0 {
             return Err(Error::last_os_error());
+        } else {
+            // with `MSG_TRUNC` `res` might exceed `buf_len`
+            let written = std::cmp::min(buf_len, res as usize);
+            unsafe {
+                buf.advance_mut(written);
+            }
         }
         Ok(res as usize)
     }
@@ -288,13 +310,14 @@ impl Socket {
     /// buffer passed as argument, this method always reads a whole message, no matter its size.
     pub fn recv_from_full(&self) -> Result<(Vec<u8>, SocketAddr)> {
         // Peek
-        let mut buf = Vec::<u8>::new();
-        let (rlen, _) = self.recv_from(&mut buf, libc::MSG_PEEK | libc::MSG_TRUNC)?;
+        let mut buf: Vec<u8> = Vec::new();
+        let (peek_len, _) = self.recv_from(&mut buf, libc::MSG_PEEK | libc::MSG_TRUNC)?;
 
         // Receive
-        let mut buf = vec![0; rlen as usize];
-        let (_, addr) = self.recv_from(&mut buf, 0)?;
-
+        buf.clear();
+        buf.reserve(peek_len);
+        let (rlen, addr) = self.recv_from(&mut buf, 0)?;
+        assert_eq!(rlen, peek_len);
         Ok((buf, addr))
     }
 
@@ -431,44 +454,40 @@ impl Socket {
 /// int getsockopt(int socket, int level, int option_name, void *restrict option_value, socklen_t *restrict option_len);
 /// ```
 pub(crate) fn getsockopt<T: Copy>(fd: RawFd, level: libc::c_int, option: libc::c_int) -> Result<T> {
-    unsafe {
-        // Create storage for the options we're fetching
-        let mut slot: T = mem::zeroed();
+    // Create storage for the options we're fetching
+    let mut slot: T = unsafe { mem::zeroed() };
 
-        // Create a mutable raw pointer to the storage so that getsockopt can fill the value
-        let slot_ptr = &mut slot as *mut T as *mut libc::c_void;
+    // Create a mutable raw pointer to the storage so that getsockopt can fill the value
+    let slot_ptr = &mut slot as *mut T as *mut libc::c_void;
 
-        // Let getsockopt know how big our storage is
-        let mut slot_len = mem::size_of::<T>() as libc::socklen_t;
+    // Let getsockopt know how big our storage is
+    let mut slot_len = mem::size_of::<T>() as libc::socklen_t;
 
-        // getsockopt takes a mutable pointer to the length, because for some options like
-        // NETLINK_LIST_MEMBERSHIP where the option value is a list with arbitrary length,
-        // getsockopt uses this parameter to signal how big the storage needs to be.
-        let slot_len_ptr = &mut slot_len as *mut libc::socklen_t;
+    // getsockopt takes a mutable pointer to the length, because for some options like
+    // NETLINK_LIST_MEMBERSHIP where the option value is a list with arbitrary length,
+    // getsockopt uses this parameter to signal how big the storage needs to be.
+    let slot_len_ptr = &mut slot_len as *mut libc::socklen_t;
 
-        let res = libc::getsockopt(fd, level, option, slot_ptr, slot_len_ptr);
-        if res < 0 {
-            return Err(Error::last_os_error());
-        }
-
-        // Ignore the options that require the legnth to be set by getsockopt.
-        // We'll deal with them individually.
-        assert_eq!(slot_len as usize, mem::size_of::<T>());
-
-        Ok(slot)
+    let res = unsafe { libc::getsockopt(fd, level, option, slot_ptr, slot_len_ptr) };
+    if res < 0 {
+        return Err(Error::last_os_error());
     }
+
+    // Ignore the options that require the legnth to be set by getsockopt.
+    // We'll deal with them individually.
+    assert_eq!(slot_len as usize, mem::size_of::<T>());
+
+    Ok(slot)
 }
 
 // adapted from rust standard library
 fn setsockopt<T>(fd: RawFd, level: libc::c_int, option: libc::c_int, payload: T) -> Result<()> {
-    unsafe {
-        let payload = &payload as *const T as *const libc::c_void;
-        let payload_len = mem::size_of::<T>() as libc::socklen_t;
+    let payload = &payload as *const T as *const libc::c_void;
+    let payload_len = mem::size_of::<T>() as libc::socklen_t;
 
-        let res = libc::setsockopt(fd, level, option, payload, payload_len);
-        if res < 0 {
-            return Err(Error::last_os_error());
-        }
+    let res = unsafe { libc::setsockopt(fd, level, option, payload, payload_len) };
+    if res < 0 {
+        return Err(Error::last_os_error());
     }
     Ok(())
 }

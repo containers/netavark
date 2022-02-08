@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 mod config;
 pub use config::*;
 

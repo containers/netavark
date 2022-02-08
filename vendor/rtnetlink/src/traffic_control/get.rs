@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use futures::{
     future::{self, Either},
     stream::{StreamExt, TryStream},

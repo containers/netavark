@@ -151,7 +151,7 @@ impl CoreUtils {
         let mut links = handle
             .link()
             .get()
-            .set_name_filter(ifname.to_string())
+            .match_name(ifname.to_string())
             .set_filter_mask(AF_BRIDGE as u8, RTEXT_FILTER_BRVLAN)
             .execute();
         while let msg = links.try_next().await {
@@ -235,7 +235,7 @@ impl CoreUtils {
         let mut links = handle
             .link()
             .get()
-            .set_name_filter(link_name.to_string())
+            .match_name(link_name.to_string())
             .execute();
         match links.try_next().await {
             Ok(Some(link)) => {
@@ -278,11 +278,7 @@ impl CoreUtils {
         ifname: &str,
         ip: &ipnet::IpNet,
     ) -> Result<(), std::io::Error> {
-        let mut links = handle
-            .link()
-            .get()
-            .set_name_filter(ifname.to_string())
-            .execute();
+        let mut links = handle.link().get().match_name(ifname.to_string()).execute();
         match links.try_next().await {
             Ok(Some(link)) => {
                 match handle
@@ -429,11 +425,7 @@ impl CoreUtils {
     }
 
     async fn remove_link(handle: &rtnetlink::Handle, ifname: &str) -> Result<(), std::io::Error> {
-        let mut links = handle
-            .link()
-            .get()
-            .set_name_filter(ifname.to_string())
-            .execute();
+        let mut links = handle.link().get().match_name(ifname.to_string()).execute();
         match links.try_next().await {
             Ok(Some(link)) => match handle.link().del(link.header.index).execute().await {
                 Ok(_) => Ok(()),
@@ -454,11 +446,7 @@ impl CoreUtils {
     }
 
     async fn set_link_up(handle: &rtnetlink::Handle, ifname: &str) -> Result<(), std::io::Error> {
-        let mut links = handle
-            .link()
-            .get()
-            .set_name_filter(ifname.to_string())
-            .execute();
+        let mut links = handle.link().get().match_name(ifname.to_string()).execute();
         match links.try_next().await {
             Ok(Some(link)) => match handle.link().set(link.header.index).up().execute().await {
                 Ok(_) => Ok(()),
@@ -483,11 +471,7 @@ impl CoreUtils {
         ifname: &str,
         mtu: u32,
     ) -> Result<(), std::io::Error> {
-        let mut links = handle
-            .link()
-            .get()
-            .set_name_filter(ifname.to_string())
-            .execute();
+        let mut links = handle.link().get().match_name(ifname.to_string()).execute();
         match links.try_next().await {
             Ok(Some(link)) => match handle
                 .link()
@@ -529,11 +513,7 @@ impl CoreUtils {
             }
         };
 
-        let mut links = handle
-            .link()
-            .get()
-            .set_name_filter(ifname.to_string())
-            .execute();
+        let mut links = handle.link().get().match_name(ifname.to_string()).execute();
         match links.try_next().await {
             Ok(Some(link)) => match handle
                 .link()
@@ -584,7 +564,7 @@ impl CoreUtils {
         let mut links = handle
             .link()
             .get()
-            .set_name_filter(macvlan_tmp_ifname.to_string())
+            .match_name(macvlan_tmp_ifname.to_string())
             .execute();
         match links.try_next().await {
             Ok(Some(link)) => {
@@ -658,7 +638,7 @@ impl CoreUtils {
         let mut links = handle
             .link()
             .get()
-            .set_name_filter(master_ifname.to_string())
+            .match_name(master_ifname.to_string())
             .execute();
         match links.try_next().await {
             Ok(Some(link)) => {
@@ -710,7 +690,7 @@ impl CoreUtils {
                 let mut links = handle
                     .link()
                     .get()
-                    .set_name_filter(macvlan_tmp_name.to_string())
+                    .match_name(macvlan_tmp_name.to_string())
                     .execute();
                 match links.try_next().await {
                     Ok(Some(link)) => {
@@ -812,16 +792,12 @@ impl CoreUtils {
         tokio::spawn(_connection);
 
         // create if not exist
-        let mut links = handle
-            .link()
-            .get()
-            .set_name_filter(ifname.to_string())
-            .execute();
+        let mut links = handle.link().get().match_name(ifname.to_string()).execute();
         match links.try_next().await {
             // FIXME: Make sure this interface is a bridge, if not error.
             // I am unable to decipher how I can get get the link mode.
             Ok(Some(_)) => (),
-            Ok(None) => {
+            Err(rtnetlink::Error::NetlinkError(er)) if -er.code == libc::ENODEV => {
                 if let Err(err) = handle
                     .link()
                     .add()
@@ -853,6 +829,15 @@ impl CoreUtils {
                         ));
                     }
                 }
+            }
+            Ok(None) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "failed to get bridge interface {}: empty netlink response",
+                        ifname
+                    ),
+                ))
             }
             Err(err) => {
                 return Err(std::io::Error::new(
@@ -977,7 +962,7 @@ impl CoreUtils {
         let mut links = handle
             .link()
             .get()
-            .set_name_filter(host_veth.to_string())
+            .match_name(host_veth.to_string())
             .execute();
         match links.try_next().await {
             Ok(Some(link)) => {
@@ -1039,13 +1024,15 @@ impl CoreUtils {
         tokio::spawn(_connection);
 
         // get bridge interface index
-        let mut links = handle
-            .link()
-            .get()
-            .set_name_filter(br_if.to_string())
-            .execute();
+        let mut links = handle.link().get().match_name(br_if.to_string()).execute();
         let bridge_interface_index = match links.try_next().await {
             Ok(Some(link)) => link.header.index,
+            Err(rtnetlink::Error::NetlinkError(er)) if -er.code == libc::ENODEV => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("bridge interface {} not found", &br_if),
+                ))
+            }
             Ok(None) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -1136,7 +1123,7 @@ impl CoreUtils {
         let mut links = handle
             .link()
             .get()
-            .set_name_filter(host_veth.to_string())
+            .match_name(host_veth.to_string())
             .execute();
         match links.try_next().await {
             Ok(Some(link)) => {

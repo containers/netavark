@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use futures::TryStreamExt;
 use std::{env, net::Ipv4Addr};
 
@@ -43,7 +45,7 @@ async fn add_route(
     let iface_idx = handle
         .link()
         .get()
-        .set_name_filter(iface)
+        .match_name(iface)
         .execute()
         .try_next()
         .await?

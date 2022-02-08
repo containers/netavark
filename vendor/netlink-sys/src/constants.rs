@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 //! This module provides a lot of netlink constants for various protocol. As we add support for the
 //! various protocols, these constants will be moved to their own crate.
 

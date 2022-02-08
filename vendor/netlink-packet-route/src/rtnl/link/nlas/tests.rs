@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use crate::{utils::nla::Nla, DecodeError};
 
 use super::*;

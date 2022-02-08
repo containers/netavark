@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #[macro_export]
 macro_rules! getter {
     ($buffer: ident, $name:ident, slice, $offset:expr) => {

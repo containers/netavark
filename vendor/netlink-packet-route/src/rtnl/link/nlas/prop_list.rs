@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use crate::{
     constants::*,
     nlas::{DefaultNla, Nla, NlaBuffer},

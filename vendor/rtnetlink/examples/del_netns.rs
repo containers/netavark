@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use rtnetlink::NetworkNamespace;
 use std::env;
 

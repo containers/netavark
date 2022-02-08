@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use futures::stream::TryStreamExt;
 use rtnetlink::{
     new_connection,
@@ -68,7 +70,7 @@ async fn get_link_by_index(handle: Handle, index: u32) -> Result<(), Error> {
 }
 
 async fn get_link_by_name(handle: Handle, name: String) -> Result<(), Error> {
-    let mut links = handle.link().get().set_name_filter(name.clone()).execute();
+    let mut links = handle.link().get().match_name(name.clone()).execute();
     if let Some(_) = links.try_next().await? {
         println!("found link {}", name);
         // We should only have one link with that name

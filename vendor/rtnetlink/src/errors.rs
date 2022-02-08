@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use thiserror::Error;
 
 use crate::packet::{ErrorMessage, NetlinkMessage, RtnlMessage};

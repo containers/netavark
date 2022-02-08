@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use netlink_packet_route::{

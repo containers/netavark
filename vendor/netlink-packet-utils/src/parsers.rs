@@ -1,4 +1,9 @@
-use std::mem::size_of;
+// SPDX-License-Identifier: MIT
+
+use std::{
+    mem::size_of,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+};
 
 use anyhow::Context;
 use byteorder::{BigEndian, ByteOrder, NativeEndian};
@@ -25,6 +30,32 @@ pub fn parse_ipv6(payload: &[u8]) -> Result<[u8; 16], DecodeError> {
         address[i] = *byte;
     }
     Ok(address)
+}
+
+pub fn parse_ip(payload: &[u8]) -> Result<IpAddr, DecodeError> {
+    match payload.len() {
+        4 => Ok(Ipv4Addr::new(payload[0], payload[1], payload[2], payload[3]).into()),
+        16 => Ok(Ipv6Addr::from([
+            payload[0],
+            payload[1],
+            payload[2],
+            payload[3],
+            payload[4],
+            payload[5],
+            payload[6],
+            payload[7],
+            payload[8],
+            payload[9],
+            payload[10],
+            payload[11],
+            payload[12],
+            payload[13],
+            payload[14],
+            payload[15],
+        ])
+        .into()),
+        _ => Err(format!("invalid IPv6 address: {:?}", payload).into()),
+    }
 }
 
 pub fn parse_string(payload: &[u8]) -> Result<String, DecodeError> {

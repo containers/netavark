@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 pub use netlink_packet_core::constants::*;
 
 pub const RTM_BASE: u16 = 16;
@@ -392,6 +394,18 @@ pub const IFLA_INFO_DATA: u16 = 2;
 pub const IFLA_INFO_XSTATS: u16 = 3;
 pub const IFLA_INFO_SLAVE_KIND: u16 = 4;
 pub const IFLA_INFO_SLAVE_DATA: u16 = 5;
+// Bridge flags
+pub const IFLA_BRIDGE_FLAGS: u16 = 47;
+pub const BRIDGE_FLAGS_MASTER: u16 = 1; /* Bridge command to/from master */
+pub const BRIDGE_FLAGS_SELF: u16 = 2; /* Bridge command to/from lowerdev */
+
+pub const IFLA_BRIDGE_VLAN_INFO: u16 = 48;
+pub const BRIDGE_VLAN_INFO_MASTER: u16 = 1;
+pub const BRIDGE_VLAN_INFO_PVID: u16 = 4;
+pub const BRIDGE_VLAN_INFO_UNTAGGED: u16 = 8;
+pub const BRIDGE_VLAN_INFO_RANGE_BEGIN: u16 = 16;
+pub const BRIDGE_VLAN_INFO_RANGE_END: u16 = 32;
+
 pub const IFLA_BR_UNSPEC: u16 = 0;
 pub const IFLA_BR_FORWARD_DELAY: u16 = 1;
 pub const IFLA_BR_HELLO_TIME: u16 = 2;
@@ -781,12 +795,12 @@ pub const IFA_F_STABLE_PRIVACY: u32 = 2048;
 // pub const RTNL_FAMILY_MAX: int = 129;
 // pub const RTA_ALIGNTO: int = 4;
 //
-// pub const RTNH_F_DEAD: int = 1;
-// pub const RTNH_F_PERVASIVE: int = 2;
-// pub const RTNH_F_ONLINK: int = 4;
-// pub const RTNH_F_OFFLOAD: int = 8;
-// pub const RTNH_F_LINKDOWN: int = 16;
-// pub const RTNH_F_UNRESOLVED: int = 32;
+pub const RTNH_F_DEAD: u8 = 1;
+pub const RTNH_F_PERVASIVE: u8 = 2;
+pub const RTNH_F_ONLINK: u8 = 4;
+pub const RTNH_F_OFFLOAD: u8 = 8;
+pub const RTNH_F_LINKDOWN: u8 = 16;
+pub const RTNH_F_UNRESOLVED: u8 = 32;
 // pub const RTNH_COMPARE_MASK: int = 25;
 // pub const RTNH_ALIGNTO: int = 4;
 // pub const RTNETLINK_HAVE_PEERINFO: int = 1;
@@ -860,11 +874,12 @@ pub const RTEXT_FILTER_SKIP_STATS: u32 = 8;
 // pub const IFLA_MACVLAN_MACADDR_DATA: int = 5;
 // pub const IFLA_MACVLAN_MACADDR_COUNT: int = 6;
 //
-// pub const MACVLAN_MODE_PRIVATE: int = 1;
-// pub const MACVLAN_MODE_VEPA: int = 2;
-// pub const MACVLAN_MODE_BRIDGE: int = 4;
-// pub const MACVLAN_MODE_PASSTHRU: int = 8;
-// pub const MACVLAN_MODE_SOURCE: int = 16;
+// Available MACVLAN MODES
+pub const MACVLAN_MODE_PRIVATE: u32 = 1;
+pub const MACVLAN_MODE_VEPA: u32 = 2;
+pub const MACVLAN_MODE_BRIDGE: u32 = 4;
+pub const MACVLAN_MODE_PASSTHRU: u32 = 8;
+pub const MACVLAN_MODE_SOURCE: u32 = 16;
 //
 // pub const MACVLAN_MACADDR_ADD: int = 0;
 // pub const MACVLAN_MACADDR_DEL: int = 1;

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use super::{buffer::RuleMessageBuffer, RULE_HEADER_LEN};
 use crate::{
     constants::*,

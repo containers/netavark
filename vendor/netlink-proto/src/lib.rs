@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 //! `netlink-proto` is an asynchronous implementation of the Netlink
 //! protocol.
 //!
@@ -14,14 +16,18 @@
 //! ```rust,no_run
 //! use futures::stream::StreamExt;
 //! use netlink_packet_audit::{
-//!     NLM_F_ACK, NLM_F_REQUEST, NetlinkMessage, NetlinkPayload,
-//!     AuditMessage, StatusMessage,
+//!     AuditMessage,
+//!     NetlinkMessage,
+//!     NetlinkPayload,
+//!     StatusMessage,
+//!     NLM_F_ACK,
+//!     NLM_F_REQUEST,
 //! };
 //! use std::process;
 //!
 //! use netlink_proto::{
 //!     new_connection,
-//!     sys::{SocketAddr, protocols::NETLINK_AUDIT},
+//!     sys::{protocols::NETLINK_AUDIT, SocketAddr},
 //! };
 //!
 //! const AUDIT_STATUS_ENABLED: u32 = 1;
@@ -107,12 +113,17 @@
 //! use futures::StreamExt;
 //!
 //! use netlink_packet_route::{
-//!     NLM_F_DUMP, NLM_F_REQUEST, NetlinkMessage, NetlinkHeader, LinkMessage, RtnlMessage
+//!     LinkMessage,
+//!     NetlinkHeader,
+//!     NetlinkMessage,
+//!     RtnlMessage,
+//!     NLM_F_DUMP,
+//!     NLM_F_REQUEST,
 //! };
 //!
 //! use netlink_proto::{
 //!     new_connection,
-//!     sys::{SocketAddr, protocols::NETLINK_ROUTE},
+//!     sys::{protocols::NETLINK_ROUTE, SocketAddr},
 //! };
 //!
 //! #[tokio::main]
@@ -183,13 +194,13 @@ use std::{fmt::Debug, io};
 pub use netlink_packet_core as packet;
 
 pub mod sys {
-    pub use netlink_sys::{protocols, SocketAddr};
+    pub use netlink_sys::{protocols, AsyncSocket, AsyncSocketExt, SocketAddr};
 
     #[cfg(feature = "tokio_socket")]
-    pub use netlink_sys::TokioSocket as Socket;
+    pub use netlink_sys::TokioSocket;
 
     #[cfg(feature = "smol_socket")]
-    pub use netlink_sys::SmolSocket as Socket;
+    pub use netlink_sys::SmolSocket;
 }
 
 /// Create a new Netlink connection for the given Netlink protocol, and returns a handle to that
@@ -209,6 +220,7 @@ pub mod sys {
 /// handle to send messages.
 ///
 /// [protos]: crate::sys::protocols
+#[cfg(feature = "tokio_socket")]
 #[allow(clippy::type_complexity)]
 pub fn new_connection<T>(
     protocol: isize,
@@ -218,13 +230,40 @@ pub fn new_connection<T>(
     UnboundedReceiver<(packet::NetlinkMessage<T>, sys::SocketAddr)>,
 )>
 where
-    T: Debug
-        + PartialEq
-        + Eq
-        + Clone
-        + packet::NetlinkSerializable<T>
-        + packet::NetlinkDeserializable<T>
-        + Unpin,
+    T: Debug + packet::NetlinkSerializable + packet::NetlinkDeserializable + Unpin,
+{
+    new_connection_with_codec(protocol)
+}
+
+/// Variant of [`new_connection`] that allows specifying a socket type to use for async handling
+#[allow(clippy::type_complexity)]
+pub fn new_connection_with_socket<T, S>(
+    protocol: isize,
+) -> io::Result<(
+    Connection<T, S>,
+    ConnectionHandle<T>,
+    UnboundedReceiver<(packet::NetlinkMessage<T>, sys::SocketAddr)>,
+)>
+where
+    T: Debug + packet::NetlinkSerializable + packet::NetlinkDeserializable + Unpin,
+    S: sys::AsyncSocket,
+{
+    new_connection_with_codec(protocol)
+}
+
+/// Variant of [`new_connection`] that allows specifying a socket type to use for async handling and a special codec
+#[allow(clippy::type_complexity)]
+pub fn new_connection_with_codec<T, S, C>(
+    protocol: isize,
+) -> io::Result<(
+    Connection<T, S, C>,
+    ConnectionHandle<T>,
+    UnboundedReceiver<(packet::NetlinkMessage<T>, sys::SocketAddr)>,
+)>
+where
+    T: Debug + packet::NetlinkSerializable + packet::NetlinkDeserializable + Unpin,
+    S: sys::AsyncSocket,
+    C: NetlinkMessageCodec,
 {
     let (requests_tx, requests_rx) = unbounded::<Request<T>>();
     let (messages_tx, messages_rx) = unbounded::<(packet::NetlinkMessage<T>, sys::SocketAddr)>();

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use std::{
     fmt,
     hash::{Hash, Hasher},

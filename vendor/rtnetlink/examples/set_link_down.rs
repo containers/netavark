@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use futures::stream::TryStreamExt;
 use rtnetlink::{new_connection, Error, Handle};
 use std::env;
@@ -20,7 +22,7 @@ async fn main() -> Result<(), String> {
 }
 
 async fn set_link_down(handle: Handle, name: String) -> Result<(), Error> {
-    let mut links = handle.link().get().set_name_filter(name.clone()).execute();
+    let mut links = handle.link().get().match_name(name.clone()).execute();
     if let Some(link) = links.try_next().await? {
         handle
             .link()

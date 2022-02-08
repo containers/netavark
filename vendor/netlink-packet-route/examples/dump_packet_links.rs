@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use netlink_packet_route::{
     LinkMessage,
     NetlinkHeader,
@@ -37,7 +39,7 @@ fn main() {
 
     // we set the NLM_F_DUMP flag so we expect a multipart rx_packet in response.
     loop {
-        let size = socket.recv(&mut receive_buffer[..], 0).unwrap();
+        let size = socket.recv(&mut &mut receive_buffer[..], 0).unwrap();
 
         loop {
             let bytes = &receive_buffer[offset..];

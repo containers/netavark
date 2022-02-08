@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use futures::stream::TryStreamExt;
 use rtnetlink::{new_connection, Error, Handle};
 use std::{env, net::IpAddr};
@@ -29,7 +31,7 @@ async fn add_neighbour(link_name: &str, ip: IpAddr, handle: Handle) -> Result<()
     let mut links = handle
         .link()
         .get()
-        .set_name_filter(link_name.to_string())
+        .match_name(link_name.to_string())
         .execute();
     if let Some(link) = links.try_next().await? {
         handle

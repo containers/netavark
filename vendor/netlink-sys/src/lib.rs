@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 pub mod constants;
 pub mod protocols {
     pub use super::constants::{
@@ -30,6 +32,12 @@ pub use self::socket::Socket;
 
 mod addr;
 pub use self::addr::SocketAddr;
+
+mod async_socket;
+pub use self::async_socket::AsyncSocket;
+
+pub mod async_socket_ext;
+pub use self::async_socket_ext::AsyncSocketExt;
 
 #[cfg(feature = "tokio_socket")]
 mod tokio;

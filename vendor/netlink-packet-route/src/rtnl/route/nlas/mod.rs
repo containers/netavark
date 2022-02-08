@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 mod cache_info;
 pub use self::cache_info::*;
 
@@ -6,6 +8,9 @@ pub use self::metrics::*;
 
 mod mfc_stats;
 pub use self::mfc_stats::*;
+
+mod next_hops;
+pub use self::next_hops::*;
 
 use anyhow::Context;
 use byteorder::{ByteOrder, NativeEndian};
@@ -18,19 +23,37 @@ use crate::{
     DecodeError,
 };
 
+#[cfg(feature = "rich_nlas")]
+use crate::traits::Emitable;
+
+/// Netlink attributes for `RTM_NEWROUTE`, `RTM_DELROUTE`,
+/// `RTM_GETROUTE` messages.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Nla {
+    #[cfg(not(feature = "rich_nlas"))]
+    Metrics(Vec<u8>),
+    #[cfg(feature = "rich_nlas")]
+    Metrics(Metrics),
+    #[cfg(not(feature = "rich_nlas"))]
+    MfcStats(Vec<u8>),
+    #[cfg(feature = "rich_nlas")]
+    MfcStats(MfcStats),
+    #[cfg(not(feature = "rich_nlas"))]
+    MultiPath(Vec<u8>),
+    #[cfg(feature = "rich_nlas")]
+    // See: https://codecave.cc/multipath-routing-in-linux-part-1.html
+    MultiPath(Vec<NextHop>),
+    #[cfg(not(feature = "rich_nlas"))]
+    CacheInfo(Vec<u8>),
+    #[cfg(feature = "rich_nlas")]
+    CacheInfo(CacheInfo),
     Unspec(Vec<u8>),
     Destination(Vec<u8>),
     Source(Vec<u8>),
     Gateway(Vec<u8>),
     PrefSource(Vec<u8>),
-    Metrics(Vec<u8>),
-    MultiPath(Vec<u8>),
-    CacheInfo(Vec<u8>),
     Session(Vec<u8>),
     MpAlgo(Vec<u8>),
-    MfcStats(Vec<u8>),
     Via(Vec<u8>),
     NewDestination(Vec<u8>),
     Pref(Vec<u8>),
@@ -60,7 +83,6 @@ impl nlas::Nla for Nla {
                 | Source(ref bytes)
                 | Gateway(ref bytes)
                 | PrefSource(ref bytes)
-                | MultiPath(ref bytes)
                 | Session(ref bytes)
                 | MpAlgo(ref bytes)
                 | Via(ref bytes)
@@ -71,10 +93,23 @@ impl nlas::Nla for Nla {
                 | Pad(ref bytes)
                 | Uid(ref bytes)
                 | TtlPropagate(ref bytes)
-                | CacheInfo(ref bytes)
+                => bytes.len(),
+
+            #[cfg(not(feature = "rich_nlas"))]
+            CacheInfo(ref bytes)
                 | MfcStats(ref bytes)
                 | Metrics(ref bytes)
+                | MultiPath(ref bytes)
                 => bytes.len(),
+
+            #[cfg(feature = "rich_nlas")]
+            CacheInfo(ref cache_info) => cache_info.buffer_len(),
+            #[cfg(feature = "rich_nlas")]
+            MfcStats(ref stats) => stats.buffer_len(),
+            #[cfg(feature = "rich_nlas")]
+            Metrics(ref metrics) => metrics.buffer_len(),
+            #[cfg(feature = "rich_nlas")]
+            MultiPath(ref next_hops) => next_hops.iter().map(|nh| nh.buffer_len()).sum(),
 
             EncapType(_) => 2,
             Iif(_)
@@ -99,7 +134,6 @@ impl nlas::Nla for Nla {
                 | Source(ref bytes)
                 | Gateway(ref bytes)
                 | PrefSource(ref bytes)
-                | MultiPath(ref bytes)
                 | Session(ref bytes)
                 | MpAlgo(ref bytes)
                 | Via(ref bytes)
@@ -110,10 +144,31 @@ impl nlas::Nla for Nla {
                 | Pad(ref bytes)
                 | Uid(ref bytes)
                 | TtlPropagate(ref bytes)
+                => buffer.copy_from_slice(bytes.as_slice()),
+
+            #[cfg(not(feature = "rich_nlas"))]
+                MultiPath(ref bytes)
                 | CacheInfo(ref bytes)
                 | MfcStats(ref bytes)
                 | Metrics(ref bytes)
                 => buffer.copy_from_slice(bytes.as_slice()),
+
+            #[cfg(feature = "rich_nlas")]
+            CacheInfo(ref cache_info) => cache_info.emit(buffer),
+            #[cfg(feature = "rich_nlas")]
+            MfcStats(ref stats) => stats.emit(buffer),
+            #[cfg(feature = "rich_nlas")]
+            Metrics(ref metrics) => metrics.emit(buffer),
+            #[cfg(feature = "rich_nlas")]
+            MultiPath(ref next_hops) => {
+                let mut offset = 0;
+                for nh in next_hops {
+                    let len = nh.buffer_len();
+                    nh.emit(&mut buffer[offset..offset+len]);
+                    offset += len
+                }
+            }
+
             EncapType(value) => NativeEndian::write_u16(buffer, value),
             Iif(value)
                 | Oif(value)
@@ -173,7 +228,6 @@ impl<'a, T: AsRef<[u8]> + ?Sized> Parseable<NlaBuffer<&'a T>> for Nla {
             RTA_SRC => Source(payload.to_vec()),
             RTA_GATEWAY => Gateway(payload.to_vec()),
             RTA_PREFSRC => PrefSource(payload.to_vec()),
-            RTA_MULTIPATH => MultiPath(payload.to_vec()),
             RTA_SESSION => Session(payload.to_vec()),
             RTA_MP_ALGO => MpAlgo(payload.to_vec()),
             RTA_VIA => Via(payload.to_vec()),
@@ -196,9 +250,54 @@ impl<'a, T: AsRef<[u8]> + ?Sized> Parseable<NlaBuffer<&'a T>> for Nla {
             RTA_FLOW => Flow(parse_u32(payload).context("invalid RTA_FLOW value")?),
             RTA_TABLE => Table(parse_u32(payload).context("invalid RTA_TABLE value")?),
             RTA_MARK => Mark(parse_u32(payload).context("invalid RTA_MARK value")?),
+
+            #[cfg(not(feature = "rich_nlas"))]
             RTA_CACHEINFO => CacheInfo(payload.to_vec()),
+            #[cfg(feature = "rich_nlas")]
+            RTA_CACHEINFO => CacheInfo(
+                cache_info::CacheInfo::parse(
+                    &CacheInfoBuffer::new_checked(payload)
+                        .context("invalid RTA_CACHEINFO value")?,
+                )
+                .context("invalid RTA_CACHEINFO value")?,
+            ),
+            #[cfg(not(feature = "rich_nlas"))]
             RTA_MFC_STATS => MfcStats(payload.to_vec()),
+            #[cfg(feature = "rich_nlas")]
+            RTA_MFC_STATS => MfcStats(
+                mfc_stats::MfcStats::parse(
+                    &MfcStatsBuffer::new_checked(payload).context("invalid RTA_MFC_STATS value")?,
+                )
+                .context("invalid RTA_MFC_STATS value")?,
+            ),
+            #[cfg(not(feature = "rich_nlas"))]
             RTA_METRICS => Metrics(payload.to_vec()),
+            #[cfg(feature = "rich_nlas")]
+            RTA_METRICS => Metrics(
+                metrics::Metrics::parse(
+                    &NlaBuffer::new_checked(payload).context("invalid RTA_METRICS value")?,
+                )
+                .context("invalid RTA_METRICS value")?,
+            ),
+            #[cfg(not(feature = "rich_nlas"))]
+            RTA_MULTIPATH => MultiPath(payload.to_vec()),
+            #[cfg(feature = "rich_nlas")]
+            RTA_MULTIPATH => {
+                let mut next_hops = vec![];
+                let mut buf = payload;
+                loop {
+                    let nh_buf =
+                        NextHopBuffer::new_checked(&buf).context("invalid RTA_MULTIPATH value")?;
+                    let len = nh_buf.length() as usize;
+                    let nh = NextHop::parse(&nh_buf).context("invalid RTA_MULTIPATH value")?;
+                    next_hops.push(nh);
+                    if buf.len() == len {
+                        break;
+                    }
+                    buf = &buf[len..];
+                }
+                MultiPath(next_hops)
+            }
             _ => Other(DefaultNla::parse(buf).context("invalid NLA (unknown kind)")?),
         })
     }

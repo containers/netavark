@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 mod inet;
 pub use self::inet::*;
 

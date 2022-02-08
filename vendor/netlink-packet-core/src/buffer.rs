@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 use byteorder::{ByteOrder, NativeEndian};
 
 use crate::{DecodeError, Field, Rest};

@@ -1,20 +1,30 @@
-use bytes::{BufMut, BytesMut};
+// SPDX-License-Identifier: MIT
+
+use bytes::BytesMut;
 use std::{
+    fmt::Debug,
     io,
+    marker::PhantomData,
     pin::Pin,
-    slice,
     task::{Context, Poll},
 };
 
 use futures::{Sink, Stream};
 use log::error;
-use tokio_util::codec::{Decoder, Encoder};
 
-use crate::sys::{Socket, SocketAddr};
+use crate::{
+    codecs::NetlinkMessageCodec,
+    sys::{AsyncSocket, SocketAddr},
+};
+use netlink_packet_core::{NetlinkDeserializable, NetlinkMessage, NetlinkSerializable};
 
-pub struct NetlinkFramed<C> {
-    socket: Socket,
-    codec: C,
+pub struct NetlinkFramed<T, S, C> {
+    socket: S,
+    // see https://doc.rust-lang.org/nomicon/phantom-data.html
+    // "invariant" seems like the safe choice; using `fn(T) -> T`
+    // should make it invariant but still Send+Sync.
+    msg_type: PhantomData<fn(T) -> T>, // invariant
+    codec: PhantomData<fn(C) -> C>,    // invariant
     reader: BytesMut,
     writer: BytesMut,
     in_addr: SocketAddr,
@@ -22,16 +32,16 @@ pub struct NetlinkFramed<C> {
     flushed: bool,
 }
 
-impl<C> Stream for NetlinkFramed<C>
+impl<T, S, C> Stream for NetlinkFramed<T, S, C>
 where
-    C: Decoder + Unpin,
-    C::Error: std::error::Error,
+    T: NetlinkDeserializable + Debug,
+    S: AsyncSocket,
+    C: NetlinkMessageCodec,
 {
-    type Item = (C::Item, SocketAddr);
+    type Item = (NetlinkMessage<T>, SocketAddr);
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let Self {
-            ref mut codec,
             ref mut socket,
             ref mut in_addr,
             ref mut reader,
@@ -39,7 +49,7 @@ where
         } = Pin::get_mut(self);
 
         loop {
-            match codec.decode(reader) {
+            match C::decode::<T>(reader) {
                 Ok(Some(item)) => return Poll::Ready(Some((item, *in_addr))),
                 Ok(None) => {}
                 Err(e) => {
@@ -51,31 +61,24 @@ where
             reader.clear();
             reader.reserve(INITIAL_READER_CAPACITY);
 
-            *in_addr = unsafe {
-                // Read into the buffer without having to initialize the memory.
-                //
-                // safety: we know poll_recv_from never reads from the
-                // memory during a recv so it's fine to turn &mut
-                // [<MaybeUninitialized<u8>>] into &mut[u8]
-                let bytes = reader.chunk_mut();
-                let bytes = slice::from_raw_parts_mut(bytes.as_mut_ptr(), bytes.len());
-                match ready!(socket.poll_recv_from(cx, bytes)) {
-                    Ok((n, addr)) => {
-                        reader.advance_mut(n);
-                        addr
-                    }
-                    Err(e) => {
-                        error!("failed to read from netlink socket: {:?}", e);
-                        return Poll::Ready(None);
-                    }
+            *in_addr = match ready!(socket.poll_recv_from(cx, reader)) {
+                Ok(addr) => addr,
+                Err(e) => {
+                    error!("failed to read from netlink socket: {:?}", e);
+                    return Poll::Ready(None);
                 }
             };
         }
     }
 }
 
-impl<C: Encoder<Item> + Unpin, Item> Sink<(Item, SocketAddr)> for NetlinkFramed<C> {
-    type Error = C::Error;
+impl<T, S, C> Sink<(NetlinkMessage<T>, SocketAddr)> for NetlinkFramed<T, S, C>
+where
+    T: NetlinkSerializable + Debug,
+    S: AsyncSocket,
+    C: NetlinkMessageCodec,
+{
+    type Error = io::Error;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         if !self.flushed {
@@ -88,11 +91,14 @@ impl<C: Encoder<Item> + Unpin, Item> Sink<(Item, SocketAddr)> for NetlinkFramed<
         Poll::Ready(Ok(()))
     }
 
-    fn start_send(self: Pin<&mut Self>, item: (Item, SocketAddr)) -> Result<(), Self::Error> {
+    fn start_send(
+        self: Pin<&mut Self>,
+        item: (NetlinkMessage<T>, SocketAddr),
+    ) -> Result<(), Self::Error> {
         trace!("sending frame");
         let (frame, out_addr) = item;
         let pin = self.get_mut();
-        pin.codec.encode(frame, &mut pin.writer)?;
+        C::encode(frame, &mut pin.writer)?;
         pin.out_addr = out_addr;
         pin.flushed = false;
         trace!("frame encoded; length={}", pin.writer.len());
@@ -112,7 +118,7 @@ impl<C: Encoder<Item> + Unpin, Item> Sink<(Item, SocketAddr)> for NetlinkFramed<
             ..
         } = *self;
 
-        let n = ready!(socket.poll_send_to(cx, &writer, &out_addr))?;
+        let n = ready!(socket.poll_send_to(cx, writer, out_addr))?;
         trace!("written {}", n);
 
         let wrote_all = n == self.writer.len();
@@ -125,8 +131,7 @@ impl<C: Encoder<Item> + Unpin, Item> Sink<(Item, SocketAddr)> for NetlinkFramed<
             Err(io::Error::new(
                 io::ErrorKind::Other,
                 "failed to write entire datagram to socket",
-            )
-            .into())
+            ))
         };
 
         Poll::Ready(res)
@@ -144,14 +149,15 @@ impl<C: Encoder<Item> + Unpin, Item> Sink<(Item, SocketAddr)> for NetlinkFramed<
 const INITIAL_READER_CAPACITY: usize = 64 * 1024;
 const INITIAL_WRITER_CAPACITY: usize = 8 * 1024;
 
-impl<C> NetlinkFramed<C> {
+impl<T, S, C> NetlinkFramed<T, S, C> {
     /// Create a new `NetlinkFramed` backed by the given socket and codec.
     ///
     /// See struct level documentation for more details.
-    pub fn new(socket: Socket, codec: C) -> NetlinkFramed<C> {
-        NetlinkFramed {
+    pub fn new(socket: S) -> Self {
+        Self {
             socket,
-            codec,
+            msg_type: PhantomData,
+            codec: PhantomData,
             out_addr: SocketAddr::new(0, 0),
             in_addr: SocketAddr::new(0, 0),
             reader: BytesMut::with_capacity(INITIAL_READER_CAPACITY),
@@ -167,7 +173,7 @@ impl<C> NetlinkFramed<C> {
     /// Care should be taken to not tamper with the underlying stream of data
     /// coming in as it may corrupt the stream of frames otherwise being worked
     /// with.
-    pub fn get_ref(&self) -> &Socket {
+    pub fn get_ref(&self) -> &S {
         &self.socket
     }
 
@@ -179,12 +185,12 @@ impl<C> NetlinkFramed<C> {
     /// Care should be taken to not tamper with the underlying stream of data
     /// coming in as it may corrupt the stream of frames otherwise being worked
     /// with.
-    pub fn get_mut(&mut self) -> &mut Socket {
+    pub fn get_mut(&mut self) -> &mut S {
         &mut self.socket
     }
 
     /// Consumes the `Framed`, returning its underlying I/O stream.
-    pub fn into_inner(self) -> Socket {
+    pub fn into_inner(self) -> S {
         self.socket
     }
 }

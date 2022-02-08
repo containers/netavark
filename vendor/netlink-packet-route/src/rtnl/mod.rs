@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 pub mod address;
 pub use address::{AddressHeader, AddressMessage, AddressMessageBuffer, ADDRESS_HEADER_LEN};
 
