@@ -133,7 +133,7 @@ impl CoreUtils {
         ifname: &str,
     ) -> Result<Vec<u32>, std::io::Error> {
         let mut connected_veth: Vec<u32> = Vec::new();
-        let (_connection, handle, _) = match rtnetlink::new_connection() {
+        let (connection, handle, _) = match rtnetlink::new_connection() {
             Ok((conn, handle, messages)) => (conn, handle, messages),
             Err(err) => {
                 return Err(std::io::Error::new(
@@ -143,40 +143,28 @@ impl CoreUtils {
             }
         };
 
-        tokio::spawn(_connection);
+        tokio::spawn(connection);
 
-        let mut master_id: u32 = 0;
-        let mut master_index: u32 = 0;
+        let master_index: u32;
 
-        let mut links = handle
-            .link()
-            .get()
-            .match_name(ifname.to_string())
-            .set_filter_mask(AF_BRIDGE as u8, RTEXT_FILTER_BRVLAN)
-            .execute();
-        while let msg = links.try_next().await {
-            match msg {
-                Ok(Some(msg)) => {
-                    for nla in msg.nlas.into_iter() {
-                        if let Nla::Master(data) = nla {
-                            master_id = data;
-                            master_index = msg.header.index;
-                            continue;
-                        }
-                    }
-                }
-                Err(err) => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
-                            "Unable to resolve physical address for interface {}: {}",
-                            ifname, err
-                        ),
-                    ));
-                }
-                _ => {
-                    break;
-                }
+        let mut links = handle.link().get().match_name(ifname.to_string()).execute();
+        match links.try_next().await {
+            Ok(Some(msg)) => master_index = msg.header.index,
+
+            Ok(None) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "Unable to resolve bridge interface {}: interface not found",
+                        ifname
+                    ),
+                ));
+            }
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Unable to resolve bridge interface {}: {}", ifname, err),
+                ));
             }
         }
 
@@ -188,12 +176,13 @@ impl CoreUtils {
         while let msg = links.try_next().await {
             match msg {
                 Ok(Some(msg)) => {
+                    // do not count the bridge itself
+                    if msg.header.index == master_index {
+                        continue;
+                    }
                     for nla in msg.nlas.into_iter() {
                         if let Nla::Master(data) = nla {
-                            if data == master_id {
-                                if msg.header.index == master_index {
-                                    continue;
-                                }
+                            if data == master_index {
                                 connected_veth.push(msg.header.index);
                             }
                             continue;
@@ -214,6 +203,7 @@ impl CoreUtils {
                 }
             }
         }
+        debug!("bridge has {} connected interfaces", connected_veth.len());
 
         Ok(connected_veth)
     }
