@@ -76,9 +76,9 @@ impl Core {
             }
             Some(i) => i,
         };
-        let static_mac: String = match &per_network_opts.static_mac {
-            Some(mac) => mac.to_owned(),
-            None => "".to_string(),
+        let static_mac = match &per_network_opts.static_mac {
+            Some(mac) => mac,
+            None => "",
         };
 
         // is ipv6 enabled, we need to propogate this to lower stack
@@ -155,7 +155,7 @@ impl Core {
             &bridge_name,
             address_vector,
             gw_ipaddr_vector,
-            &static_mac,
+            static_mac,
             &container_veth_name,
             &host_veth_name,
             netns,
@@ -361,37 +361,19 @@ impl Core {
         }
 
         // get master interface name
-        let mut master_ifname: String = match network.network_interface.as_ref() {
-            None => {
+        let master_ifname = match network.network_interface.as_deref() {
+            None | Some("") => {
                 if let Ok(ifname) = core_utils::CoreUtils::get_default_route_interface() {
                     ifname
                 } else {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        "unable to find any valid master interface for macvlan".to_string(),
+                        "unable to find any valid master interface for macvlan",
                     ));
                 }
             }
-            Some(interface) => interface.to_owned(),
+            Some(interface) => interface.to_string(),
         };
-
-        // user could provide empty value as well so handle that
-        if master_ifname.is_empty() {
-            if let Ok(ifname) = core_utils::CoreUtils::get_default_route_interface() {
-                if ifname.is_empty() {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "unable to find any valid master interface for macvlan".to_string(),
-                    ));
-                }
-                master_ifname = ifname;
-            } else {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "unable to find any valid master interface for macvlan".to_string(),
-                ));
-            }
-        }
 
         // static ip vector
         let mut address_vector = Vec::new();
@@ -405,7 +387,7 @@ impl Core {
             None => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    "no static ips provided".to_string(),
+                    "no static ips provided",
                 ))
             }
             Some(i) => i.clone(),
