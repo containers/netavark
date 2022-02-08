@@ -13,7 +13,8 @@
     clippy::too_many_lines,
     clippy::unit_arg,
     clippy::while_immutable_condition,
-    clippy::zero_ptr
+    clippy::zero_ptr,
+    irrefutable_let_patterns
 )]
 
 use anyhow::{anyhow, ensure, Chain, Error, Result};
@@ -528,7 +529,7 @@ fn test_as() {
     let test = || Ok(ensure!(f as for<'a> fn() as usize * 0 != 0));
     assert_err(
         test,
-        "Condition failed: `f as for<'a>fn() as usize * 0 != 0` (0 vs 0)", // FIXME
+        "Condition failed: `f as for<'a> fn() as usize * 0 != 0` (0 vs 0)",
     );
 
     let test = || Ok(ensure!(f as unsafe fn() as usize * 0 != 0));
@@ -613,7 +614,7 @@ fn test_pat() {
     let test = || Ok(ensure!(if let -1..=1 = 0 { 0 } else { 1 } == 1));
     assert_err(
         test,
-        "Condition failed: `if let -1 ..=1 = 0 { 0 } else { 1 } == 1` (0 vs 1)", // FIXME
+        "Condition failed: `if let -1..=1 = 0 { 0 } else { 1 } == 1` (0 vs 1)",
     );
 
     let test = || Ok(ensure!(if let &0 = &0 { 0 } else { 1 } == 1));
@@ -656,7 +657,7 @@ fn test_pat() {
     let test = || Ok(ensure!(if let P::<u8> {} = p { 0 } else { 1 } == 1));
     assert_err(
         test,
-        "Condition failed: `if let P::<u8> {  } = p { 0 } else { 1 } == 1` (0 vs 1)", // FIXME
+        "Condition failed: `if let P::<u8> {} = p { 0 } else { 1 } == 1` (0 vs 1)",
     );
 
     let test = || Ok(ensure!(if let ::std::marker::PhantomData = p {} != ()));
