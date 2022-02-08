@@ -68,6 +68,9 @@ fw_driver=iptables
     # iptables -L ...
 
     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
+
+    # bridge should be removed on teardown
+    expected_rc=1 run_in_host_netns ip addr show podman0
 }
 
 @test "$fw_driver - ipv6 bridge" {
