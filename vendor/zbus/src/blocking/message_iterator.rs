@@ -2,9 +2,7 @@ use futures_util::StreamExt;
 use static_assertions::assert_impl_all;
 use std::sync::Arc;
 
-use async_io::block_on;
-
-use crate::{blocking::Connection, Message, Result};
+use crate::{blocking::Connection, utils::block_on, Message, Result};
 
 /// A blocking wrapper of [`crate::MessageStream`].
 ///

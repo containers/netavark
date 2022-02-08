@@ -1,6 +1,7 @@
 use futures_core::ready;
 
 use std::{
+    collections::VecDeque,
     fmt::Debug,
     future::Future,
     marker::PhantomData,
@@ -14,6 +15,25 @@ use crate::{
     raw::{self, Handshake as SyncHandshake, Socket},
     Result,
 };
+
+/// Authentication mechanisms
+///
+/// See <https://dbus.freedesktop.org/doc/dbus-specification.html#auth-mechanisms>
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum AuthMechanism {
+    /// This is the recommended authentication mechanism on platforms where credentials can be
+    /// transferred out-of-band, in particular Unix platforms that can perform credentials-passing
+    /// over the `unix:` transport.
+    External,
+
+    /// This mechanism is designed to establish that a client has the ability to read a private file
+    /// owned by the user being authenticated.
+    Cookie,
+
+    /// Does not perform any authentication at all, and should not be accepted by message buses.
+    /// However, it might sometimes be useful for non-message-bus uses of D-Bus.
+    Anonymous,
+}
 
 /// The asynchronous authentication implementation based on non-blocking [`raw::Handshake`].
 ///
@@ -41,18 +61,34 @@ where
     S: Socket + Unpin,
 {
     /// Create a client-side `Authenticated` for the given `socket`.
-    pub async fn client(socket: S) -> Result<Self> {
+    pub async fn client(socket: S, mechanisms: Option<VecDeque<AuthMechanism>>) -> Result<Self> {
         Handshake {
-            handshake: Some(raw::ClientHandshake::new(socket)),
+            handshake: Some(raw::ClientHandshake::new(socket, mechanisms)),
             phantom: PhantomData,
         }
         .await
     }
 
     /// Create a server-side `Authenticated` for the given `socket`.
-    pub async fn server(socket: S, guid: Guid, client_uid: u32) -> Result<Self> {
+    ///
+    /// The function takes `client_uid` on Unix only.
+    pub async fn server(
+        socket: S,
+        guid: Guid,
+        #[cfg(unix)] client_uid: u32,
+        #[cfg(windows)] client_sid: Option<String>,
+        auth_mechanisms: Option<VecDeque<AuthMechanism>>,
+    ) -> Result<Self> {
         Handshake {
-            handshake: Some(raw::ServerHandshake::new(socket, guid, client_uid)),
+            handshake: Some(raw::ServerHandshake::new(
+                socket,
+                guid,
+                #[cfg(unix)]
+                client_uid,
+                #[cfg(windows)]
+                client_sid,
+                auth_mechanisms,
+            )?),
             phantom: PhantomData,
         }
         .await
@@ -92,6 +128,7 @@ where
     }
 }
 
+#[cfg(all(unix, feature = "async-io"))]
 #[cfg(test)]
 mod tests {
     use async_io::Async;
@@ -105,7 +142,7 @@ mod tests {
 
     #[test]
     fn async_handshake() {
-        async_io::block_on(handshake()).unwrap();
+        crate::utils::block_on(handshake()).unwrap();
     }
 
     async fn handshake() -> Result<()> {
@@ -113,9 +150,13 @@ mod tests {
         let (p0, p1) = UnixStream::pair()?;
 
         // initialize both handshakes
-        let client = Authenticated::client(Async::new(p0)?);
-        let server =
-            Authenticated::server(Async::new(p1)?, Guid::generate(), Uid::current().into());
+        let client = Authenticated::client(Async::new(p0)?, None);
+        let server = Authenticated::server(
+            Async::new(p1)?,
+            Guid::generate(),
+            Uid::current().into(),
+            None,
+        );
 
         // proceed to the handshakes
         let (client_auth, server_auth) = futures_util::try_join!(client, server)?;

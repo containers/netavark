@@ -130,8 +130,28 @@ that is something you would like to avoid, you need to:
   * Use [`ConnectionBuilder`] and disable the `internal_executor` flag.
   * Ensure the [internal executor keeps ticking continuously][iektc].
 
+Moreover, by default zbus makes use of [`async-io`] for all I/O, which also launches its own thread
+to run its own internal executor.
+
+### Special tokio support
+
+Since [`tokio`] is the most popular async runtime, zbus provides an easy way to enable tight
+integration with it without you having to worry about any of the above: Enabling the `tokio` feature
+and disabling the default `async-io` feature:
+
+```toml
+# Sample Cargo.toml snippet.
+[dependencies]
+zbus = { version = "2", default-features = false, features = ["tokio"] }
+```
+
+That's it! No threads launched behind your back by zbus (directly or indirectly) now and no need to
+tick any executors etc. 😼
+
 [zbus]: https://gitlab.freedesktop.org/dbus/zbus/-/blob/main/README.md
 [bw]: https://docs.rs/zbus/2.0.0/zbus/blocking/index.html
-[iektc]: https://docs.rs/zbus/2.0.0/zbus/azync/struct.Connection.html#method.executor
+[iektc]: https://docs.rs/zbus/2.0.0/zbus/struct.Connection.html#examples-1
 [`ConnectionBuilder`]: https://docs.rs/zbus/2.0.0/zbus/struct.ConnectionBuilder.html
+[`tokio`]: https://crates.io/crates/tokio
+[`async-io`]: https://crates.io/crates/async-io
 [LICENSE-MIT]: https://gitlab.freedesktop.org/dbus/zbus/-/blob/main/LICENSE-MIT

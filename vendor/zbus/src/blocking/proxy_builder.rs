@@ -1,11 +1,10 @@
 use std::convert::TryInto;
 
-use async_io::block_on;
 use static_assertions::assert_impl_all;
 use zbus_names::{BusName, InterfaceName};
 use zvariant::ObjectPath;
 
-use crate::{blocking::Connection, CacheProperties, Error, Result};
+use crate::{blocking::Connection, utils::block_on, CacheProperties, Error, Result};
 
 pub use crate::ProxyDefault;
 

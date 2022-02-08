@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "zbus_macros"
-version = "2.0.1"
+version = "2.1.1"
 authors = ["Marc-André Lureau <marcandre.lureau@redhat.com>"]
 description = "proc-macros for zbus"
 readme = "README.md"

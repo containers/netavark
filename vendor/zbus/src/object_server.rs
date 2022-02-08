@@ -658,17 +658,21 @@ impl From<crate::blocking::ObjectServer> for ObjectServer {
 #[cfg(test)]
 #[allow(clippy::blacklisted_name)]
 mod tests {
-    use std::{collections::HashMap, convert::TryInto, os::unix::net::UnixStream};
+    #[cfg(all(unix, feature = "async-io"))]
+    use std::os::unix::net::UnixStream;
+    use std::{collections::HashMap, convert::TryInto};
+    #[cfg(all(unix, not(feature = "async-io")))]
+    use tokio::net::UnixStream;
 
+    use crate::utils::block_on;
     use async_channel::{bounded, Sender};
-    use async_io::block_on;
     use event_listener::Event;
     use futures_util::StreamExt;
     use ntest::timeout;
     use serde::{Deserialize, Serialize};
     use test_log::test;
     use zbus::DBusError;
-    use zvariant::{Type, Value};
+    use zvariant::{DeserializeDict, OwnedValue, SerializeDict, Type, Value};
 
     use crate::{
         dbus_interface, dbus_proxy, CacheProperties, Connection, ConnectionBuilder, InterfaceRef,
@@ -679,6 +683,15 @@ mod tests {
     pub struct ArgStructTest {
         foo: i32,
         bar: String,
+    }
+
+    // Mimic a NetworkManager interface property that's a dict. This tests ability to use a custom
+    // dict type using the `Type` And `*Dict` macros (issue #241).
+    #[derive(DeserializeDict, SerializeDict, Type, Debug, Value, OwnedValue, PartialEq)]
+    #[zvariant(signature = "dict")]
+    pub struct IP4Adress {
+        prefix: u32,
+        address: String,
     }
 
     #[dbus_proxy(gen_blocking = false)]
@@ -711,6 +724,12 @@ mod tests {
 
         #[dbus_proxy(property)]
         fn hash_map(&self) -> zbus::Result<HashMap<String, String>>;
+
+        #[dbus_proxy(property)]
+        fn address_data(&self) -> zbus::Result<IP4Adress>;
+
+        #[dbus_proxy(property)]
+        fn address_data2(&self) -> zbus::Result<IP4Adress>;
     }
 
     #[derive(Debug, Clone)]
@@ -845,6 +864,25 @@ mod tests {
             self.test_hashmap_return().await.unwrap()
         }
 
+        #[dbus_interface(property)]
+        fn address_data(&self) -> IP4Adress {
+            IP4Adress {
+                address: "127.0.0.1".to_string(),
+                prefix: 1234,
+            }
+        }
+
+        // On the bus, this should return the same value as address_data above. We want to test if
+        // this works both ways.
+        #[dbus_interface(property)]
+        fn address_data2(&self) -> HashMap<String, OwnedValue> {
+            let mut map = HashMap::new();
+            map.insert("address".into(), Value::from("127.0.0.1").into());
+            map.insert("prefix".into(), 1234u32.into());
+
+            map
+        }
+
         #[dbus_interface(signal)]
         async fn alert_count(ctxt: &SignalContext<'_>, val: u32) -> zbus::Result<()>;
     }
@@ -852,6 +890,16 @@ mod tests {
     fn check_hash_map(map: HashMap<String, String>) {
         assert_eq!(map["hi"], "hello");
         assert_eq!(map["bye"], "now");
+    }
+
+    fn check_ipv4_address(address: IP4Adress) {
+        assert_eq!(
+            address,
+            IP4Adress {
+                address: "127.0.0.1".to_string(),
+                prefix: 1234,
+            }
+        );
     }
 
     async fn my_iface_test(conn: Connection, event: Event) -> zbus::Result<u32> {
@@ -894,6 +942,9 @@ mod tests {
             .await?;
         check_hash_map(proxy.test_hashmap_return().await?);
         check_hash_map(proxy.hash_map().await?);
+        check_ipv4_address(proxy.address_data().await?);
+        check_ipv4_address(proxy.address_data2().await?);
+
         #[cfg(feature = "xml")]
         {
             let xml = proxy.introspect().await?;
@@ -939,6 +990,9 @@ mod tests {
             .path("/zbus/test/MyObj")?
             .build()
             .await?;
+        my_obj_proxy.receive_count_changed().await;
+        // Calling this after creating the stream was panicking (MR !460)
+        assert_eq!(my_obj_proxy.cached_count()?, None);
         assert_eq!(my_obj_proxy.count().await?, 0);
         assert_eq!(my_obj_proxy.cached_count()?, Some(0));
         assert_eq!(
@@ -973,6 +1027,7 @@ mod tests {
         block_on(basic_iface_(false));
     }
 
+    #[cfg(unix)]
     #[test]
     #[timeout(15000)]
     fn basic_iface_unix_p2p() {
@@ -981,15 +1036,30 @@ mod tests {
 
     async fn basic_iface_(p2p: bool) {
         let event = event_listener::Event::new();
-
         let guid = zbus::Guid::generate();
-        let (service_conn_builder, client_conn_builder) = if p2p {
-            let (p0, p1) = UnixStream::pair().unwrap();
 
-            (
-                ConnectionBuilder::unix_stream(p0).server(&guid).p2p(),
-                ConnectionBuilder::unix_stream(p1).p2p(),
-            )
+        let (service_conn_builder, client_conn_builder) = if p2p {
+            #[cfg(unix)]
+            {
+                let (p0, p1) = UnixStream::pair().unwrap();
+
+                (
+                    ConnectionBuilder::unix_stream(p0).server(&guid).p2p(),
+                    ConnectionBuilder::unix_stream(p1).p2p(),
+                )
+            }
+            #[cfg(windows)]
+            {
+                let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+                let addr = listener.local_addr().unwrap();
+                let p1 = std::net::TcpStream::connect(addr).unwrap();
+                let p0 = listener.incoming().next().unwrap().unwrap();
+
+                (
+                    ConnectionBuilder::tcp_stream(p0).server(&guid).p2p(),
+                    ConnectionBuilder::tcp_stream(p1).p2p(),
+                )
+            }
         } else {
             let service_conn_builder = ConnectionBuilder::session()
                 .unwrap()

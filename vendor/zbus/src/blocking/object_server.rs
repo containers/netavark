@@ -1,10 +1,11 @@
 use std::{convert::TryInto, ops::Deref};
 
-use async_io::block_on;
 use static_assertions::assert_impl_all;
 use zvariant::ObjectPath;
 
-use crate::{Error, Interface, InterfaceDeref, InterfaceDerefMut, Result, SignalContext};
+use crate::{
+    utils::block_on, Error, Interface, InterfaceDeref, InterfaceDerefMut, Result, SignalContext,
+};
 
 /// Wrapper over an interface, along with its corresponding `SignalContext`
 /// instance. A reference to the underlying interface may be obtained via

@@ -248,7 +248,7 @@ pub fn expand(args: AttributeArgs, mut input: ItemImpl) -> syn::Result<TokenStre
                         }
                         ::std::result::Result::Err(e) => {
                             ::std::result::Result::Err(
-                                ::std::convert::Into::into(#zbus::Error::Variant(e)),
+                                ::std::convert::Into::into(#zbus::Error::Variant(::std::convert::Into::into(e))),
                             )
                         }
                     }

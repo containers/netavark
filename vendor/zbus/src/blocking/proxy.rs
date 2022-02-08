@@ -1,4 +1,3 @@
-use async_io::block_on;
 use futures_util::StreamExt;
 use static_assertions::assert_impl_all;
 use std::{
@@ -9,7 +8,7 @@ use std::{
 use zbus_names::{BusName, InterfaceName, MemberName, UniqueName};
 use zvariant::{ObjectPath, OwnedValue, Value};
 
-use crate::{blocking::Connection, Error, Message, Result};
+use crate::{blocking::Connection, utils::block_on, Error, Message, Result};
 
 use crate::fdo;
 

@@ -4,9 +4,7 @@ use std::{convert::TryInto, ops::Deref, sync::Arc};
 use zbus_names::{BusName, ErrorName, InterfaceName, MemberName, OwnedUniqueName, WellKnownName};
 use zvariant::ObjectPath;
 
-use async_io::block_on;
-
-use crate::{blocking::ObjectServer, DBusError, Error, Message, Result};
+use crate::{blocking::ObjectServer, utils::block_on, DBusError, Error, Message, Result};
 
 /// A blocking wrapper of [`zbus::Connection`].
 ///
@@ -241,22 +239,29 @@ impl From<crate::Connection> for Connection {
     }
 }
 
+#[cfg(unix)]
 #[cfg(test)]
 mod tests {
     use ntest::timeout;
-    use std::{os::unix::net::UnixStream, thread};
+    #[cfg(feature = "async-io")]
+    use std::os::unix::net::UnixStream;
+    use std::thread;
     use test_log::test;
+    #[cfg(not(feature = "async-io"))]
+    use tokio::net::UnixStream;
 
     use crate::{
         blocking::{ConnectionBuilder, MessageIterator},
         Guid,
     };
+
     #[test]
     #[timeout(15000)]
     fn unix_p2p() {
         let guid = Guid::generate();
 
-        let (p0, p1) = UnixStream::pair().unwrap();
+        // Tokio needs us to call the sync function from async context. :shrug:
+        let (p0, p1) = crate::utils::block_on(async { UnixStream::pair().unwrap() });
 
         let server_thread = thread::spawn(move || {
             let c = ConnectionBuilder::unix_stream(p0)

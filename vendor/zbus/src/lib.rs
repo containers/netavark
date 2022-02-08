@@ -17,11 +17,14 @@ mod doctests {
     doc_comment::doctest!("../../book/src/introduction.md");
     doc_comment::doctest!("../../book/src/server.md");
     doc_comment::doctest!("../../book/src/blocking.md");
-
-    // FAQ contains a code sample that requires our tokio support.
-    #[cfg(feature = "tokio")]
     doc_comment::doctest!("../../book/src/faq.md");
 }
+
+#[cfg(all(not(feature = "async-io"), not(feature = "tokio")))]
+compile_error!("Either \"async-io\" (default) or \"tokio\" must be enabled.");
+
+#[cfg(windows)]
+mod win32;
 
 mod dbus_error;
 pub use dbus_error::*;
@@ -48,7 +51,9 @@ mod message_fields;
 pub use message_fields::*;
 
 mod handshake;
+pub use handshake::AuthMechanism;
 pub(crate) use handshake::*;
+
 mod connection;
 pub use connection::*;
 mod connection_builder;
@@ -98,6 +103,7 @@ pub mod export {
 pub use zbus_names as names;
 pub use zvariant;
 
+#[cfg(unix)]
 use zvariant::OwnedFd;
 
 #[cfg(test)]
@@ -105,18 +111,23 @@ mod tests {
     use std::{
         collections::HashMap,
         convert::{TryFrom, TryInto},
-        fs::File,
-        os::unix::io::{AsRawFd, FromRawFd},
         sync::{mpsc::channel, Arc, Condvar, Mutex},
     };
+    #[cfg(unix)]
+    use std::{
+        fs::File,
+        os::unix::io::{AsRawFd, FromRawFd},
+    };
 
-    use async_io::block_on;
+    use crate::utils::block_on;
     use enumflags2::BitFlags;
     use ntest::timeout;
     use test_log::test;
 
     use zbus_names::UniqueName;
-    use zvariant::{Fd, OwnedObjectPath, OwnedValue, Type};
+    #[cfg(unix)]
+    use zvariant::Fd;
+    use zvariant::{OwnedObjectPath, OwnedValue, Type};
 
     use crate::{
         blocking::{self, MessageIterator},
@@ -178,7 +189,7 @@ mod tests {
     #[test]
     #[timeout(15000)]
     fn basic_connection_async() {
-        async_io::block_on(test_basic_connection()).unwrap();
+        block_on(test_basic_connection()).unwrap();
     }
 
     async fn test_basic_connection() -> Result<()> {
@@ -202,6 +213,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(unix)]
     #[test]
     #[timeout(15000)]
     fn fdpass_systemd() {
@@ -325,14 +337,17 @@ mod tests {
         let pid: u32 = (&hashmap["ProcessID"]).try_into().unwrap();
         println!("DBus bus PID: {}", pid);
 
-        let uid: u32 = (&hashmap["UnixUserID"]).try_into().unwrap();
-        println!("DBus bus UID: {}", uid);
+        #[cfg(unix)]
+        {
+            let uid: u32 = (&hashmap["UnixUserID"]).try_into().unwrap();
+            println!("DBus bus UID: {}", uid);
+        }
     }
 
     #[test]
     #[timeout(15000)]
     fn freedesktop_api_async() {
-        async_io::block_on(test_freedesktop_api()).unwrap();
+        block_on(test_freedesktop_api()).unwrap();
     }
 
     async fn test_freedesktop_api() -> Result<()> {
@@ -428,8 +443,11 @@ mod tests {
         let pid: u32 = (&hashmap["ProcessID"]).try_into().unwrap();
         println!("DBus bus PID: {}", pid);
 
-        let uid: u32 = (&hashmap["UnixUserID"]).try_into().unwrap();
-        println!("DBus bus UID: {}", uid);
+        #[cfg(unix)]
+        {
+            let uid: u32 = (&hashmap["UnixUserID"]).try_into().unwrap();
+            println!("DBus bus UID: {}", uid);
+        }
 
         Ok(())
     }

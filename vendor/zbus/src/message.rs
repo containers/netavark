@@ -2,6 +2,10 @@ use std::{
     convert::{TryFrom, TryInto},
     fmt,
     io::Cursor,
+};
+
+#[cfg(unix)]
+use std::{
     os::unix::io::{AsRawFd, RawFd},
     sync::{Arc, RwLock},
 };
@@ -11,12 +15,15 @@ use static_assertions::assert_impl_all;
 use zbus_names::{BusName, ErrorName, InterfaceName, MemberName, UniqueName};
 use zvariant::{DynamicType, EncodingContext, ObjectPath, Signature, Type};
 
+#[cfg(unix)]
+use crate::OwnedFd;
 use crate::{
     utils::padding_for_8_bytes, EndianSig, Error, MessageField, MessageFieldCode, MessageFields,
-    MessageFlags, MessageHeader, MessagePrimaryHeader, MessageType, OwnedFd, QuickMessageFields,
-    Result, MIN_MESSAGE_SIZE, NATIVE_ENDIAN_SIG,
+    MessageFlags, MessageHeader, MessagePrimaryHeader, MessageType, QuickMessageFields, Result,
+    MIN_MESSAGE_SIZE, NATIVE_ENDIAN_SIG,
 };
 
+#[cfg(unix)]
 const LOCK_PANIC_MSG: &str = "lock poisoned";
 
 macro_rules! dbus_context {
@@ -202,7 +209,16 @@ impl<'a> MessageBuilder<'a> {
         let mut header = self.header;
         // Note: this iterates the body twice, but we prefer efficient handling of large messages
         // to efficient handling of ones that are complex to serialize.
-        let (body_len, fds_len) = zvariant::serialized_size_fds(ctxt, body)?;
+        let (body_len, fds_len) = {
+            #[cfg(unix)]
+            {
+                zvariant::serialized_size_fds(ctxt, body)?
+            }
+            #[cfg(not(unix))]
+            {
+                (zvariant::serialized_size(ctxt, body)?, 0)
+            }
+        };
 
         let mut signature = body.dynamic_signature();
         if !signature.is_empty() {
@@ -227,7 +243,16 @@ impl<'a> MessageBuilder<'a> {
         let mut cursor = Cursor::new(&mut bytes);
         zvariant::to_writer(&mut cursor, ctxt, &header)?;
 
-        let (_, fds) = zvariant::to_writer_fds(&mut cursor, ctxt, body)?;
+        let (_, _fds) = {
+            #[cfg(unix)]
+            {
+                zvariant::to_writer_fds(&mut cursor, ctxt, body)?
+            }
+            #[cfg(not(unix))]
+            {
+                (zvariant::to_writer(&mut cursor, ctxt, body)?, 0)
+            }
+        };
         let primary_header = header.into_primary();
         let header: MessageHeader<'_> = zvariant::from_slice(&bytes, ctxt)?;
         let quick_fields = QuickMessageFields::new(&bytes, &header)?;
@@ -237,18 +262,21 @@ impl<'a> MessageBuilder<'a> {
             quick_fields,
             bytes,
             body_offset: hdr_len,
-            fds: Arc::new(RwLock::new(Fds::Raw(fds))),
+            #[cfg(unix)]
+            fds: Arc::new(RwLock::new(Fds::Raw(_fds))),
             recv_seq: MessageSequence::default(),
         })
     }
 }
 
+#[cfg(unix)]
 #[derive(Debug, Eq, PartialEq)]
 enum Fds {
     Owned(Vec<OwnedFd>),
     Raw(Vec<RawFd>),
 }
 
+#[cfg(unix)]
 impl Clone for Fds {
     fn clone(&self) -> Self {
         Fds::Raw(match self {
@@ -275,11 +303,11 @@ pub struct MessageSequence {
 /// and hence use the API provided by [`Connection`], even when using the low-level API.
 ///
 /// **Note**: The message owns the received FDs and will close them when dropped. You can call
-/// [`disown_fds`] after deserializing to `RawFD` using [`body`] if you want to take the ownership.
+/// [`take_fds`] after deserializing to `RawFD` using [`body`] if you want to take the ownership.
 /// Moreover, a clone of a message with owned FDs will only receive unowned copies of the FDs.
 ///
 /// [`body`]: #method.body
-/// [`disown_fds`]: #method.disown_fds
+/// [`take_fds`]: #method.take_fds
 /// [`Connection`]: struct.Connection#method.call_method
 #[derive(Clone)]
 pub struct Message {
@@ -287,6 +315,7 @@ pub struct Message {
     quick_fields: QuickMessageFields,
     bytes: Vec<u8>,
     body_offset: usize,
+    #[cfg(unix)]
     fds: Arc<RwLock<Fds>>,
     recv_seq: MessageSequence,
 }
@@ -408,13 +437,18 @@ impl Message {
     }
 
     /// Create a message from its full contents
-    pub(crate) fn from_raw_parts(bytes: Vec<u8>, fds: Vec<OwnedFd>, recv_seq: u64) -> Result<Self> {
+    pub(crate) fn from_raw_parts(
+        bytes: Vec<u8>,
+        #[cfg(unix)] fds: Vec<OwnedFd>,
+        recv_seq: u64,
+    ) -> Result<Self> {
         if EndianSig::try_from(bytes[0])? != NATIVE_ENDIAN_SIG {
             return Err(Error::IncorrectEndian);
         }
 
         let (primary_header, fields_len) = MessagePrimaryHeader::read(&bytes)?;
         let header = zvariant::from_slice(&bytes, dbus_context!(0))?;
+        #[cfg(unix)]
         let fds = Arc::new(RwLock::new(Fds::Owned(fds)));
 
         let header_len = MIN_MESSAGE_SIZE + fields_len as usize;
@@ -426,6 +460,7 @@ impl Message {
             quick_fields,
             bytes,
             body_offset,
+            #[cfg(unix)]
             fds,
             recv_seq: MessageSequence { recv_seq },
         })
@@ -437,8 +472,11 @@ impl Message {
     /// the message from closing those FDs on drop, call this method that returns all the received
     /// FDs with their ownership.
     ///
+    /// This function is Unix-specific.
+    ///
     /// Note: the message will continue to reference the files, so you must keep them open for as
     /// long as the message itself.
+    #[cfg(unix)]
     pub fn take_fds(&self) -> Vec<OwnedFd> {
         let mut fds_lock = self.fds.write().expect(LOCK_PANIC_MSG);
         if let Fds::Owned(ref mut fds) = *fds_lock {
@@ -530,11 +568,20 @@ impl Message {
     where
         B: serde::de::Deserialize<'d> + Type,
     {
-        zvariant::from_slice_fds(
-            &self.bytes[self.body_offset..],
-            Some(&self.fds()),
-            dbus_context!(0),
-        )
+        {
+            #[cfg(unix)]
+            {
+                zvariant::from_slice_fds(
+                    &self.bytes[self.body_offset..],
+                    Some(&self.fds()),
+                    dbus_context!(0),
+                )
+            }
+            #[cfg(not(unix))]
+            {
+                zvariant::from_slice(&self.bytes[self.body_offset..], dbus_context!(0))
+            }
+        }
         .map_err(Error::from)
     }
 
@@ -571,15 +618,29 @@ impl Message {
             Err(e) => return Err(e),
         };
 
-        zvariant::from_slice_fds_for_dynamic_signature(
-            &self.bytes[self.body_offset..],
-            Some(&self.fds()),
-            dbus_context!(0),
-            &body_sig,
-        )
+        {
+            #[cfg(unix)]
+            {
+                zvariant::from_slice_fds_for_dynamic_signature(
+                    &self.bytes[self.body_offset..],
+                    Some(&self.fds()),
+                    dbus_context!(0),
+                    &body_sig,
+                )
+            }
+            #[cfg(not(unix))]
+            {
+                zvariant::from_slice_for_dynamic_signature(
+                    &self.bytes[self.body_offset..],
+                    dbus_context!(0),
+                    &body_sig,
+                )
+            }
+        }
         .map_err(Error::from)
     }
 
+    #[cfg(unix)]
     pub(crate) fn fds(&self) -> Vec<RawFd> {
         match &*self.fds.read().expect(LOCK_PANIC_MSG) {
             Fds::Raw(fds) => fds.clone(),
@@ -635,9 +696,12 @@ impl fmt::Debug for Message {
         if let Ok(s) = self.body_signature() {
             msg.field("body", &s);
         }
-        let fds = self.fds();
-        if !fds.is_empty() {
-            msg.field("fds", &fds);
+        #[cfg(unix)]
+        {
+            let fds = self.fds();
+            if !fds.is_empty() {
+                msg.field("fds", &fds);
+            }
         }
         msg.finish()
     }
@@ -699,15 +763,20 @@ impl fmt::Display for Message {
 
 #[cfg(test)]
 mod tests {
-    use crate::Error;
-
-    use super::{Fds, Message};
+    #[cfg(unix)]
     use std::os::unix::io::AsRawFd;
     use test_log::test;
+    #[cfg(unix)]
     use zvariant::Fd;
+
+    #[cfg(unix)]
+    use super::Fds;
+    use super::Message;
+    use crate::Error;
 
     #[test]
     fn test() {
+        #[cfg(unix)]
         let stdout = std::io::stdout();
         let m = Message::method(
             Some(":1.72"),
@@ -715,10 +784,18 @@ mod tests {
             "/",
             None::<()>,
             "do",
-            &(Fd::from(&stdout), "foo"),
+            &(
+                #[cfg(unix)]
+                Fd::from(&stdout),
+                "foo",
+            ),
         )
         .unwrap();
-        assert_eq!(m.body_signature().unwrap().to_string(), "hs");
+        assert_eq!(
+            m.body_signature().unwrap().to_string(),
+            if cfg!(unix) { "hs" } else { "s" }
+        );
+        #[cfg(unix)]
         assert_eq!(*m.fds.read().unwrap(), Fds::Raw(vec![stdout.as_raw_fd()]));
 
         let body: Result<u32, Error> = m.body();

@@ -12,7 +12,7 @@
 [package]
 edition = "2018"
 name = "zbus"
-version = "2.0.1"
+version = "2.1.1"
 authors = ["Zeeshan Ali <zeeshanak@gnome.org>"]
 description = "API for D-Bus communication"
 readme = "README.md"
@@ -35,6 +35,7 @@ version = "1.4.1"
 
 [dependencies.async-io]
 version = "1.3.1"
+optional = true
 
 [dependencies.async-lock]
 version = "2.3.0"
@@ -75,6 +76,9 @@ default-features = false
 [dependencies.hex]
 version = "0.4.2"
 
+[dependencies.lazy_static]
+version = "1.4.0"
+
 [dependencies.nix]
 version = "0.23.0"
 
@@ -107,17 +111,17 @@ version = "1.1.0"
 
 [dependencies.tokio]
 version = "1.10.0"
-features = ["net"]
+features = ["rt", "net"]
 optional = true
 
 [dependencies.zbus_macros]
-version = "=2.0.1"
+version = "=2.1.1"
 
 [dependencies.zbus_names]
 version = "2"
 
 [dependencies.zvariant]
-version = "3"
+version = "3.1.2"
 features = ["enumflags2"]
 default-features = false
 [dev-dependencies.async-std]
@@ -144,6 +148,9 @@ version = "1"
 features = ["macros", "rt-multi-thread", "sync", "fs", "io-util", "net"]
 
 [features]
-default = []
+default = ["async-io"]
 gvariant = ["zvariant/gvariant"]
 xml = ["serde-xml-rs"]
+[target."cfg(windows)".dependencies.winapi]
+version = "0.3"
+features = ["handleapi", "iphlpapi", "processthreadsapi", "sddl", "securitybaseapi", "tcpmib", "winbase", "winerror"]

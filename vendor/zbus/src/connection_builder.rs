@@ -1,26 +1,36 @@
+#[cfg(feature = "async-io")]
 use async_io::Async;
 use async_lock::RwLock;
 use static_assertions::assert_impl_all;
+#[cfg(feature = "async-io")]
+use std::net::TcpStream;
+#[cfg(all(unix, feature = "async-io"))]
+use std::os::unix::net::UnixStream;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     convert::TryInto,
-    os::unix::net::UnixStream,
     sync::Arc,
 };
+#[cfg(all(not(feature = "async-io"), feature = "tokio"))]
+use tokio::net::TcpStream;
+#[cfg(all(unix, not(feature = "async-io"), feature = "tokio"))]
+use tokio::net::UnixStream;
 use zvariant::ObjectPath;
 
 use crate::{
     address::{self, Address},
     names::{InterfaceName, WellKnownName},
     raw::Socket,
-    Authenticated, Connection, Error, Guid, Interface, Result,
+    AuthMechanism, Authenticated, Connection, Error, Guid, Interface, Result,
 };
 
 const DEFAULT_MAX_QUEUED: usize = 64;
 
 #[derive(Debug)]
 enum Target {
+    #[cfg(unix)]
     UnixStream(UnixStream),
+    TcpStream(TcpStream),
     Address(Address),
     Socket(Box<dyn Socket>),
 }
@@ -40,6 +50,7 @@ pub struct ConnectionBuilder<'a> {
     #[derivative(Debug = "ignore")]
     interfaces: Interfaces<'a>,
     names: HashSet<WellKnownName<'a>>,
+    auth_mechanisms: Option<VecDeque<AuthMechanism>>,
 }
 
 assert_impl_all!(ConnectionBuilder<'_>: Send, Sync, Unpin);
@@ -69,15 +80,38 @@ impl<'a> ConnectionBuilder<'a> {
     }
 
     /// Create a builder for connection that will use the given unix stream.
+    ///
+    /// If the default `async-io` feature is disabled, this method will expect
+    /// [`tokio::net::UnixStream`](https://docs.rs/tokio/latest/tokio/net/struct.UnixStream.html)
+    /// argument.
+    #[cfg(unix)]
     #[must_use]
     pub fn unix_stream(stream: UnixStream) -> Self {
         Self::new(Target::UnixStream(stream))
+    }
+
+    /// Create a builder for connection that will use the given TCP stream.
+    ///
+    /// If the default `async-io` feature is disabled, this method will expect
+    /// [`tokio::net::TcpStream`](https://docs.rs/tokio/latest/tokio/net/struct.TcpStream.html)
+    /// argument.
+    #[must_use]
+    pub fn tcp_stream(stream: TcpStream) -> Self {
+        Self::new(Target::TcpStream(stream))
     }
 
     /// Create a builder for connection that will use the given socket.
     #[must_use]
     pub fn socket<S: Socket + 'static>(socket: S) -> Self {
         Self::new(Target::Socket(Box::new(socket)))
+    }
+
+    /// Specify the mechanisms to use during authentication.
+    #[must_use]
+    pub fn auth_mechanisms(mut self, auth_mechanisms: &[AuthMechanism]) -> Self {
+        self.auth_mechanisms = Some(VecDeque::from(auth_mechanisms.to_vec()));
+
+        self
     }
 
     /// The to-be-created connection will be a peer-to-peer connection.
@@ -186,48 +220,77 @@ impl<'a> ConnectionBuilder<'a> {
     /// result in [`Error::Unsupported`] error.
     pub async fn build(self) -> Result<Connection> {
         let stream = match self.target {
-            Target::UnixStream(stream) => Box::new(Async::new(stream)?),
+            #[cfg(all(unix, feature = "async-io"))]
+            Target::UnixStream(stream) => Box::new(Async::new(stream)?) as Box<dyn Socket>,
+            #[cfg(all(unix, not(feature = "async-io"), feature = "tokio"))]
+            Target::UnixStream(stream) => Box::new(stream) as Box<dyn Socket>,
+            #[cfg(feature = "async-io")]
+            Target::TcpStream(stream) => Box::new(Async::new(stream)?) as Box<dyn Socket>,
+            #[cfg(all(not(feature = "async-io"), feature = "tokio"))]
+            Target::TcpStream(stream) => Box::new(stream) as Box<dyn Socket>,
             Target::Address(address) => match address.connect().await? {
-                address::Stream::Unix(stream) => Box::new(Async::new(stream.into_inner()?)?),
+                #[cfg(unix)]
+                address::Stream::Unix(stream) => Box::new(stream) as Box<dyn Socket>,
+                address::Stream::Tcp(stream) => Box::new(stream) as Box<dyn Socket>,
             },
             Target::Socket(stream) => stream,
         };
         let auth = match self.guid {
             None => {
                 // SASL Handshake
-                Authenticated::client(stream).await?
+                Authenticated::client(stream, self.auth_mechanisms).await?
             }
             Some(guid) => {
                 if !self.p2p {
                     return Err(Error::Unsupported);
                 }
 
-                #[cfg(any(target_os = "android", target_os = "linux"))]
+                #[cfg(unix)]
                 let client_uid = {
-                    use nix::sys::socket::{getsockopt, sockopt::PeerCredentials};
+                    #[cfg(any(target_os = "android", target_os = "linux"))]
+                    {
+                        use nix::sys::socket::{getsockopt, sockopt::PeerCredentials};
 
-                    let creds = getsockopt(stream.as_raw_fd(), PeerCredentials).map_err(|e| {
-                        Error::Handshake(format!("Failed to get peer credentials: {}", e))
-                    })?;
+                        let creds =
+                            getsockopt(stream.as_raw_fd(), PeerCredentials).map_err(|e| {
+                                Error::Handshake(format!("Failed to get peer credentials: {}", e))
+                            })?;
 
-                    creds.uid()
+                        creds.uid()
+                    }
+
+                    #[cfg(any(
+                        target_os = "macos",
+                        target_os = "ios",
+                        target_os = "freebsd",
+                        target_os = "dragonfly",
+                        target_os = "openbsd",
+                        target_os = "netbsd"
+                    ))]
+                    {
+                        let uid = nix::unistd::getpeereid(stream.as_raw_fd())
+                            .map_err(|e| {
+                                Error::Handshake(format!("Failed to get peer credentials: {}", e))
+                            })?
+                            .0;
+
+                        uid.into()
+                    }
                 };
-                #[cfg(any(
-                    target_os = "macos",
-                    target_os = "ios",
-                    target_os = "freebsd",
-                    target_os = "dragonfly",
-                    target_os = "openbsd",
-                    target_os = "netbsd"
-                ))]
-                let client_uid = nix::unistd::getpeereid(stream.as_raw_fd())
-                    .map_err(|e| {
-                        Error::Handshake(format!("Failed to get peer credentials: {}", e))
-                    })?
-                    .0
-                    .into();
 
-                Authenticated::server(stream, guid.clone(), client_uid).await?
+                #[cfg(windows)]
+                let client_sid = stream.peer_sid();
+
+                Authenticated::server(
+                    stream,
+                    guid.clone(),
+                    #[cfg(unix)]
+                    client_uid,
+                    #[cfg(windows)]
+                    client_sid,
+                    self.auth_mechanisms,
+                )
+                .await?
             }
         };
 
@@ -266,6 +329,7 @@ impl<'a> ConnectionBuilder<'a> {
             internal_executor: true,
             interfaces: HashMap::new(),
             names: HashSet::new(),
+            auth_mechanisms: None,
         }
     }
 }

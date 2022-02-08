@@ -180,7 +180,7 @@ mod tests {
     #[test]
     #[ntest::timeout(15000)]
     fn builder() {
-        async_io::block_on(builder_async());
+        crate::utils::block_on(builder_async());
     }
 
     async fn builder_async() {

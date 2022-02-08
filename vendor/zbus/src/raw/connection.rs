@@ -6,10 +6,13 @@ use std::{
 
 use event_listener::{Event, EventListener};
 
+#[cfg(unix)]
+use crate::OwnedFd;
 use crate::{
     message_header::MIN_MESSAGE_SIZE, raw::Socket, utils::padding_for_8_bytes, Message,
-    MessagePrimaryHeader, OwnedFd,
+    MessagePrimaryHeader,
 };
+
 use futures_core::ready;
 
 /// A low-level representation of a D-Bus connection
@@ -27,6 +30,7 @@ pub struct Connection<S> {
     socket: S,
     event: Event,
     raw_in_buffer: Vec<u8>,
+    #[cfg(unix)]
     raw_in_fds: Vec<OwnedFd>,
     raw_in_pos: usize,
     raw_out_buffer: VecDeque<u8>,
@@ -40,6 +44,7 @@ impl<S: Socket> Connection<S> {
             socket,
             event: Event::new(),
             raw_in_buffer: vec![],
+            #[cfg(unix)]
             raw_in_fds: vec![],
             raw_in_pos: 0,
             raw_out_buffer: VecDeque::new(),
@@ -62,22 +67,38 @@ impl<S: Socket> Connection<S> {
             // VecDeque should never return an empty front buffer if the VecDeque
             // itself is not empty
             debug_assert!(!front.is_empty());
-            let written = ready!(self.socket.poll_sendmsg(cx, front, &[]))?;
+            let written = ready!(self.socket.poll_sendmsg(
+                cx,
+                front,
+                #[cfg(unix)]
+                &[]
+            ))?;
             self.raw_out_buffer.drain(..written);
         }
 
         // now, try to drain the msg_out_buffer
         while let Some(msg) = self.msg_out_buffer.front() {
             let mut data = msg.as_bytes();
+            #[cfg(unix)]
             let fds = msg.fds();
-            let written = ready!(self.socket.poll_sendmsg(cx, data, &fds))?;
+            let written = ready!(self.socket.poll_sendmsg(
+                cx,
+                data,
+                #[cfg(unix)]
+                &fds
+            ))?;
             // at least some part of the message has been sent, see if we can/need to send more
             // now the message must be removed from msg_out_buffer and any leftover bytes
             // must be stored into raw_out_buffer
             let msg = self.msg_out_buffer.pop_front().unwrap();
             data = &msg.as_bytes()[written..];
             while !data.is_empty() {
-                match self.socket.poll_sendmsg(cx, data, &[]) {
+                match self.socket.poll_sendmsg(
+                    cx,
+                    data,
+                    #[cfg(unix)]
+                    &[],
+                ) {
                     Poll::Ready(Ok(n)) => data = &data[n..],
                     e => {
                         // an error occurred, we cannot send more, store the remaining into
@@ -117,11 +138,22 @@ impl<S: Socket> Connection<S> {
             // Given that MIN_MESSAGE_SIZE is 16, this codepath is actually extremely unlikely
             // to be taken more than once
             while self.raw_in_pos < MIN_MESSAGE_SIZE {
-                let (len, fds) = ready!(self
+                let res = ready!(self
                     .socket
                     .poll_recvmsg(cx, &mut self.raw_in_buffer[self.raw_in_pos..]))?;
+                let len = {
+                    #[cfg(unix)]
+                    {
+                        let (len, fds) = res;
+                        self.raw_in_fds.extend(fds);
+                        len
+                    }
+                    #[cfg(not(unix))]
+                    {
+                        res
+                    }
+                };
                 self.raw_in_pos += len;
-                self.raw_in_fds.extend(fds);
                 if len == 0 {
                     return Poll::Ready(Err(crate::Error::Io(std::io::Error::new(
                         std::io::ErrorKind::UnexpectedEof,
@@ -142,20 +174,37 @@ impl<S: Socket> Connection<S> {
 
         // Now we have an incomplete message; read the rest
         while self.raw_in_buffer.len() > self.raw_in_pos {
-            let (read, fds) = ready!(self
+            let res = ready!(self
                 .socket
                 .poll_recvmsg(cx, &mut self.raw_in_buffer[self.raw_in_pos..]))?;
+            let read = {
+                #[cfg(unix)]
+                {
+                    let (read, fds) = res;
+                    self.raw_in_fds.extend(fds);
+                    read
+                }
+                #[cfg(not(unix))]
+                {
+                    res
+                }
+            };
             self.raw_in_pos += read;
-            self.raw_in_fds.extend(fds);
         }
 
         // If we reach here, the message is complete; return it
         self.raw_in_pos = 0;
         let bytes = std::mem::take(&mut self.raw_in_buffer);
+        #[cfg(unix)]
         let fds = std::mem::take(&mut self.raw_in_fds);
         let seq = self.prev_seq + 1;
         self.prev_seq = seq;
-        Poll::Ready(Message::from_raw_parts(bytes, fds, seq))
+        Poll::Ready(Message::from_raw_parts(
+            bytes,
+            #[cfg(unix)]
+            fds,
+            seq,
+        ))
     }
 
     /// Close the connection.
@@ -189,6 +238,7 @@ impl Connection<Box<dyn Socket>> {
     }
 }
 
+#[cfg(all(unix, feature = "async-io"))]
 #[cfg(test)]
 mod tests {
     use super::Connection;

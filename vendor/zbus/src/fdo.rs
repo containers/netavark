@@ -13,8 +13,7 @@ use zbus_names::{
     WellKnownName,
 };
 use zvariant::{
-    DeserializeDict, ObjectPath, Optional, OwnedObjectPath, OwnedValue, SerializeDict, Type,
-    TypeDict, Value,
+    DeserializeDict, ObjectPath, Optional, OwnedObjectPath, OwnedValue, SerializeDict, Type, Value,
 };
 
 use crate::{dbus_interface, dbus_proxy, DBusError, MessageHeader, ObjectServer, SignalContext};
@@ -469,7 +468,8 @@ assert_impl_all!(ReleaseNameReply: Send, Sync, Unpin);
 ///
 /// **Note**: unknown keys, in particular those with "." that are not from the specification, will
 /// be ignored. Use your own implementation or contribute your keys here, or in the specification.
-#[derive(Debug, DeserializeDict, PartialEq, SerializeDict, TypeDict)]
+#[derive(Debug, DeserializeDict, PartialEq, SerializeDict, Type)]
+#[zvariant(signature = "a{sv}")]
 pub struct ConnectionCredentials {
     /// The numeric Unix user ID, as defined by POSIX
     #[zvariant(rename = "UnixUserID")]
@@ -853,6 +853,7 @@ mod tests {
 
         // single-threaded scheduler.
         runtime::Builder::new_current_thread()
+            .enable_io()
             .build()
             .unwrap()
             .block_on(test_signal());

@@ -1,10 +1,18 @@
-use async_io::block_on;
 use static_assertions::assert_impl_all;
-use std::{convert::TryInto, os::unix::net::UnixStream};
+use std::convert::TryInto;
+#[cfg(feature = "async-io")]
+use std::net::TcpStream;
+#[cfg(all(unix, feature = "async-io"))]
+use std::os::unix::net::UnixStream;
+#[cfg(all(not(feature = "async-io"), feature = "tokio"))]
+use tokio::net::TcpStream;
+#[cfg(all(unix, not(feature = "async-io"), feature = "tokio"))]
+use tokio::net::UnixStream;
 use zvariant::ObjectPath;
 
 use crate::{
-    address::Address, blocking::Connection, names::WellKnownName, Error, Guid, Interface, Result,
+    address::Address, blocking::Connection, names::WellKnownName, utils::block_on, AuthMechanism,
+    Error, Guid, Interface, Result,
 };
 
 /// A builder for [`zbus::blocking::Connection`].
@@ -36,9 +44,30 @@ impl<'a> ConnectionBuilder<'a> {
     }
 
     /// Create a builder for connection that will use the given unix stream.
+    ///
+    /// If the default `async-io` feature is disabled, this method will expect
+    /// [`tokio::net::UnixStream`](https://docs.rs/tokio/latest/tokio/net/struct.UnixStream.html)
+    /// argument.
+    #[cfg(unix)]
     #[must_use]
     pub fn unix_stream(stream: UnixStream) -> Self {
         Self(crate::ConnectionBuilder::unix_stream(stream))
+    }
+
+    /// Create a builder for connection that will use the given TCP stream.
+    ///
+    /// If the default `async-io` feature is disabled, this method will expect
+    /// [`tokio::net::TcpStream`](https://docs.rs/tokio/latest/tokio/net/struct.TcpStream.html)
+    /// argument.
+    #[must_use]
+    pub fn tcp_stream(stream: TcpStream) -> Self {
+        Self(crate::ConnectionBuilder::tcp_stream(stream))
+    }
+
+    /// Specify the mechanisms to use during authentication.
+    #[must_use]
+    pub fn auth_mechanisms(self, auth_mechanisms: &[AuthMechanism]) -> Self {
+        Self(self.0.auth_mechanisms(auth_mechanisms))
     }
 
     /// The to-be-created connection will be a peer-to-peer connection.
