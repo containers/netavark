@@ -425,6 +425,15 @@ s! {
         pub maxerror: i32,
         pub esterror: i32,
     }
+
+    pub struct mmapobj_result_t {
+        pub mr_addr: ::caddr_t,
+        pub mr_msize: ::size_t,
+        pub mr_fize: ::size_t,
+        pub mr_offset: ::size_t,
+        pub mr_prot: ::c_uint,
+        pub mr_flags: ::c_uint,
+    }
 }
 
 s_no_extra_traits! {
@@ -1239,6 +1248,11 @@ pub const MCL_FUTURE: ::c_int = 0x0002;
 pub const MS_SYNC: ::c_int = 0x0004;
 pub const MS_ASYNC: ::c_int = 0x0001;
 pub const MS_INVALIDATE: ::c_int = 0x0002;
+
+pub const MMOBJ_PADDING: ::c_uint = 0x10000;
+pub const MMOBJ_INTERPRET: ::c_uint = 0x20000;
+pub const MR_PADDING: ::c_uint = 0x1;
+pub const MR_HDR_ELF: ::c_uint = 0x2;
 
 pub const EPERM: ::c_int = 1;
 pub const ENOENT: ::c_int = 2;
@@ -2219,6 +2233,14 @@ pub const __PROC_PROTECT: ::c_uint = 0x0008;
 pub const NET_MAC_AWARE: ::c_uint = 0x0010;
 pub const NET_MAC_AWARE_INHERIT: ::c_uint = 0x0020;
 pub const PRIV_AWARE_RESET: ::c_uint = 0x0040;
+pub const PRIV_XPOLICY: ::c_uint = 0x0080;
+pub const PRIV_PFEXEC: ::c_uint = 0x0100;
+pub const PRIV_USER: ::c_uint = PRIV_DEBUG
+    | NET_MAC_AWARE
+    | NET_MAC_AWARE_INHERIT
+    | PRIV_XPOLICY
+    | PRIV_AWARE_RESET
+    | PRIV_PFEXEC;
 
 // As per sys/socket.h, header alignment must be 8 bytes on SPARC
 // and 4 bytes everywhere else:
@@ -2337,6 +2359,10 @@ safe_f! {
 
     pub {const} fn WCOREDUMP(status: ::c_int) -> bool {
         (status & 0x80) != 0
+    }
+
+    pub {const} fn MR_GET_TYPE(flags: ::c_uint) -> ::c_uint {
+        flags & 0x0000ffff
     }
 }
 
@@ -2800,6 +2826,32 @@ extern "C" {
         sfvcnt: ::c_int,
         xferred: *mut ::size_t,
     ) -> ::ssize_t;
+    pub fn getpagesize() -> ::c_int;
+    pub fn getpagesizes(pagesize: *mut ::size_t, nelem: ::c_int) -> ::c_int;
+    pub fn mmapobj(
+        fd: ::c_int,
+        flags: ::c_uint,
+        storage: *mut mmapobj_result_t,
+        elements: *mut ::c_uint,
+        arg: *mut ::c_void,
+    ) -> ::c_int;
+    pub fn meminfo(
+        inaddr: *const u64,
+        addr_count: ::c_int,
+        info_req: *const ::c_uint,
+        info_count: ::c_int,
+        outdata: *mut u64,
+        validity: *mut ::c_uint,
+    ) -> ::c_int;
+
+    pub fn strcasecmp_l(s1: *const ::c_char, s2: *const ::c_char, loc: ::locale_t) -> ::c_int;
+    pub fn strncasecmp_l(
+        s1: *const ::c_char,
+        s2: *const ::c_char,
+        n: ::size_t,
+        loc: ::locale_t,
+    ) -> ::c_int;
+    pub fn strsep(string: *mut *mut ::c_char, delim: *const ::c_char) -> *mut ::c_char;
 }
 
 mod compat;
