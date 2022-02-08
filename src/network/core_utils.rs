@@ -2,7 +2,7 @@ use crate::network::constants;
 use futures::stream::TryStreamExt;
 use futures::StreamExt;
 use libc;
-use log::{debug, error};
+use log::debug;
 use nix::sched;
 use rand::Rng;
 use rtnetlink;
@@ -11,7 +11,6 @@ use rtnetlink::packet::rtnl::link::nlas::Nla;
 use rtnetlink::packet::NetlinkPayload;
 use rtnetlink::packet::RouteMessage;
 use sha2::{Digest, Sha512};
-use std::fmt::Write;
 use std::fs::File;
 use std::io::Error;
 use std::net::IpAddr;
@@ -28,53 +27,41 @@ pub struct CoreUtils {
 
 impl CoreUtils {
     fn encode_address_to_hex(bytes: &[u8]) -> String {
-        let mut final_slice = Vec::new();
-        for &b in bytes {
-            let mut a = String::with_capacity(bytes.len() * 2);
-            match write!(&mut a, "{:02x}", b) {
-                Ok(_) => {}
-                Err(err) => {
-                    error!("failed to encode address to hex: {}", err)
-                }
-            }
-            final_slice.push(a);
-        }
-        final_slice.join(":")
+        let address: String = bytes
+            .iter()
+            .map(|x| format!("{:02x}", x))
+            .collect::<Vec<String>>()
+            .join(":");
+
+        address
     }
 
     fn decode_address_from_hex(input: &str) -> Result<Vec<u8>, std::io::Error> {
-        let mut array = [0u8; 6];
+        let bytes: Result<Vec<u8>, _> = input
+            .split(|c| c == ':' || c == '-')
+            .into_iter()
+            .map(|b| u8::from_str_radix(b, 16))
+            .collect();
 
-        let mut nth = 0;
-        for byte in input.split(|c| c == ':' || c == '-') {
-            if nth == 6 {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("invalid mac length for address: {}", input),
-                ));
-            }
-
-            array[nth] = match u8::from_str_radix(byte, 16) {
-                Ok(value) => value,
-                Err(err) => {
+        let result = match bytes {
+            Ok(bytes) => {
+                if bytes.len() != 6 {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        format!("unable to parse mac address {}: {}", input, err),
+                        format!("invalid mac length for address: {}", input),
                     ));
                 }
-            };
+                bytes
+            }
+            Err(e) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("unable to parse mac address {}: {}", input, e),
+                ));
+            }
+        };
 
-            nth += 1;
-        }
-
-        if nth != 6 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("invalid mac length for address: {}", input),
-            ));
-        }
-
-        Ok(array.to_vec())
+        Ok(result)
     }
 
     pub fn get_macvlan_mode_from_string(mode: &str) -> Result<u32, std::io::Error> {
@@ -89,7 +76,7 @@ impl CoreUtils {
             // default to bridge
             _ => Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                "invalid macvlan mode".to_string(),
+                "invalid macvlan mode",
             )),
         }
     }
