@@ -760,6 +760,7 @@ pub const O_DIRECTORY: ::c_int = 0x08000000;
 pub const F_GETLK: ::c_int = 7;
 pub const F_SETLK: ::c_int = 8;
 pub const F_SETLKW: ::c_int = 9;
+pub const F_GETPATH: ::c_int = 19;
 pub const ENOMEDIUM: ::c_int = 93;
 pub const EASYNC: ::c_int = 99;
 pub const ELAST: ::c_int = 99;
@@ -964,6 +965,7 @@ pub const NOTE_CHILD: u32 = 0x00000004;
 
 pub const SO_SNDSPACE: ::c_int = 0x100a;
 pub const SO_CPUHINT: ::c_int = 0x1030;
+pub const SO_PASSCRED: ::c_int = 0x4000;
 
 pub const PT_FIRSTMACH: ::c_int = 32;
 
@@ -1285,11 +1287,11 @@ pub const LC_ALL_MASK: ::c_int = LC_COLLATE_MASK
     | LC_NUMERIC_MASK
     | LC_TIME_MASK;
 
-pub const TIOCSIG: ::c_uint = 0x2000745f;
+pub const TIOCSIG: ::c_ulong = 0x2000745f;
 pub const BTUARTDISC: ::c_int = 0x7;
-pub const TIOCDCDTIMESTAMP: ::c_uint = 0x40107458;
-pub const TIOCISPTMASTER: ::c_uint = 0x20007455;
-pub const TIOCMODG: ::c_uint = 0x40047403;
+pub const TIOCDCDTIMESTAMP: ::c_ulong = 0x40107458;
+pub const TIOCISPTMASTER: ::c_ulong = 0x20007455;
+pub const TIOCMODG: ::c_ulong = 0x40047403;
 pub const TIOCMODS: ::c_ulong = 0x80047404;
 pub const TIOCREMOTE: ::c_ulong = 0x80047469;
 
@@ -1346,7 +1348,7 @@ pub const MINCORE_SUPER: ::c_int = 0x20;
 
 const_fn! {
     {const} fn _CMSG_ALIGN(n: usize) -> usize {
-        (n + 3) & !3
+        (n + (::mem::size_of::<::c_long>() - 1)) & !(::mem::size_of::<::c_long>() - 1)
     }
 }
 

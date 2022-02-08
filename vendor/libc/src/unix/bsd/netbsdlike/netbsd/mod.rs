@@ -575,6 +575,16 @@ s! {
         pub descr_len: u32,
         pub descr_str: [::c_char; 1],
     }
+
+    pub struct ifreq {
+        pub _priv: [[::c_char; 6]; 24],
+    }
+
+    pub struct ifconf {
+        pub ifc_len: ::c_int,
+        #[cfg(libc_union)]
+        pub ifc_ifcu: __c_anonymous_ifc_ifcu,
+    }
 }
 
 s_no_extra_traits! {
@@ -692,6 +702,12 @@ s_no_extra_traits! {
     pub union __c_anonymous_posix_spawn_fae {
         pub open: __c_anonymous_posix_spawn_fae_open,
         pub dup2: __c_anonymous_posix_spawn_fae_dup2,
+    }
+
+    #[cfg(libc_union)]
+    pub union __c_anonymous_ifc_ifcu {
+        pub ifcu_buf: *mut ::c_void,
+        pub ifcu_req: *mut ifreq,
     }
 }
 
@@ -1155,6 +1171,41 @@ cfg_if! {
                 }
             }
         }
+
+        #[cfg(libc_union)]
+        impl Eq for __c_anonymous_ifc_ifcu {}
+
+        #[cfg(libc_union)]
+        impl PartialEq for __c_anonymous_ifc_ifcu {
+            fn eq(&self, other: &__c_anonymous_ifc_ifcu) -> bool {
+                unsafe {
+                    self.ifcu_buf == other.ifcu_buf
+                        || self.ifcu_req == other.ifcu_req
+                }
+            }
+        }
+
+        #[cfg(libc_union)]
+        impl ::fmt::Debug for __c_anonymous_ifc_ifcu {
+            fn fmt(&self, f: &mut ::fmt::Formatter) -> ::fmt::Result {
+                unsafe {
+                    f.debug_struct("__c_anonymous_ifc_ifcu")
+                        .field("ifcu_buf", &self.ifcu_buf)
+                        .field("ifcu_req", &self.ifcu_req)
+                        .finish()
+                }
+            }
+        }
+
+        #[cfg(libc_union)]
+        impl ::hash::Hash for __c_anonymous_ifc_ifcu {
+            fn hash<H: ::hash::Hasher>(&self, state: &mut H) {
+                unsafe {
+                    self.ifcu_buf.hash(state);
+                    self.ifcu_req.hash(state);
+                }
+            }
+        }
     }
 }
 
@@ -1253,6 +1304,7 @@ pub const F_CLOSEM: ::c_int = 10;
 pub const F_GETNOSIGPIPE: ::c_int = 13;
 pub const F_SETNOSIGPIPE: ::c_int = 14;
 pub const F_MAXFD: ::c_int = 11;
+pub const F_GETPATH: ::c_int = 15;
 
 pub const IP_RECVDSTADDR: ::c_int = 7;
 pub const IP_SENDSRCADDR: ::c_int = IP_RECVDSTADDR;
@@ -2104,6 +2156,14 @@ f! {
         };
         ::mem::size_of::<sockcred>() + ::mem::size_of::<::gid_t>() * ngrps
     }
+
+    pub fn PROT_MPROTECT(x: ::c_int) -> ::c_int {
+        x << 3
+    }
+
+    pub fn PROT_MPROTECT_EXTRACT(x: ::c_int) -> ::c_int {
+        (x >> 3) & 0x7
+    }
 }
 
 safe_f! {
@@ -2163,6 +2223,12 @@ extern "C" {
     pub fn chflags(path: *const ::c_char, flags: ::c_ulong) -> ::c_int;
     pub fn fchflags(fd: ::c_int, flags: ::c_ulong) -> ::c_int;
     pub fn lchflags(path: *const ::c_char, flags: ::c_ulong) -> ::c_int;
+
+    pub fn execvpe(
+        file: *const ::c_char,
+        argv: *const *const ::c_char,
+        envp: *const *const ::c_char,
+    ) -> ::c_int;
 
     pub fn extattr_delete_fd(
         fd: ::c_int,

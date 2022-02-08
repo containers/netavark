@@ -218,12 +218,6 @@ s! {
         pub rt_irtt: ::c_ushort,
     }
 
-    pub struct ip_mreqn {
-        pub imr_multiaddr: ::in_addr,
-        pub imr_address: ::in_addr,
-        pub imr_ifindex: ::c_int,
-    }
-
     pub struct __exit_status {
         pub e_termination: ::c_short,
         pub e_exit: ::c_short,
@@ -638,9 +632,6 @@ pub const RLIMIT_RTPRIO: ::c_int = 14;
 
 pub const REG_OK: ::c_int = 0;
 
-pub const TIOCSBRK: ::c_int = 0x5427;
-pub const TIOCCBRK: ::c_int = 0x5428;
-
 pub const PRIO_PROCESS: ::c_int = 0;
 pub const PRIO_PGRP: ::c_int = 1;
 pub const PRIO_USER: ::c_int = 2;
@@ -745,6 +736,7 @@ extern "C" {
         old_limit: *mut ::rlimit64,
     ) -> ::c_int;
 
+    pub fn ioctl(fd: ::c_int, request: ::c_int, ...) -> ::c_int;
     pub fn gettimeofday(tp: *mut ::timeval, tz: *mut ::c_void) -> ::c_int;
     pub fn ptrace(request: ::c_int, ...) -> ::c_long;
     pub fn getpriority(which: ::c_int, who: ::id_t) -> ::c_int;
@@ -772,6 +764,7 @@ extern "C" {
     pub fn ctermid(s: *mut ::c_char) -> *mut ::c_char;
 
     pub fn memfd_create(name: *const ::c_char, flags: ::c_uint) -> ::c_int;
+    pub fn mlock2(addr: *const ::c_void, len: ::size_t, flags: ::c_uint) -> ::c_int;
 }
 
 cfg_if! {

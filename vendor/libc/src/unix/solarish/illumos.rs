@@ -13,6 +13,12 @@ s! {
         pub shm_ctime: ::time_t,
         pub shm_pad4: [i64; 4],
     }
+
+    pub struct fil_info {
+        pub fi_flags: ::c_int,
+        pub fi_pos: ::c_int,
+        pub fi_name: [::c_char; ::FILNAME_MAX as usize],
+    }
 }
 
 pub const AF_LOCAL: ::c_int = 1; // AF_UNIX
@@ -33,6 +39,17 @@ pub const F_OFD_SETLKW: ::c_int = 52;
 pub const F_FLOCK: ::c_int = 55;
 pub const F_FLOCKW: ::c_int = 56;
 
+pub const FIL_ATTACH: ::c_int = 0x1;
+pub const FIL_DETACH: ::c_int = 0x2;
+pub const FIL_LIST: ::c_int = 0x3;
+pub const FILNAME_MAX: ::c_int = 32;
+pub const FILF_PROG: ::c_int = 0x1;
+pub const FILF_AUTO: ::c_int = 0x2;
+pub const FILF_BYPASS: ::c_int = 0x4;
+pub const SOL_FILTER: ::c_int = 0xfffc;
+
+pub const MR_HDR_AOUT: ::c_uint = 0x3;
+
 extern "C" {
     pub fn eventfd(init: ::c_uint, flags: ::c_int) -> ::c_int;
 
@@ -49,4 +66,5 @@ extern "C" {
     pub fn preadv(fd: ::c_int, iov: *const ::iovec, iovcnt: ::c_int, offset: ::off_t) -> ::ssize_t;
     pub fn pwritev(fd: ::c_int, iov: *const ::iovec, iovcnt: ::c_int, offset: ::off_t)
         -> ::ssize_t;
+    pub fn getpagesizes2(pagesize: *mut ::size_t, nelem: ::c_int) -> ::c_int;
 }

@@ -48,6 +48,12 @@ cfg_if! {
 }
 
 s! {
+    pub struct ip_mreqn {
+        pub imr_multiaddr: in_addr,
+        pub imr_address: in_addr,
+        pub imr_ifindex: ::c_int,
+    }
+
     pub struct glob_t {
         pub gl_pathc:   ::size_t,
         pub gl_matchc:  ::size_t,
@@ -207,6 +213,12 @@ s! {
         pub sin_port: ::in_port_t,
         pub sin_addr: ::in_addr,
         pub sin_zero: [i8; 8],
+    }
+
+    pub struct splice {
+        pub sp_fd: ::c_int,
+        pub sp_max: ::off_t,
+        pub sp_idle: ::timeval,
     }
 
     pub struct kevent {
@@ -1173,7 +1185,9 @@ pub const EV_DISPATCH: u16 = 0x80;
 pub const EV_FLAG1: u16 = 0x2000;
 pub const EV_ERROR: u16 = 0x4000;
 pub const EV_EOF: u16 = 0x8000;
-pub const EV_SYSFLAGS: u16 = 0xf000;
+
+#[deprecated(since = "0.2.113", note = "Not stable across OS versions")]
+pub const EV_SYSFLAGS: u16 = 0xf800;
 
 pub const NOTE_LOWAT: u32 = 0x00000001;
 pub const NOTE_EOF: u32 = 0x00000002;

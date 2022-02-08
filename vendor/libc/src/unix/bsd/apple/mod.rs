@@ -215,6 +215,12 @@ s! {
         pub imr_interface: in_addr,
     }
 
+    pub struct ip_mreqn {
+        pub imr_multiaddr: in_addr,
+        pub imr_address: in_addr,
+        pub imr_ifindex: ::c_int,
+    }
+
     pub struct aiocb {
         pub aio_fildes: ::c_int,
         pub aio_offset: ::off_t,
@@ -948,6 +954,11 @@ s! {
         pub ri_interval_max_phys_footprint: u64,
         pub ri_runnable_time: u64,
     }
+
+    pub struct image_offset {
+        pub uuid: ::uuid_t,
+        pub offset: u32,
+    }
 }
 
 s_no_extra_traits! {
@@ -1216,6 +1227,13 @@ s_no_extra_traits! {
         pub system_time: time_value_t,
         pub policy: ::policy_t,
         pub suspend_count: integer_t,
+    }
+
+    #[cfg_attr(libc_packedN, repr(packed(4)))]
+    pub struct log2phys {
+        pub l2p_flags: ::c_uint,
+        pub l2p_contigbytes: ::off_t,
+        pub l2p_devoffset: ::off_t,
     }
 }
 
@@ -2467,6 +2485,37 @@ cfg_if! {
                 suspend_count.hash(state);
             }
         }
+
+        impl PartialEq for log2phys {
+            fn eq(&self, other: &log2phys) -> bool {
+                self.l2p_flags == other.l2p_flags
+                    && self.l2p_contigbytes == other.l2p_contigbytes
+                    && self.l2p_devoffset == other.l2p_devoffset
+            }
+        }
+        impl Eq for log2phys {}
+        impl ::fmt::Debug for log2phys {
+            fn fmt(&self, f: &mut ::fmt::Formatter) -> ::fmt::Result {
+                let l2p_flags = self.l2p_flags;
+                let l2p_contigbytes = self.l2p_contigbytes;
+                let l2p_devoffset = self.l2p_devoffset;
+                f.debug_struct("log2phys")
+                    .field("l2p_flags", &l2p_flags)
+                    .field("l2p_contigbytes", &l2p_contigbytes)
+                    .field("l2p_devoffset", &l2p_devoffset)
+                    .finish()
+            }
+        }
+        impl ::hash::Hash for log2phys {
+            fn hash<H: ::hash::Hasher>(&self, state: &mut H) {
+                let l2p_flags = self.l2p_flags;
+                let l2p_contigbytes = self.l2p_contigbytes;
+                let l2p_devoffset = self.l2p_devoffset;
+                l2p_flags.hash(state);
+                l2p_contigbytes.hash(state);
+                l2p_devoffset.hash(state);
+            }
+        }
     }
 }
 
@@ -2943,12 +2992,16 @@ pub const F_PREALLOCATE: ::c_int = 42;
 pub const F_RDADVISE: ::c_int = 44;
 pub const F_RDAHEAD: ::c_int = 45;
 pub const F_NOCACHE: ::c_int = 48;
+pub const F_LOG2PHYS: ::c_int = 49;
 pub const F_GETPATH: ::c_int = 50;
 pub const F_FULLFSYNC: ::c_int = 51;
 pub const F_FREEZE_FS: ::c_int = 53;
 pub const F_THAW_FS: ::c_int = 54;
 pub const F_GLOBAL_NOCACHE: ::c_int = 55;
 pub const F_NODIRECT: ::c_int = 62;
+pub const F_LOG2PHYS_EXT: ::c_int = 65;
+pub const F_BARRIERFSYNC: ::c_int = 85;
+pub const F_GETPATH_NOFIRMLINK: ::c_int = 102;
 
 pub const F_ALLOCATECONTIG: ::c_uint = 0x02;
 pub const F_ALLOCATEALL: ::c_uint = 0x04;
@@ -3476,6 +3529,7 @@ pub const IP_RECVIF: ::c_int = 20;
 pub const IP_BOUND_IF: ::c_int = 25;
 pub const IP_PKTINFO: ::c_int = 26;
 pub const IP_RECVTOS: ::c_int = 27;
+pub const IP_DONTFRAG: ::c_int = 28;
 pub const IPV6_JOIN_GROUP: ::c_int = 12;
 pub const IPV6_LEAVE_GROUP: ::c_int = 13;
 pub const IPV6_CHECKSUM: ::c_int = 26;
@@ -3484,6 +3538,7 @@ pub const IPV6_TCLASS: ::c_int = 36;
 pub const IPV6_PKTINFO: ::c_int = 46;
 pub const IPV6_HOPLIMIT: ::c_int = 47;
 pub const IPV6_RECVPKTINFO: ::c_int = 61;
+pub const IPV6_DONTFRAG: ::c_int = 62;
 
 pub const TCP_NOPUSH: ::c_int = 4;
 pub const TCP_NOOPT: ::c_int = 8;
@@ -4901,6 +4956,23 @@ extern "C" {
     ) -> kern_return_t;
     pub fn __error() -> *mut ::c_int;
     pub fn backtrace(buf: *mut *mut ::c_void, sz: ::c_int) -> ::c_int;
+    pub fn backtrace_symbols(addrs: *const *mut ::c_void, sz: ::c_int) -> *mut *mut ::c_char;
+    pub fn backtrace_symbols_fd(addrs: *const *mut ::c_void, sz: ::c_int, fd: ::c_int);
+    pub fn backtrace_from_fp(
+        startfp: *mut ::c_void,
+        array: *mut *mut ::c_void,
+        size: ::c_int,
+    ) -> ::c_int;
+    pub fn backtrace_image_offsets(
+        array: *const *mut ::c_void,
+        image_offsets: *mut image_offset,
+        size: ::c_int,
+    );
+    pub fn backtrace_async(
+        array: *mut *mut ::c_void,
+        length: ::size_t,
+        task_id: *mut u32,
+    ) -> ::size_t;
     #[cfg_attr(
         all(target_os = "macos", not(target_arch = "aarch64")),
         link_name = "statfs$INODE64"
