@@ -104,6 +104,8 @@ impl Aardvark {
             .args(&aardvark_args[1..])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
+            // set RUST_LOG for aardvark
+            .env("RUST_LOG", log::max_level().as_str())
             .spawn()?;
 
         Ok(())
