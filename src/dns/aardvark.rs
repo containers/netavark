@@ -1,4 +1,5 @@
 use crate::network::types;
+use log::log_enabled;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::collections::HashMap;
@@ -9,6 +10,7 @@ use std::io::prelude::*;
 use std::io::Result;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
+use std::os::unix::prelude::FromRawFd;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -100,10 +102,17 @@ impl Aardvark {
 
         log::debug!("start aardvark-dns: {:?}", aardvark_args);
 
+        let output = match log_enabled!(log::Level::Debug) {
+            true => Stdio::null(),
+            false => unsafe { Stdio::from_raw_fd(2) },
+        };
+
         Command::new(&aardvark_args[0])
             .args(&aardvark_args[1..])
             .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stderr(output)
+            // set RUST_LOG for aardvark
+            .env("RUST_LOG", log::max_level().as_str())
             .spawn()?;
 
         Ok(())
