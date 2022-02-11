@@ -10,7 +10,6 @@ use std::io::prelude::*;
 use std::io::Result;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
-use std::os::unix::prelude::FromRawFd;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -103,12 +102,13 @@ impl Aardvark {
         log::debug!("start aardvark-dns: {:?}", aardvark_args);
 
         let output = match log_enabled!(log::Level::Debug) {
-            true => Stdio::null(),
-            false => unsafe { Stdio::from_raw_fd(2) },
+            true => Stdio::inherit(),
+            false => Stdio::null(),
         };
 
         Command::new(&aardvark_args[0])
             .args(&aardvark_args[1..])
+            .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(output)
             // set RUST_LOG for aardvark
