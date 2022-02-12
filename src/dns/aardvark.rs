@@ -211,8 +211,10 @@ impl Aardvark {
             per_network_opts,
             netavark_res,
         );
-        self.commit_entries(entries)?;
-        self.notify(true)?;
+        if !entries.is_empty() {
+            self.commit_entries(entries)?;
+            self.notify(true)?;
+        }
         Ok(())
     }
 
