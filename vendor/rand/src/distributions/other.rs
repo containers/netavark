@@ -21,7 +21,7 @@ use crate::Rng;
 #[cfg(feature = "serde1")]
 use serde::{Serialize, Deserialize};
 #[cfg(feature = "min_const_gen")]
-use std::mem::{self, MaybeUninit};
+use core::mem::{self, MaybeUninit};
 
 
 // ----- Sampling distributions -----
@@ -32,17 +32,20 @@ use std::mem::{self, MaybeUninit};
 /// # Example
 ///
 /// ```
-/// use std::iter;
 /// use rand::{Rng, thread_rng};
 /// use rand::distributions::Alphanumeric;
 ///
 /// let mut rng = thread_rng();
-/// let chars: String = iter::repeat(())
-///         .map(|()| rng.sample(Alphanumeric))
-///         .map(char::from)
-///         .take(7)
-///         .collect();
+/// let chars: String = (0..7).map(|_| rng.sample(Alphanumeric) as char).collect();
 /// println!("Random chars: {}", chars);
+/// ```
+///
+/// The [`DistString`] trait provides an easier method of generating
+/// a random `String`, and offers more efficient allocation:
+/// ```
+/// use rand::distributions::{Alphanumeric, DistString};
+/// let string = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
+/// println!("Random string: {}", string);
 /// ```
 ///
 /// # Passwords
@@ -187,6 +190,7 @@ tuple_impl! {A, B, C, D, E, F, G, H, I, J, K}
 tuple_impl! {A, B, C, D, E, F, G, H, I, J, K, L}
 
 #[cfg(feature = "min_const_gen")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "min_const_gen")))]
 impl<T, const N: usize> Distribution<[T; N]> for Standard
 where Standard: Distribution<T>
 {

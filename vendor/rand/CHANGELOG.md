@@ -8,6 +8,24 @@ A [separate changelog is kept for rand_core](rand_core/CHANGELOG.md).
 
 You may also find the [Upgrade Guide](https://rust-random.github.io/book/update.html) useful.
 
+## [0.8.5] - 2021-08-20
+### Fixes
+- Fix build on non-32/64-bit architectures (#1144)
+- Fix "min_const_gen" feature for `no_std` (#1173)
+- Check `libc::pthread_atfork` return value with panic on error (#1178)
+- More robust reseeding in case `ReseedingRng` is used from a fork handler (#1178)
+- Fix nightly: remove unused `slice_partition_at_index` feature (#1215)
+- Fix nightly + `simd_support`: update `packed_simd` (#1216)
+
+### Rngs
+- `StdRng`: Switch from HC128 to ChaCha12 on emscripten (#1142).
+  We now use ChaCha12 on all platforms.
+
+### Documentation
+- Added docs about rand's use of const generics (#1150)
+- Better random chars example (#1157)
+
+
 ## [0.8.4] - 2021-06-15
 ### Additions
 - Use const-generics to support arrays of all sizes (#1104)
@@ -678,4 +696,4 @@ when updating from `rand 0.7.0` without also updating `rand_core`.
 
 ## [0.10-pre] - 2014-03-02
 ### Added
-- Seperate `rand` out of the standard library
+- Separate `rand` out of the standard library
