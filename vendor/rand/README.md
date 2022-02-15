@@ -51,7 +51,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rand = "0.8.0"
+rand = "0.8.4"
 ```
 
 To get started using Rand, see [The Book](https://rust-random.github.io/book).
@@ -120,7 +120,7 @@ Rand is built with these features enabled by default:
 
 Optionally, the following dependencies can be enabled:
 
--   `log` enables logging via the `log` crate` crate
+-   `log` enables logging via the `log` crate
 
 Additionally, these features configure Rand:
 
@@ -128,6 +128,8 @@ Additionally, these features configure Rand:
 -   `nightly` enables some optimizations requiring nightly Rust
 -   `simd_support` (experimental) enables sampling of SIMD values
     (uniformly random SIMD integers and floats), requiring nightly Rust
+-   `min_const_gen` enables generating random arrays of 
+    any size using min-const-generics, requiring Rust ≥ 1.51.
 
 Note that nightly features are not stable and therefore not all library and
 compiler versions will be compatible. This is especially true of Rand's
@@ -143,7 +145,7 @@ unavailable.
 
 The WASM target `wasm32-unknown-unknown` is not *automatically* supported by
 `rand` or `getrandom`. To solve this, either use a different target such as
-`wasm32-wasi` or add a direct dependancy on `getrandom` with the `js` feature
+`wasm32-wasi` or add a direct dependency on `getrandom` with the `js` feature
 (if the target supports JavaScript). See
 [getrandom#WebAssembly support](https://docs.rs/getrandom/latest/getrandom/#webassembly-support).
 

@@ -13,22 +13,37 @@
 edition = "2018"
 rust-version = "1.36"
 name = "serde_json"
-version = "1.0.78"
-authors = ["Erick Tryzelaar <erick.tryzelaar@gmail.com>", "David Tolnay <dtolnay@gmail.com>"]
+version = "1.0.79"
+authors = [
+    "Erick Tryzelaar <erick.tryzelaar@gmail.com>",
+    "David Tolnay <dtolnay@gmail.com>",
+]
 description = "A JSON serialization file format"
 documentation = "https://docs.serde.rs/serde_json/"
 readme = "README.md"
-keywords = ["json", "serde", "serialization"]
+keywords = [
+    "json",
+    "serde",
+    "serialization",
+]
 categories = ["encoding"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/serde-rs/json"
+
 [package.metadata.docs.rs]
-features = ["raw_value", "unbounded_depth"]
-rustdoc-args = ["--cfg", "docsrs"]
+features = [
+    "raw_value",
+    "unbounded_depth",
+]
 targets = ["x86_64-unknown-linux-gnu"]
+rustdoc-args = [
+    "--cfg",
+    "docsrs",
+]
 
 [package.metadata.playground]
 features = ["raw_value"]
+
 [dependencies.indexmap]
 version = "1.5"
 optional = true
@@ -42,6 +57,7 @@ version = "1.0"
 [dependencies.serde]
 version = "1.0.100"
 default-features = false
+
 [dev-dependencies.automod]
 version = "1.0"
 
