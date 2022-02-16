@@ -1,5 +1,8 @@
 # Release Notes
 
+## v1.0.0
+* First official release of netavark
+
 ## v1.0.0-RC2
 * RC2 containers several bug fixes and code cleanup
 
