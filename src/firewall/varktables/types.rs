@@ -232,7 +232,7 @@ pub fn get_network_chains(
                 NETAVARK_FORWARD
             ),
             position: Some(1),
-            td_policy: Some(TeardownPolicy::OnComplete),
+            td_policy: Some(TeardownPolicy::Never),
         });
         chains.push(forward_chain);
     }
