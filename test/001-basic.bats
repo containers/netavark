@@ -7,11 +7,11 @@ load helpers
 
 @test "netavark version" {
     run_netavark --version
-    assert "netavark 1.0.0-dev" "expected version"
+    assert "netavark 1.0.1-dev" "expected version"
 
     run_netavark version
     json="$output"
-    assert_json "$json" ".version" == "1.0.0-dev" "correct version"
+    assert_json "$json" ".version" == "1.0.1-dev" "correct version"
     assert_json "$json" ".commit" =~ "[0-9a-f]{40}" "shows commit sha"
     assert_json "$json" ".build_time" =~ "20.*" "show build date"
     assert_json "$json" ".target" =~ ".*" "contains target string"

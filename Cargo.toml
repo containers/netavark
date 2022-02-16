@@ -1,6 +1,6 @@
 [package]
 name = "netavark"
-version = "1.0.0"
+version = "1.0.1-dev"
 edition = "2018"
 authors = ["github.com/containers"]
 description = "A container network stack"
