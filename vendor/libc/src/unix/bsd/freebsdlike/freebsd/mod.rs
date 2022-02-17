@@ -978,6 +978,16 @@ s! {
         pub ai_termid: au_tid_t,
         pub ai_asid: ::au_asid_t,
     }
+
+    pub struct tcp_fastopen {
+        pub enable: ::c_int,
+        pub psk: [u8; ::TCP_FASTOPEN_PSK_LEN as usize],
+    }
+
+    pub struct tcp_function_set {
+        pub function_set_name: [::c_char; ::TCP_FUNCTION_NAME_LEN_MAX as usize],
+        pub pcbcnt: u32,
+    }
 }
 
 s_no_extra_traits! {
@@ -2317,6 +2327,8 @@ pub const PT_GETDBREGS: ::c_int = 37;
 pub const PT_SETDBREGS: ::c_int = 38;
 pub const PT_VM_TIMESTAMP: ::c_int = 40;
 pub const PT_VM_ENTRY: ::c_int = 41;
+pub const PT_GETREGSET: ::c_int = 42;
+pub const PT_SETREGSET: ::c_int = 43;
 pub const PT_FIRSTMACH: ::c_int = 64;
 
 pub const PTRACE_EXEC: ::c_int = 0x0001;
@@ -2849,10 +2861,24 @@ pub const TCP_MD5SIG: ::c_int = 16;
 pub const TCP_INFO: ::c_int = 32;
 pub const TCP_CONGESTION: ::c_int = 64;
 pub const TCP_CCALGOOPT: ::c_int = 65;
+pub const TCP_MAXUNACKTIME: ::c_int = 68;
+pub const TCP_MAXPEAKRATE: ::c_int = 69;
+pub const TCP_IDLE_REDUCE: ::c_int = 70;
+pub const TCP_REMOTE_UDP_ENCAPS_PORT: ::c_int = 71;
+pub const TCP_DELACK: ::c_int = 72;
+pub const TCP_FIN_IS_RST: ::c_int = 73;
+pub const TCP_LOG_LIMIT: ::c_int = 74;
+pub const TCP_SHARED_CWND_ALLOWED: ::c_int = 75;
+pub const TCP_PROC_ACCOUNTING: ::c_int = 76;
+pub const TCP_USE_CMP_ACKS: ::c_int = 77;
+pub const TCP_PERF_INFO: ::c_int = 78;
+pub const TCP_LRD: ::c_int = 79;
 pub const TCP_KEEPINIT: ::c_int = 128;
 pub const TCP_FASTOPEN: ::c_int = 1025;
 pub const TCP_PCAP_OUT: ::c_int = 2048;
 pub const TCP_PCAP_IN: ::c_int = 4096;
+pub const TCP_FASTOPEN_PSK_LEN: ::c_int = 16;
+pub const TCP_FUNCTION_NAME_LEN_MAX: ::c_int = 32;
 
 pub const IP_BINDANY: ::c_int = 24;
 pub const IP_BINDMULTI: ::c_int = 25;
@@ -4297,6 +4323,9 @@ extern "C" {
         scale: ::c_int,
         flags: ::c_int,
     ) -> ::c_int;
+
+    pub fn flopen(path: *const ::c_char, flags: ::c_int, ...) -> ::c_int;
+    pub fn flopenat(fd: ::c_int, path: *const ::c_char, flags: ::c_int, ...) -> ::c_int;
 }
 
 #[link(name = "procstat")]

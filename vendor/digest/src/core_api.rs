@@ -4,12 +4,14 @@
 //! core algorithm wrapped by the wrapper types, which implement the
 //! higher-level traits.
 use crate::InvalidOutputSize;
-use generic_array::typenum::{IsLess, Le, NonZero, U256};
 
 pub use crypto_common::{AlgorithmName, Block, BlockSizeUser, OutputSizeUser, Reset};
 
 use block_buffer::{BlockBuffer, BufferKind};
-use crypto_common::Output;
+use crypto_common::{
+    typenum::{IsLess, Le, NonZero, U256},
+    Output,
+};
 
 mod ct_variable;
 mod rt_variable;

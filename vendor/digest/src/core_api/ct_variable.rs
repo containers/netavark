@@ -6,10 +6,10 @@ use crate::HashMarker;
 #[cfg(feature = "mac")]
 use crate::MacMarker;
 use core::{fmt, marker::PhantomData};
-use crypto_common::{Block, BlockSizeUser, OutputSizeUser};
-use generic_array::{
+use crypto_common::{
+    generic_array::{ArrayLength, GenericArray},
     typenum::{IsLess, IsLessOrEqual, Le, LeEq, NonZero, U256},
-    ArrayLength, GenericArray,
+    Block, BlockSizeUser, OutputSizeUser,
 };
 
 /// Wrapper around [`VariableOutputCore`] which selects output size

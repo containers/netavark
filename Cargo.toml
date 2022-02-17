@@ -19,7 +19,7 @@ clap = { version = "3.0.12", features = ["derive"] }
 env_logger = "0.9.0"
 ipnet = { version = "2", features = ["serde"] }
 iptables = "0.5"
-libc = "0.2"
+libc = "0.2.118"
 log = "0.4.14"
 serde = { version = "1.0.136", features = ["derive"], optional = true }
 serde-value = "0.7.0"
@@ -34,7 +34,7 @@ nix = "0.23.1"
 rand = "0.8.5"
 tokio = { version = "1.16.1", features = ["full"] }
 zvariant = "3.1.2"
-sha2 = "0.10.1"
+sha2 = "0.10.2"
 netlink-packet-route = "0.10.0"
 
 [build-dependencies]

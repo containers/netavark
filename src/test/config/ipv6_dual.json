@@ -1,0 +1,47 @@
+{
+  "container_id": "6272391482bf5ad315e4546b215e16247f89f47b4657911b0c65e747bf1810d4",
+  "container_name": "",
+  "port_mappings": [
+    {
+      "host_ip": "",
+      "container_port": 80,
+      "host_port": 8080,
+      "range": 1,
+      "protocol": "tcp"
+    }
+  ],
+  "networks": {
+    "podman1": {
+      "static_ips": [
+        "10.10.10.2",
+        "fd10:88:a::2"
+      ],
+      "interface_name": "eth0"
+    }
+  },
+  "network_info": {
+    "podman1": {
+      "name": "podman1",
+      "id": "2a475f27a41a79c9a223a3a7d915094668a2a7b46090caacc95bed5613e8061d",
+      "driver": "bridge",
+      "network_interface": "podman1",
+      "created": "2021-11-22T20:00:15.343475606+01:00",
+      "subnets": [
+        {
+          "subnet": "10.10.10.0/24",
+          "gateway": "10.10.10.1"
+        },
+        {
+          "subnet": "fd10:88:a::/64",
+          "gateway": "fd10:88:a::1"
+        }
+      ],
+      "ipv6_enabled": true,
+      "internal": false,
+      "dns_enabled": false,
+      "ipam_options": {
+        "driver": "host-local"
+      }
+    }
+  }
+}

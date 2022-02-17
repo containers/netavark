@@ -393,6 +393,12 @@ pub const ENOTNAM: ::c_int = 118;
 pub const ENAVAIL: ::c_int = 119;
 pub const EISNAM: ::c_int = 120;
 pub const EREMOTEIO: ::c_int = 121;
+pub const PTRACE_GETFPREGS: ::c_uint = 14;
+pub const PTRACE_SETFPREGS: ::c_uint = 15;
+pub const PTRACE_GETFPXREGS: ::c_uint = 18;
+pub const PTRACE_SETFPXREGS: ::c_uint = 19;
+pub const PTRACE_GETREGS: ::c_uint = 12;
+pub const PTRACE_SETREGS: ::c_uint = 13;
 pub const MCL_CURRENT: ::c_int = 1;
 pub const MCL_FUTURE: ::c_int = 2;
 pub const SIGSTKSZ: ::size_t = 8192;
@@ -490,6 +496,17 @@ pub const FLUSHO: ::tcflag_t = 4096;
 pub const EXTPROC: ::tcflag_t = 65536;
 pub const __SIZEOF_PTHREAD_MUTEX_T: usize = 40;
 pub const __SIZEOF_PTHREAD_RWLOCK_T: usize = 56;
+pub const NGREG: usize = 32;
+pub const REG_PC: usize = 0;
+pub const REG_RA: usize = 1;
+pub const REG_SP: usize = 2;
+pub const REG_TP: usize = 4;
+pub const REG_S0: usize = 8;
+pub const REG_S1: usize = 9;
+pub const REG_A0: usize = 10;
+pub const REG_S2: usize = 18;
+pub const REG_NARGS: usize = 8;
+
 pub const SYS_read: ::c_long = 63;
 pub const SYS_write: ::c_long = 64;
 pub const SYS_close: ::c_long = 57;
@@ -784,3 +801,10 @@ pub const SYS_faccessat2: ::c_long = 439;
 pub const SYS_process_madvise: ::c_long = 440;
 pub const SYS_epoll_pwait2: ::c_long = 441;
 pub const SYS_mount_setattr: ::c_long = 442;
+
+cfg_if! {
+    if #[cfg(libc_align)] {
+        mod align;
+        pub use self::align::*;
+    }
+}

@@ -27,6 +27,7 @@ pub type projid_t = ::c_int;
 pub type zoneid_t = ::c_int;
 pub type psetid_t = ::c_int;
 pub type processorid_t = ::c_int;
+pub type chipid_t = ::c_int;
 
 pub type suseconds_t = ::c_long;
 pub type off_t = ::c_long;
@@ -42,6 +43,16 @@ pub type mqd_t = *mut ::c_void;
 pub type id_t = ::c_int;
 pub type idtype_t = ::c_uint;
 pub type shmatt_t = ::c_ulong;
+
+pub type lgrp_rsrc_t = ::c_int;
+pub type lgrp_affinity_t = ::c_int;
+pub type lgrp_id_t = ::id_t;
+pub type lgrp_mem_size_t = ::c_longlong;
+pub type lgrp_cookie_t = ::uintptr_t;
+pub type lgrp_content_t = ::c_uint;
+pub type lgrp_lat_between_t = ::c_uint;
+pub type lgrp_mem_size_flag_t = ::c_uint;
+pub type lgrp_view_t = ::c_uint;
 
 #[cfg_attr(feature = "extra_traits", derive(Debug))]
 pub enum timezone {}
@@ -429,10 +440,24 @@ s! {
     pub struct mmapobj_result_t {
         pub mr_addr: ::caddr_t,
         pub mr_msize: ::size_t,
-        pub mr_fize: ::size_t,
+        pub mr_fsize: ::size_t,
         pub mr_offset: ::size_t,
         pub mr_prot: ::c_uint,
         pub mr_flags: ::c_uint,
+    }
+
+    pub struct lgrp_affinity_args {
+        pub idtype: ::idtype_t,
+        pub id: ::id_t,
+        pub lgrp: ::lgrp_id_t,
+        pub aff: ::lgrp_affinity_t,
+    }
+
+    pub struct processor_info_t {
+        pub pi_state: ::c_int,
+        pub pi_processor_type: [::c_char; PI_TYPELEN as usize],
+        pub pi_fputypes: [::c_char; PI_FPUTYPE as usize],
+        pub pi_clock: ::c_int,
     }
 }
 
@@ -520,14 +545,16 @@ s_no_extra_traits! {
     }
 
     #[cfg(libc_union)]
+    #[cfg_attr(libc_align, repr(align(16)))]
     pub union pad128_t {
-        pub _q: ::c_double,
+        // pub _q in this structure would be a "long double", of 16 bytes
         pub _l: [i32; 4],
     }
 
     #[cfg(libc_union)]
+    #[cfg_attr(libc_align, repr(align(16)))]
     pub union upad128_t {
-        pub _q: ::c_double,
+        // pub _q in this structure would be a "long double", of 16 bytes
         pub _l: [u32; 4],
     }
 }
@@ -859,7 +886,7 @@ cfg_if! {
         impl PartialEq for pad128_t {
             fn eq(&self, other: &pad128_t) -> bool {
                 unsafe {
-                self._q == other._q ||
+                // FIXME: self._q == other._q ||
                     self._l == other._l
                 }
             }
@@ -871,7 +898,7 @@ cfg_if! {
             fn fmt(&self, f: &mut ::fmt::Formatter) -> ::fmt::Result {
                 unsafe {
                 f.debug_struct("pad128_t")
-                    .field("_q", &{self._q})
+                    // FIXME: .field("_q", &{self._q})
                     .field("_l", &{self._l})
                     .finish()
                 }
@@ -881,7 +908,7 @@ cfg_if! {
         impl ::hash::Hash for pad128_t {
             fn hash<H: ::hash::Hasher>(&self, state: &mut H) {
                 unsafe {
-                state.write_i64(self._q as i64);
+                // FIXME: state.write_i64(self._q as i64);
                 self._l.hash(state);
                 }
             }
@@ -890,7 +917,7 @@ cfg_if! {
         impl PartialEq for upad128_t {
             fn eq(&self, other: &upad128_t) -> bool {
                 unsafe {
-                self._q == other._q ||
+                // FIXME: self._q == other._q ||
                     self._l == other._l
                 }
             }
@@ -902,7 +929,7 @@ cfg_if! {
             fn fmt(&self, f: &mut ::fmt::Formatter) -> ::fmt::Result {
                 unsafe {
                 f.debug_struct("upad128_t")
-                    .field("_q", &{self._q})
+                    // FIXME: .field("_q", &{self._q})
                     .field("_l", &{self._l})
                     .finish()
                 }
@@ -912,7 +939,7 @@ cfg_if! {
         impl ::hash::Hash for upad128_t {
             fn hash<H: ::hash::Hasher>(&self, state: &mut H) {
                 unsafe {
-                state.write_i64(self._q as i64);
+                // FIXME: state.write_i64(self._q as i64);
                 self._l.hash(state);
                 }
             }
@@ -1217,7 +1244,7 @@ pub const PS_QUERY: ::c_int = -2;
 pub const PS_MYID: ::c_int = -3;
 pub const PS_SOFT: ::c_int = -4;
 pub const PS_HARD: ::c_int = -5;
-pub const PS_QUERY_TIME: ::c_int = -6;
+pub const PS_QUERY_TYPE: ::c_int = -6;
 pub const PS_SYSTEM: ::c_int = 1;
 pub const PS_PRIVATE: ::c_int = 2;
 
@@ -1510,6 +1537,42 @@ pub const AF_POLICY: ::c_int = 29;
 pub const AF_INET_OFFLOAD: ::c_int = 30;
 pub const AF_TRILL: ::c_int = 31;
 pub const AF_PACKET: ::c_int = 32;
+
+pub const PF_UNSPEC: ::c_int = AF_UNSPEC;
+pub const PF_UNIX: ::c_int = AF_UNIX;
+pub const PF_LOCAL: ::c_int = PF_UNIX;
+pub const PF_FILE: ::c_int = PF_UNIX;
+pub const PF_INET: ::c_int = AF_INET;
+pub const PF_IMPLINK: ::c_int = AF_IMPLINK;
+pub const PF_PUP: ::c_int = AF_PUP;
+pub const PF_CHAOS: ::c_int = AF_CHAOS;
+pub const PF_NS: ::c_int = AF_NS;
+pub const PF_NBS: ::c_int = AF_NBS;
+pub const PF_ECMA: ::c_int = AF_ECMA;
+pub const PF_DATAKIT: ::c_int = AF_DATAKIT;
+pub const PF_CCITT: ::c_int = AF_CCITT;
+pub const PF_SNA: ::c_int = AF_SNA;
+pub const PF_DECnet: ::c_int = AF_DECnet;
+pub const PF_DLI: ::c_int = AF_DLI;
+pub const PF_LAT: ::c_int = AF_LAT;
+pub const PF_HYLINK: ::c_int = AF_HYLINK;
+pub const PF_APPLETALK: ::c_int = AF_APPLETALK;
+pub const PF_NIT: ::c_int = AF_NIT;
+pub const PF_802: ::c_int = AF_802;
+pub const PF_OSI: ::c_int = AF_OSI;
+pub const PF_X25: ::c_int = AF_X25;
+pub const PF_OSINET: ::c_int = AF_OSINET;
+pub const PF_GOSIP: ::c_int = AF_GOSIP;
+pub const PF_IPX: ::c_int = AF_IPX;
+pub const PF_ROUTE: ::c_int = AF_ROUTE;
+pub const PF_LINK: ::c_int = AF_LINK;
+pub const PF_INET6: ::c_int = AF_INET6;
+pub const PF_KEY: ::c_int = AF_KEY;
+pub const PF_NCA: ::c_int = AF_NCA;
+pub const PF_POLICY: ::c_int = AF_POLICY;
+pub const PF_INET_OFFLOAD: ::c_int = AF_INET_OFFLOAD;
+pub const PF_TRILL: ::c_int = AF_TRILL;
+pub const PF_PACKET: ::c_int = AF_PACKET;
 
 pub const SOCK_DGRAM: ::c_int = 1;
 pub const SOCK_STREAM: ::c_int = 2;
@@ -2055,6 +2118,10 @@ pub const B921600: speed_t = 23;
 pub const CSTART: ::tcflag_t = 0o21;
 pub const CSTOP: ::tcflag_t = 0o23;
 pub const CSWTCH: ::tcflag_t = 0o32;
+pub const CBAUD: ::tcflag_t = 0o17;
+pub const CIBAUD: ::tcflag_t = 0o3600000;
+pub const CBAUDEXT: ::tcflag_t = 0o10000000;
+pub const CIBAUDEXT: ::tcflag_t = 0o20000000;
 pub const CSIZE: ::tcflag_t = 0o000060;
 pub const CS5: ::tcflag_t = 0;
 pub const CS6: ::tcflag_t = 0o000020;
@@ -2078,20 +2145,26 @@ pub const ISTRIP: ::tcflag_t = 0o000040;
 pub const INLCR: ::tcflag_t = 0o000100;
 pub const IGNCR: ::tcflag_t = 0o000200;
 pub const ICRNL: ::tcflag_t = 0o000400;
+pub const IUCLC: ::tcflag_t = 0o001000;
 pub const IXON: ::tcflag_t = 0o002000;
 pub const IXOFF: ::tcflag_t = 0o010000;
 pub const IXANY: ::tcflag_t = 0o004000;
 pub const IMAXBEL: ::tcflag_t = 0o020000;
+pub const DOSMODE: ::tcflag_t = 0o100000;
 pub const OPOST: ::tcflag_t = 0o000001;
+pub const OLCUC: ::tcflag_t = 0o000002;
 pub const ONLCR: ::tcflag_t = 0o000004;
 pub const OCRNL: ::tcflag_t = 0o000010;
 pub const ONOCR: ::tcflag_t = 0o000020;
 pub const ONLRET: ::tcflag_t = 0o000040;
+pub const OFILL: ::tcflag_t = 0o0000100;
+pub const OFDEL: ::tcflag_t = 0o0000200;
 pub const CREAD: ::tcflag_t = 0o000200;
 pub const PARENB: ::tcflag_t = 0o000400;
 pub const PARODD: ::tcflag_t = 0o001000;
 pub const HUPCL: ::tcflag_t = 0o002000;
 pub const CLOCAL: ::tcflag_t = 0o004000;
+pub const CRTSXOFF: ::tcflag_t = 0o10000000000;
 pub const CRTSCTS: ::tcflag_t = 0o20000000000;
 pub const ISIG: ::tcflag_t = 0o000001;
 pub const ICANON: ::tcflag_t = 0o000002;
@@ -2241,6 +2314,56 @@ pub const PRIV_USER: ::c_uint = PRIV_DEBUG
     | PRIV_XPOLICY
     | PRIV_AWARE_RESET
     | PRIV_PFEXEC;
+
+// sys/systeminfo.h
+pub const SI_SYSNAME: ::c_int = 1;
+pub const SI_HOSTNAME: ::c_int = 2;
+pub const SI_RELEASE: ::c_int = 3;
+pub const SI_VERSION: ::c_int = 4;
+pub const SI_MACHINE: ::c_int = 5;
+pub const SI_ARCHITECTURE: ::c_int = 6;
+pub const SI_HW_SERIAL: ::c_int = 7;
+pub const SI_HW_PROVIDER: ::c_int = 8;
+pub const SI_SET_HOSTNAME: ::c_int = 258;
+pub const SI_SET_SRPC_DOMAIN: ::c_int = 265;
+pub const SI_PLATFORM: ::c_int = 513;
+pub const SI_ISALIST: ::c_int = 514;
+pub const SI_DHCP_CACHE: ::c_int = 515;
+pub const SI_ARCHITECTURE_32: ::c_int = 516;
+pub const SI_ARCHITECTURE_64: ::c_int = 517;
+pub const SI_ARCHITECTURE_K: ::c_int = 518;
+pub const SI_ARCHITECTURE_NATIVE: ::c_int = 519;
+
+// sys/lgrp_user.h
+pub const LGRP_COOKIE_NONE: ::lgrp_cookie_t = 0;
+pub const LGRP_AFF_NONE: ::lgrp_affinity_t = 0x0;
+pub const LGRP_AFF_WEAK: ::lgrp_affinity_t = 0x10;
+pub const LGRP_AFF_STRONG: ::lgrp_affinity_t = 0x100;
+pub const LGRP_RSRC_COUNT: ::lgrp_rsrc_t = 2;
+pub const LGRP_RSRC_CPU: ::lgrp_rsrc_t = 0;
+pub const LGRP_RSRC_MEM: ::lgrp_rsrc_t = 1;
+pub const LGRP_CONTENT_ALL: ::lgrp_content_t = 0;
+pub const LGRP_CONTENT_HIERARCHY: ::lgrp_content_t = LGRP_CONTENT_ALL;
+pub const LGRP_CONTENT_DIRECT: ::lgrp_content_t = 1;
+pub const LGRP_LAT_CPU_TO_MEM: ::lgrp_lat_between_t = 0;
+pub const LGRP_MEM_SZ_FREE: ::lgrp_mem_size_flag_t = 0;
+pub const LGRP_MEM_SZ_INSTALLED: ::lgrp_mem_size_flag_t = 1;
+pub const LGRP_VIEW_CALLER: ::lgrp_view_t = 0;
+pub const LGRP_VIEW_OS: ::lgrp_view_t = 1;
+
+// sys/processor.h
+
+pub const P_OFFLINE: ::c_int = 0x001;
+pub const P_ONLINE: ::c_int = 0x002;
+pub const P_STATUS: ::c_int = 0x003;
+pub const P_FAULTED: ::c_int = 0x004;
+pub const P_POWEROFF: ::c_int = 0x005;
+pub const P_NOINTR: ::c_int = 0x006;
+pub const P_SPARE: ::c_int = 0x007;
+pub const P_DISABLED: ::c_int = 0x008;
+pub const P_FORCED: ::c_int = 0x10000000;
+pub const PI_TYPELEN: ::c_int = 16;
+pub const PI_FPUTYPE: ::c_int = 32;
 
 // As per sys/socket.h, header alignment must be 8 bytes on SPARC
 // and 4 bytes everywhere else:
@@ -2809,15 +2932,20 @@ extern "C" {
         old_binding: *mut processorid_t,
     ) -> ::c_int;
     pub fn p_online(processorid: ::processorid_t, flag: ::c_int) -> ::c_int;
+    pub fn processor_info(processorid: ::processorid_t, infop: *mut processor_info_t) -> ::c_int;
 
     pub fn getexecname() -> *const ::c_char;
 
     pub fn gethostid() -> ::c_long;
-    pub fn sethostid(hostid: ::c_long) -> ::c_int;
 
     pub fn getpflags(flags: ::c_uint) -> ::c_uint;
     pub fn setpflags(flags: ::c_uint, value: ::c_uint) -> ::c_int;
 
+    pub fn sysinfo(command: ::c_int, buf: *mut ::c_char, count: ::c_long) -> ::c_int;
+}
+
+#[link(name = "sendfile")]
+extern "C" {
     pub fn sendfile(out_fd: ::c_int, in_fd: ::c_int, off: *mut ::off_t, len: ::size_t)
         -> ::ssize_t;
     pub fn sendfilev(
@@ -2826,6 +2954,18 @@ extern "C" {
         sfvcnt: ::c_int,
         xferred: *mut ::size_t,
     ) -> ::ssize_t;
+    // #include <link.h>
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    pub fn dl_iterate_phdr(
+        callback: ::Option<
+            unsafe extern "C" fn(
+                info: *mut dl_phdr_info,
+                size: usize,
+                data: *mut ::c_void,
+            ) -> ::c_int,
+        >,
+        data: *mut ::c_void,
+    ) -> ::c_int;
     pub fn getpagesize() -> ::c_int;
     pub fn getpagesizes(pagesize: *mut ::size_t, nelem: ::c_int) -> ::c_int;
     pub fn mmapobj(
@@ -2854,6 +2994,38 @@ extern "C" {
     pub fn strsep(string: *mut *mut ::c_char, delim: *const ::c_char) -> *mut ::c_char;
 }
 
+#[link(name = "lgrp")]
+extern "C" {
+    pub fn lgrp_init(view: lgrp_view_t) -> lgrp_cookie_t;
+    pub fn lgrp_fini(cookie: lgrp_cookie_t) -> ::c_int;
+    pub fn lgrp_affinity_get(
+        idtype: ::idtype_t,
+        id: ::id_t,
+        lgrp: ::lgrp_id_t,
+    ) -> ::lgrp_affinity_t;
+    pub fn lgrp_affinity_set(
+        idtype: ::idtype_t,
+        id: ::id_t,
+        lgrp: ::lgrp_id_t,
+        aff: lgrp_affinity_t,
+    ) -> ::lgrp_affinity_t;
+    pub fn lgrp_cpus(
+        cookie: ::lgrp_cookie_t,
+        lgrp: ::lgrp_id_t,
+        cpuids: *mut ::processorid_t,
+        count: ::c_uint,
+        content: ::lgrp_content_t,
+    ) -> ::c_int;
+    pub fn lgrp_mem_size(
+        cookie: ::lgrp_cookie_t,
+        lgrp: ::lgrp_id_t,
+        tpe: ::lgrp_mem_size_flag_t,
+        content: ::lgrp_content_t,
+    ) -> ::lgrp_mem_size_t;
+    pub fn lgrp_nlgrps(cookie: ::lgrp_cookie_t) -> ::c_int;
+    pub fn lgrp_view(cookie: ::lgrp_cookie_t) -> ::lgrp_view_t;
+}
+
 mod compat;
 pub use self::compat::*;
 
@@ -2873,5 +3045,8 @@ cfg_if! {
     if #[cfg(target_arch = "x86_64")] {
         mod x86_64;
         pub use self::x86_64::*;
+    } else if #[cfg(target_arch = "x86")] {
+        mod x86;
+        pub use self::x86::*;
     }
 }

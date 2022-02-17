@@ -992,6 +992,8 @@ pub const F_TEST: ::c_int = 3;
 pub const F_TLOCK: ::c_int = 2;
 pub const F_ULOCK: ::c_int = 0;
 
+pub const F_SEAL_FUTURE_WRITE: ::c_int = 0x0010;
+
 pub const IFF_LOWER_UP: ::c_int = 0x10000;
 pub const IFF_DORMANT: ::c_int = 0x20000;
 pub const IFF_ECHO: ::c_int = 0x40000;
@@ -2461,6 +2463,13 @@ pub const SCHED_DEADLINE: ::c_int = 6;
 pub const SCHED_RESET_ON_FORK: ::c_int = 0x40000000;
 
 pub const CLONE_PIDFD: ::c_int = 0x1000;
+
+// linux/mempolicy.h
+pub const MPOL_DEFAULT: ::c_int = 0;
+pub const MPOL_PREFERRED: ::c_int = 1;
+pub const MPOL_BIND: ::c_int = 2;
+pub const MPOL_INTERLEAVE: ::c_int = 3;
+pub const MPOL_LOCAL: ::c_int = 4;
 
 // bits/seek_constants.h
 pub const SEEK_DATA: ::c_int = 3;

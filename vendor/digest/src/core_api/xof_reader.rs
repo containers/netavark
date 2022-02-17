@@ -2,7 +2,7 @@ use super::{AlgorithmName, XofReaderCore};
 use crate::XofReader;
 use block_buffer::EagerBuffer;
 use core::fmt;
-use generic_array::typenum::{IsLess, Le, NonZero, U256};
+use crypto_common::typenum::{IsLess, Le, NonZero, U256};
 
 /// Wrapper around [`XofReaderCore`] implementations.
 ///

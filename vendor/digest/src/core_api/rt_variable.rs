@@ -5,7 +5,7 @@ use crate::{HashMarker, InvalidBufferSize};
 use crate::{InvalidOutputSize, Reset, Update, VariableOutput, VariableOutputReset};
 use block_buffer::BlockBuffer;
 use core::fmt;
-use generic_array::typenum::{IsLess, Le, NonZero, Unsigned, U256};
+use crypto_common::typenum::{IsLess, Le, NonZero, Unsigned, U256};
 
 /// Wrapper around [`VariableOutputCore`] which selects output size
 /// at run time.

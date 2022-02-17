@@ -8,9 +8,8 @@
 //!   usually prefer using these traits.
 //! - **Mid-level traits**: [`Update`], [`FixedOutput`], [`FixedOutputReset`],
 //!   [`ExtendableOutput`], [`ExtendableOutputReset`], [`XofReader`],
-//!   [`VariableOutput`], [`VariableOutput`], [`Reset`], [`KeyInit`], and
-//!   [`InnerInit`]. These traits atomically describe available functionality
-//!   of an algorithm.
+//!   [`VariableOutput`], [`Reset`], [`KeyInit`], and [`InnerInit`]. These
+//!   traits atomically describe available functionality of an algorithm.
 //! - **Marker traits**: [`HashMarker`], [`MacMarker`]. Used to distinguish
 //!   different algorithm classes.
 //! - **Low-level traits** defined in the [`core_api`] module. These traits
@@ -27,8 +26,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![forbid(unsafe_code)]
 #![doc(
-    html_logo_url = "https://raw.githubusercontent.com/RustCrypto/media/8f1a9894/logo.svg",
-    html_favicon_url = "https://raw.githubusercontent.com/RustCrypto/media/8f1a9894/logo.svg"
+    html_logo_url = "https://raw.githubusercontent.com/RustCrypto/media/6ee8e381/logo.svg",
+    html_favicon_url = "https://raw.githubusercontent.com/RustCrypto/media/6ee8e381/logo.svg",
+    html_root_url = "https://docs.rs/digest/0.10.3"
 )]
 #![warn(missing_docs, rust_2018_idioms)]
 
@@ -38,6 +38,10 @@ extern crate alloc;
 
 #[cfg(feature = "std")]
 extern crate std;
+
+#[cfg(feature = "rand_core")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rand_core")))]
+pub use crypto_common::rand_core;
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
@@ -59,10 +63,9 @@ pub use block_buffer;
 pub use crypto_common;
 
 pub use crate::digest::{Digest, DynDigest, HashMarker};
+pub use crypto_common::{generic_array, typenum, typenum::consts, Output, OutputSizeUser, Reset};
 #[cfg(feature = "mac")]
 pub use crypto_common::{InnerInit, InvalidLength, Key, KeyInit};
-pub use crypto_common::{Output, OutputSizeUser, Reset};
-pub use generic_array::{self, typenum::consts};
 #[cfg(feature = "mac")]
 pub use mac::{CtOutput, Mac, MacError, MacMarker};
 
@@ -72,6 +75,16 @@ use core::fmt;
 pub trait Update {
     /// Update state using the provided data.
     fn update(&mut self, data: &[u8]);
+
+    /// Digest input data in a chained manner.
+    #[must_use]
+    fn chain(mut self, data: impl AsRef<[u8]>) -> Self
+    where
+        Self: Sized,
+    {
+        self.update(data.as_ref());
+        self
+    }
 }
 
 /// Trait for hash functions with fixed-size output.

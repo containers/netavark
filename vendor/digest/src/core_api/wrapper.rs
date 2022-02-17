@@ -7,8 +7,10 @@ use crate::{
 };
 use block_buffer::BlockBuffer;
 use core::fmt;
-use crypto_common::{BlockSizeUser, InvalidLength, Key, KeyInit, KeySizeUser, Output};
-use generic_array::typenum::{IsLess, Le, NonZero, U256};
+use crypto_common::{
+    typenum::{IsLess, Le, NonZero, U256},
+    BlockSizeUser, InvalidLength, Key, KeyInit, KeySizeUser, Output,
+};
 
 #[cfg(feature = "mac")]
 use crate::MacMarker;

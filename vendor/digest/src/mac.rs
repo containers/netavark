@@ -1,8 +1,10 @@
 use crate::{FixedOutput, FixedOutputReset, Update};
-use crypto_common::{InvalidLength, Key, KeyInit, KeySizeUser, Output, OutputSizeUser, Reset};
+use crypto_common::{InvalidLength, Key, KeyInit, Output, OutputSizeUser, Reset};
 
+#[cfg(feature = "rand_core")]
+use crate::rand_core::{CryptoRng, RngCore};
 use core::fmt;
-use generic_array::typenum::Unsigned;
+use crypto_common::typenum::Unsigned;
 use subtle::{Choice, ConstantTimeEq};
 
 /// Marker trait for Message Authentication algorithms.
@@ -14,15 +16,30 @@ pub trait MacMarker {}
 /// This trait wraps [`KeyInit`], [`Update`], [`FixedOutput`], and [`MacMarker`]
 /// traits and provides additional convenience methods.
 #[cfg_attr(docsrs, doc(cfg(feature = "mac")))]
-pub trait Mac: KeySizeUser + OutputSizeUser + Sized {
+pub trait Mac: OutputSizeUser + Sized {
     /// Create new value from fixed size key.
-    fn new(key: &Key<Self>) -> Self;
+    fn new(key: &Key<Self>) -> Self
+    where
+        Self: KeyInit;
+
+    /// Generate random key using the provided [`CryptoRng`].
+    #[cfg(feature = "rand_core")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rand_core")))]
+    fn generate_key(rng: impl CryptoRng + RngCore) -> Key<Self>
+    where
+        Self: KeyInit;
 
     /// Create new value from variable size key.
-    fn new_from_slice(key: &[u8]) -> Result<Self, InvalidLength>;
+    fn new_from_slice(key: &[u8]) -> Result<Self, InvalidLength>
+    where
+        Self: KeyInit;
 
     /// Update state using the provided data.
     fn update(&mut self, data: &[u8]);
+
+    /// Process input data in a chained manner.
+    #[must_use]
+    fn chain_update(self, data: impl AsRef<[u8]>) -> Self;
 
     /// Obtain the result of a [`Mac`] computation as a [`CtOutput`] and consume
     /// [`Mac`] instance.
@@ -62,20 +79,32 @@ pub trait Mac: KeySizeUser + OutputSizeUser + Sized {
     fn verify_truncated_right(self, tag: &[u8]) -> Result<(), MacError>;
 }
 
-impl<T: KeyInit + Update + FixedOutput + MacMarker> Mac for T {
+impl<T: Update + FixedOutput + MacMarker> Mac for T {
     #[inline(always)]
-    fn new(key: &Key<Self>) -> Self {
+    fn new(key: &Key<Self>) -> Self
+    where
+        Self: KeyInit,
+    {
         KeyInit::new(key)
     }
 
     #[inline(always)]
-    fn new_from_slice(key: &[u8]) -> Result<Self, InvalidLength> {
+    fn new_from_slice(key: &[u8]) -> Result<Self, InvalidLength>
+    where
+        Self: KeyInit,
+    {
         KeyInit::new_from_slice(key)
     }
 
     #[inline]
     fn update(&mut self, data: &[u8]) {
         Update::update(self, data);
+    }
+
+    #[inline]
+    fn chain_update(mut self, data: impl AsRef<[u8]>) -> Self {
+        Update::update(&mut self, data.as_ref());
+        self
     }
 
     #[inline]
@@ -150,6 +179,16 @@ impl<T: KeyInit + Update + FixedOutput + MacMarker> Mac for T {
             Err(MacError)
         }
     }
+
+    #[cfg(feature = "rand_core")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rand_core")))]
+    #[inline]
+    fn generate_key(rng: impl CryptoRng + RngCore) -> Key<Self>
+    where
+        Self: KeyInit,
+    {
+        <T as KeyInit>::generate_key(rng)
+    }
 }
 
 /// Fixed size output value which provides a safe [`Eq`] implementation that
@@ -157,7 +196,7 @@ impl<T: KeyInit + Update + FixedOutput + MacMarker> Mac for T {
 ///
 /// It is useful for implementing Message Authentication Codes (MACs).
 #[derive(Clone)]
-#[cfg_attr(docsrs, doc(cfg(feature = "subtle")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "mac")))]
 pub struct CtOutput<T: OutputSizeUser> {
     bytes: Output<T>,
 }
@@ -209,6 +248,7 @@ impl<T: OutputSizeUser> Eq for CtOutput<T> {}
 /// Error type for when the [`Output`] of a [`Mac`]
 /// is not equal to the expected value.
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
+#[cfg_attr(docsrs, doc(cfg(feature = "mac")))]
 pub struct MacError;
 
 impl fmt::Display for MacError {

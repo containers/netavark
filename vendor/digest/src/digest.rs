@@ -1,6 +1,5 @@
 use super::{FixedOutput, FixedOutputReset, InvalidBufferSize, Reset, Update};
-use crypto_common::{Output, OutputSizeUser};
-use generic_array::typenum::Unsigned;
+use crypto_common::{typenum::Unsigned, Output, OutputSizeUser};
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
@@ -14,13 +13,17 @@ pub trait HashMarker {}
 /// This trait wraps [`Update`], [`FixedOutput`], [`Default`], and
 /// [`HashMarker`] traits and provides additional convenience methods.
 pub trait Digest: OutputSizeUser {
-    /// Create new hasher instance
+    /// Create new hasher instance.
     fn new() -> Self;
+
+    /// Create new hasher instance which has processed the provided data.
+    fn new_with_prefix(data: impl AsRef<[u8]>) -> Self;
 
     /// Process data, updating the internal state.
     fn update(&mut self, data: impl AsRef<[u8]>);
 
     /// Process input data in a chained manner.
+    #[must_use]
     fn chain_update(self, data: impl AsRef<[u8]>) -> Self;
 
     /// Retrieve result and consume hasher instance.
@@ -55,6 +58,16 @@ impl<D: FixedOutput + Default + Update + HashMarker> Digest for D {
     #[inline]
     fn new() -> Self {
         Self::default()
+    }
+
+    #[inline]
+    fn new_with_prefix(data: impl AsRef<[u8]>) -> Self
+    where
+        Self: Default + Sized,
+    {
+        let mut h = Self::default();
+        h.update(data.as_ref());
+        h
     }
 
     #[inline]
