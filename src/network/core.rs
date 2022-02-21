@@ -377,6 +377,8 @@ impl Core {
 
         // static ip vector
         let mut address_vector = Vec::new();
+        // gateway ip vector
+        let mut gw_ipaddr_vector = Vec::new();
         // network addresses for response
         let mut response_net_addresses: Vec<NetAddress> = Vec::new();
         // interfaces map, but we only ever expect one, for response
@@ -394,9 +396,38 @@ impl Core {
         };
 
         // prepare a vector of static aps with appropriate cidr
-        // we only need static ips so do not process gateway,
         for (idx, subnet) in network.subnets.iter().flatten().enumerate() {
             let subnet_mask_cidr = subnet.subnet.prefix_len();
+            if let Some(gw) = subnet.gateway {
+                let gw_net = match gw {
+                    IpAddr::V4(gw4) => match ipnet::Ipv4Net::new(gw4, subnet_mask_cidr) {
+                        Ok(dest) => ipnet::IpNet::from(dest),
+                        Err(err) => {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!(
+                                    "failed to parse address {}/{}: {}",
+                                    gw4, subnet_mask_cidr, err
+                                ),
+                            ))
+                        }
+                    },
+                    IpAddr::V6(gw6) => match ipnet::Ipv6Net::new(gw6, subnet_mask_cidr) {
+                        Ok(dest) => ipnet::IpNet::from(dest),
+                        Err(err) => {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!(
+                                    "failed to parse address {}/{}: {}",
+                                    gw6, subnet_mask_cidr, err
+                                ),
+                            ))
+                        }
+                    },
+                };
+
+                gw_ipaddr_vector.push(gw_net)
+            }
 
             // Build up response information
             let container_address: ipnet::IpNet =
@@ -421,6 +452,7 @@ impl Core {
         let container_macvlan_mac = match Core::add_macvlan(
             &master_ifname,
             &container_macvlan_name,
+            gw_ipaddr_vector,
             macvlan_mode,
             mtu_config,
             address_vector,
@@ -448,6 +480,7 @@ impl Core {
     pub fn add_macvlan(
         master_ifname: &str,
         container_macvlan: &str,
+        gw_ipaddr: Vec<ipnet::IpNet>,
         macvlan_mode: u32,
         mtu: u32,
         netns_ipaddr: Vec<ipnet::IpNet>,
@@ -483,7 +516,6 @@ impl Core {
                 let container_macvlan_clone: String = container_macvlan.to_owned();
                 // So complicated cloning for threads ?
                 // TODO: simplify this later
-                let _gw_ipaddr_empty = Vec::new(); // we are not using this for macvlan but arg is needed.
                 let mut netns_ipaddr_clone = Vec::new();
                 for ip in &netns_ipaddr {
                     netns_ipaddr_clone.push(*ip)
@@ -499,7 +531,7 @@ impl Core {
                     if let Err(err) = core_utils::CoreUtils::configure_netns_interface_async(
                         &container_macvlan_clone,
                         netns_ipaddr_clone,
-                        _gw_ipaddr_empty,
+                        gw_ipaddr,
                         &"".to_string(), // do we want static mac support for macvlan ? probably later.
                     ) {
                         return Err(err);
