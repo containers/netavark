@@ -28,6 +28,11 @@ function setup() {
     run_in_container_netns ip addr show eth0
     assert "$output" "=~" "$ipaddr" "IP address matches container address"
     assert_json "$result" ".podman.interfaces.eth0.subnets[0].ipnet" "==" "$ipaddr" "Result contains correct IP address"
+
+    # check gateway assignment
+    run_in_container_netns ip r
+    assert "$output" "=~" "default via 10.88.0.1" "gateway must be there in default route"
+    assert_json "$result" ".podman.interfaces.eth0.subnets[0].gateway" == "10.88.0.1" "Result contains gateway address"
 }
 
 @test "macvlan setup with mtu" {
