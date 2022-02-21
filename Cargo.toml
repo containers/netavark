@@ -35,7 +35,7 @@ rand = "0.8.5"
 tokio = { version = "1.16.1", features = ["full"] }
 zvariant = "3.1.2"
 sha2 = "0.10.1"
-netlink-packet-route = "0.10.0"
+netlink-packet-route = "0.11.0"
 
 [build-dependencies]
 vergen = { version = "6.0.2", default-features = false, features = ["build", "rustc", "git"] }
