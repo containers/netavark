@@ -465,8 +465,11 @@ EOF
                     connect_ip=$host_ip
                 fi
 
-                run_nc_test "-4 $nc_proto_arg" $cport $connect_ip $hport
+                if is_ipv4 "$connect_ip"; then
+                    run_nc_test "-4 $nc_proto_arg" $cport $connect_ip $hport
+                fi
             fi
+
 
             if [ $ipv6 = true ]; then
                 connect_ip=$ipv6_gateway
@@ -474,7 +477,9 @@ EOF
                     connect_ip=$host_ip
                 fi
 
-                run_nc_test "-6 $nc_proto_arg" $cport $connect_ip $hport
+                if is_ipv6 "$connect_ip"; then
+                    run_nc_test "-6 $nc_proto_arg" $cport $connect_ip $hport
+                fi
             fi
 
             ((i = i + 1))
@@ -484,6 +489,24 @@ EOF
     done
 
     run_netavark teardown $(get_container_netns_path) <<<"$config"
+}
+
+#################
+#  is_ipv6      # check if the given arg is a ipv6 address
+#################
+# Note that this only checks for a colon so it does not validate the ip address.
+# This should only be used if you have a valid ip but do not know if it is ipv4 or ipv6.
+function is_ipv6() {
+    [[ "$1" == *":"* ]]
+}
+
+#################
+#  is_ipv4      # check if the given arg is a ipv4 address
+#################
+# Note that this only checks for a dot so it does not validate the ip address.
+# This should only be used if you have a valid ip but do not know if it is ipv4 or ipv6.
+function is_ipv4() {
+    [[ "$1" == *"."* ]]
 }
 
 #################
@@ -498,7 +521,6 @@ function run_nc_test() {
     local container_port=$2
     local connect_ip=$3
     local host_port=$4
-
 
     # for some reason we have to attach STDIN to the server only for the sctp proto
     # otherwise it will just exit for unknown reasons. However we must not add STDIN
@@ -596,7 +618,6 @@ function gateway_from_subnet() {
 function setup_sctp_kernel_module() {
     modprobe sctp || skip "cannot load sctp kernel module"
 }
-
 
 #################################
 #  add_dummy_interface_on_host  #
