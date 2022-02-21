@@ -24,11 +24,14 @@ Netavark is a tool for configuring networking for Linux containers. Its features
 ```console
 $ make
 ```
-## Latest release
-Not applicable yet (TBD)
+## Test
+```console
+$ make test
+```
+Also see [./test](./test/README.md) for more information.
 
 ## Latest release
-Not applicable yet (TBD)
+[v1.0.0](https://github.com/containers/netavark/releases/latest)
 
 ## Communications
 
