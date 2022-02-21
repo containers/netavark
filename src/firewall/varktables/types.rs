@@ -345,6 +345,21 @@ pub fn get_port_forwarding_chains<'a>(
     }
 
     for i in pfwd.port_mappings.clone() {
+        if let Ok(ip) = i.host_ip.parse::<IpAddr>() {
+            match ip {
+                IpAddr::V4(_) => {
+                    if is_ipv6 {
+                        continue;
+                    }
+                }
+                IpAddr::V6(_) => {
+                    if !is_ipv6 {
+                        continue;
+                    }
+                }
+            }
+        }
+
         // hostport dnat
         let is_range = i.range > 1;
         let mut host_port = i.host_port.to_string();
