@@ -1,5 +1,0 @@
-error: unsupported literal
- --> $DIR/unsupported-literal.rs:4:10
-  |
-4 |     fn [<1e+100>]() {}
-  |          ^^^^^^

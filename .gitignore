@@ -5,3 +5,4 @@ targets/
 netavark.1
 vendor/winapi*gnu*/lib/*.a
 vendor/**/*.dll
+.idea/*
