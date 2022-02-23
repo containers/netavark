@@ -1,4 +1,0 @@
-[undefined]
-# This library allows unaligned access on Intel-like processors. Prevent UBSan
-# from complaining about that.
-fun:sha1_compression_states

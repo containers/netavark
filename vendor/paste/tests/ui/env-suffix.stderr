@@ -1,5 +1,0 @@
-error: expected string literal
- --> $DIR/env-suffix.rs:4:15
-  |
-4 |     fn [<env!("VAR"suffix)>]() {}
-  |               ^^^^^^^^^^^
