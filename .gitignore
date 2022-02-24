@@ -3,6 +3,5 @@ target/
 targets/
 *.swp
 netavark.1
-vendor/winapi*gnu*/lib/*.a
-vendor/**/*.dll
+vendor/
 .idea/*
