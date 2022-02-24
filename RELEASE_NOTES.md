@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.0.1
+
+* core,macvlan: add gateway as default route to macvlan interface
+* Add host_ip and container_ip version matching to iptables portforwardinhg
+* Remove vendor directory from upstream github repo
+
 ## v1.0.0
 * First official release of netavark
 
