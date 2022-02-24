@@ -42,6 +42,19 @@ a tarball. You can download them with the following:
 
 `https://github.com/containers/netavark/releases/download/v{version}/netavark-v{version}.tar.gz`
 
+And then create a cargo config file to point it to the vendor dir.
+```
+tar xvf %{SOURCE}
+mkdir -p .cargo
+cat >.cargo/config << EOF
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor"
+EOF
+```
+
 The Fedora packaging sources for Netavark are available at the [Netavark
 dist-git](https://src.fedoraproject.org/rpms/netavark).
 

@@ -19,7 +19,6 @@ _run_noarg() {
 _run_build() {
     # Assume we're on a fast VM, compile everything needed by the
     # rest of CI since subsequent tasks may have limited resources.
-	make vendor
     make all debug=1
     make build_unit  # reuses some debug binaries
     make all  # optimized/non-debug binaries
@@ -36,7 +35,6 @@ EOF
 }
 
 _run_validate() {
-	make vendor
     make validate
 }
 
@@ -48,7 +46,6 @@ _run_verify_vendor() {
 }
 
 _run_unit() {
-	cargo vendor
     make unit
 }
 
