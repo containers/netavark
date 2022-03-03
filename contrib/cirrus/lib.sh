@@ -29,10 +29,9 @@ SECRET_ENV_RE='(ACCOUNT)|(GC[EP]..+)|(SSH)|(PASSWORD)|(TOKEN)'
 if [[ -r "/etc/ci_environment" ]]; then
     source /etc/ci_environment
 else  # set default values - see make_cienv() below
-    # Install rust packages globally instead of per-user
-    CARGO_HOME="${CARGO_HOME:-/usr/local/cargo}"
-    # Ensure cargo packages can be executed
-    PATH="$PATH:$CARGO_HOME/bin"
+    # VM Images are built with this setup
+    CARGO_HOME="${CARGO_HOME:-/var/cache/cargo}"
+    source $CARGO_HOME/env
 fi
 
 # END Global export of all variables
