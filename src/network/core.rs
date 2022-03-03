@@ -535,7 +535,7 @@ impl Core {
                         &container_macvlan_clone,
                         netns_ipaddr_clone,
                         gw_ipaddr,
-                        &"".to_string(), // do we want static mac support for macvlan ? probably later.
+                        "", // do we want static mac support for macvlan ? probably later.
                     ) {
                         return Err(err);
                     }

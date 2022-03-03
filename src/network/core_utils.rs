@@ -145,12 +145,9 @@ impl CoreUtils {
 
         tokio::spawn(connection);
 
-        let master_index: u32;
-
         let mut links = handle.link().get().match_name(ifname.to_string()).execute();
-        match links.try_next().await {
-            Ok(Some(msg)) => master_index = msg.header.index,
-
+        let master_index: u32 = match links.try_next().await {
+            Ok(Some(msg)) => msg.header.index,
             Ok(None) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -166,7 +163,7 @@ impl CoreUtils {
                     format!("Unable to resolve bridge interface {}: {}", ifname, err),
                 ));
             }
-        }
+        };
 
         let mut links = handle
             .link()
