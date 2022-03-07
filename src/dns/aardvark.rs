@@ -45,21 +45,18 @@ impl Aardvark {
 
     // On success retuns aardvark server's pid or returns -1;
     fn get_aardvark_pid(&mut self) -> i32 {
-        let pid: i32;
-        let path = Path::new(&self.config).join("aardvark.pid".to_string());
-        match fs::read_to_string(&path) {
-            Ok(content) => {
-                pid = match content.parse::<i32>() {
-                    Ok(val) => val,
-                    Err(_) => {
-                        return -1;
-                    }
+        let path = Path::new(&self.config).join("aardvark.pid");
+        let pid: i32 = match fs::read_to_string(&path) {
+            Ok(content) => match content.parse::<i32>() {
+                Ok(val) => val,
+                Err(_) => {
+                    return -1;
                 }
-            }
+            },
             Err(_) => {
                 return -1;
             }
-        }
+        };
 
         pid
     }
@@ -161,14 +158,13 @@ impl Aardvark {
     }
 
     pub fn commit_entry(&mut self, entry: AardvarkEntry) -> Result<()> {
-        let data: String;
+        let mut data: String;
         let path = Path::new(&self.config).join(entry.network_name);
         let file_exists = path.exists();
         let mut file = OpenOptions::new().append(true).create(true).open(&path)?;
         // check if this is the first container in this network
         if !file_exists {
             // write first line as gateway ip
-            let data: String;
             if !entry.network_gateway_v4.is_empty() && !entry.network_gateway_v6.is_empty() {
                 data = format!(
                     "{},{}\n",

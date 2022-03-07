@@ -75,6 +75,15 @@ test: unit integration
 build_unit: $(CARGO_TARGET_DIR)
 	cargo test --no-run
 
+# Test build cross-architecture
+.PHONY: build_cross
+build_cross: $(CARGO_TARGET_DIR)
+	cargo install cross
+	rustup target add aarch64-unknown-linux-gnu
+	rustup target add arm-unknown-linux-gnueabi
+	cross build --target aarch64-unknown-linux-gnu
+	cross build --target arm-unknown-linux-gnueabi
+
 .PHONY: unit
 unit: $(CARGO_TARGET_DIR)
 	cargo test

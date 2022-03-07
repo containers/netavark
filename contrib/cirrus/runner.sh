@@ -35,7 +35,13 @@ EOF
 }
 
 _run_validate() {
+    rustup install stable
+    rustup default stable
     make validate
+}
+
+_run_build_cross() {
+    make build_cross
 }
 
 _run_verify_vendor() {

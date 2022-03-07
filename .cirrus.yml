@@ -17,7 +17,7 @@ env:
     # Save a little typing (path relative to $CIRRUS_WORKING_DIR)
     SCRIPT_BASE: "./contrib/cirrus"
     FEDORA_NAME: "fedora-35"
-    IMAGE_SUFFIX: "c4560539387953152"
+    IMAGE_SUFFIX: "c6118659411148800"
     FEDORA_NETAVARK_IMAGE: "fedora-netavark-${IMAGE_SUFFIX}"
 
 
@@ -113,6 +113,15 @@ unit_task:
   setup_script: *setup
   main_script: *main
 
+build_cross_task:
+  alias: "build_cross"
+  depends_on:
+    - "build"
+  cargo_cache: *ro_cargo_cache
+  targets_cache: *ro_targets_cache
+  bin_cache: *ro_bin_cache
+  setup_script: *setup
+  main_script: *main
 
 integration_task:
   alias: "integration"
@@ -152,6 +161,7 @@ success_task:
   alias: success
   depends_on:
     - "build"
+    - "build_cross"
     - "validate"
     - "verify_vendor"
     - "unit"
