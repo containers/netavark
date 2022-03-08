@@ -5,7 +5,7 @@ use netavark::commands::teardown;
 use netavark::commands::version;
 
 #[derive(Parser, Debug)]
-#[clap(version = env!("VERGEN_BUILD_SEMVER"))]
+#[clap(version = env!("CARGO_PKG_VERSION"))]
 struct Opts {
     /// Instead of reading from STDIN, read the configuration to be applied from the given file.
     #[clap(short, long)]
