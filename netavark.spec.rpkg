@@ -46,11 +46,7 @@ BuildRequires: git-core
 BuildRequires: golang-github-cpuguy83-md2man
 Recommends: aardvark-dns
 Provides: container-network-stack
-
 ExclusiveArch:  %{rust_arches}
-%if %{__cargo_skip_build}
-BuildArch:      noarch
-%endif
 
 %global _description %{expand:
 OCI network stack.}
