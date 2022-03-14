@@ -155,6 +155,16 @@ meta_task:
     clone_script: &noop mkdir -p $CIRRUS_WORKING_DIR  # source not needed
     script: /usr/local/bin/entrypoint.sh
 
+fedora36_build_task:
+    alias: fedora36_build
+    depends_on:
+      - "build"
+    container:
+        cpu: 2
+        memory: 2
+        image: quay.io/libpod/fedora36rust
+    script:
+        - cargo build
 
 success_task:
   name: "Total success"
@@ -167,6 +177,7 @@ success_task:
     - "unit"
     - "integration"
     - "meta"
+    - "fedora36_build"
   env:
     CIRRUS_SHELL: "/bin/sh"
   clone_script: *noop
