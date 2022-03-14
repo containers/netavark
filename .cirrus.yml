@@ -166,6 +166,28 @@ fedora36_build_task:
     script:
         - cargo build
 
+ubuntu20_build_task:
+    alias: ubuntu20_build
+    depends_on:
+      - "build"
+    container:
+        cpu: 2
+        memory: 2
+        image: quay.io/libpod/ubuntu20rust
+    script:
+        - cargo build
+
+centos9_build_task:
+    alias: centos9_build
+    depends_on:
+      - "build"
+    container:
+        cpu: 2
+        memory: 2
+        image: quay.io/libpod/centos9rust
+    script:
+        - cargo build
+
 success_task:
   name: "Total success"
   alias: success
@@ -178,6 +200,8 @@ success_task:
     - "integration"
     - "meta"
     - "fedora36_build"
+    - "ubuntu20_build"
+    - "centos9_build"
   env:
     CIRRUS_SHELL: "/bin/sh"
   clone_script: *noop
