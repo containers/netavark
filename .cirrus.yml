@@ -5,7 +5,7 @@
 # Main collection of env. vars to set for all tasks and scripts.
 env:
     # Actual|intended branch for this run
-    DEST_BRANCH: "main"
+    DEST_BRANCH: "v1.0.1-rhel"
     # The default is 'sh' if unspecified
     CIRRUS_SHELL: "/bin/bash"
     # Location where source repo. will be cloned
