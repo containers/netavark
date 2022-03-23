@@ -13,6 +13,9 @@ use std::net::Ipv4Addr;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+const SYSTEMD_CHECK_PATH: &str = "/run/systemd/system";
+const SYSTEMD_RUN: &str = "systemd-run";
+
 #[derive(Debug, Clone)]
 pub struct AardvarkEntry {
     pub network_name: String,
@@ -77,10 +80,10 @@ impl Aardvark {
         log::debug!("Spawning aardvark server");
 
         let mut aardvark_args = vec![];
-        let systemd_run = "systemd-run";
-        if Aardvark::is_executable_in_path(systemd_run) {
+        // only use systemd when it is booted, see sd_booted(3)
+        if Path::new(SYSTEMD_CHECK_PATH).exists() && Aardvark::is_executable_in_path(SYSTEMD_RUN) {
             // TODO: This could be replaced by systemd-api.
-            aardvark_args = vec![systemd_run, "-q", "--scope"];
+            aardvark_args = vec![SYSTEMD_RUN, "-q", "--scope"];
 
             if self.rootless {
                 aardvark_args.push("--user");
