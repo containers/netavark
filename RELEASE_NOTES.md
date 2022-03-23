@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.0.2
+* Fix issue [#13533](https://github.com/containers/podman/issues/13533) - only use systemd when present
+* Dropped vergen dependency
+* Updated several dependency libraries
+* Allow macvlans to not require a default gateway
+
 ## v1.0.1
 
 * core,macvlan: add gateway as default route to macvlan interface
