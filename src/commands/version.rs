@@ -17,10 +17,10 @@ struct Info {
 impl Version {
     pub fn exec(&self) -> Result<(), Box<dyn Error>> {
         let info = Info {
-            version: env!("VERGEN_BUILD_SEMVER"),
-            commit: env!("VERGEN_GIT_SHA"),
-            build_time: env!("VERGEN_BUILD_TIMESTAMP"),
-            target: env!("VERGEN_RUSTC_HOST_TRIPLE"),
+            version: env!("CARGO_PKG_VERSION"),
+            commit: env!("GIT_COMMIT"),
+            build_time: env!("BUILD_TIMESTAMP"),
+            target: env!("BUILD_TARGET"),
         };
 
         let out = serde_json::to_string_pretty(&info)?;
