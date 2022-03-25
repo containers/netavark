@@ -75,3 +75,58 @@ function setup() {
     assert "$output" "=~" "$ipaddr" "IP address matches container address"
     assert_json "$result" ".podman.interfaces.eth0.subnets[0].ipnet" "==" "$ipaddr" "Result contains correct IP address"
 }
+
+@test "macvlan modes" {
+    for mode in bridge private vepa passthru source; do
+        # echo here so we know which test failed
+        echo "mode $mode"
+
+        read -r -d '\0' config <<EOF
+{
+   "container_id": "someID",
+   "container_name": "someName",
+   "networks": {
+      "podman": {
+         "static_ips": [
+            "10.88.0.2"
+         ],
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+         "driver": "macvlan",
+         "network_interface": "dummy0",
+         "subnets": [
+            {
+               "subnet": "10.88.0.0/16",
+               "gateway": "10.88.0.1"
+            }
+         ],
+         "ipv6_enabled": false,
+         "internal": false,
+         "dns_enabled": false,
+         "ipam_options": {
+            "driver": "host-local"
+         },
+         "options": {
+            "mode": "$mode"
+         }
+      }
+   }
+}\0
+EOF
+
+    run_netavark setup $(get_container_netns_path) <<<"$config"
+    run_in_container_netns ip -j --details link show eth0
+    link_info="$output"
+    assert_json "$link_info" ".[].mtu" "=="  "1500" "MTU matches expected MTU"
+    assert_json "$link_info" '.[].flags[] | select(.=="UP")' "=="  "UP" "Container interface is up"
+    assert_json "$link_info" ".[].linkinfo.info_kind" "==" "macvlan" "Container interface is a macvlan device"
+    assert_json "$link_info" ".[].linkinfo.info_data.mode" "==" "$mode" "Container interface has correct macvlan mode"
+
+    run_netavark teardown $(get_container_netns_path) <<<"$config"
+    done
+}

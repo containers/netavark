@@ -48,23 +48,21 @@ impl Core {
         let mut nameservers: Vec<IpAddr> = Vec::new();
         // interfaces map, but we only ever expect one, for response
         let mut interfaces: HashMap<String, types::NetInterface> = HashMap::new();
-        // mtu to configure, 0 means it was not set do nothing.
-        let mut mtu_config: u32 = 0;
-        if let Some(options_map) = network.options.as_ref() {
-            if let Some(mtu) = options_map.get("mtu") {
-                match mtu.parse() {
-                    Ok(mtu) => {
-                        mtu_config = mtu;
-                    }
-                    Err(err) => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("unable to parse mtu: {}", err),
-                        ))
-                    }
+
+        // mtu to configure
+        let mtu_config = match network.options.as_ref().and_then(|map| map.get("mtu")) {
+            Some(mtu) => match mtu.parse() {
+                Ok(mtu) => mtu,
+                Err(err) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("unable to parse mtu: {}", err),
+                    ))
                 }
-            }
-        }
+            },
+            // default mtu is 0 (the kernel will pick one)
+            None => 0,
+        };
 
         let container_veth_name: String = per_network_opts.interface_name.to_owned();
         let static_ips = match per_network_opts.static_ips.as_ref() {
@@ -327,38 +325,33 @@ impl Core {
             dns_search_domains: Some(Vec::<String>::new()),
             interfaces: Some(HashMap::new()),
         };
-        // Default MACVLAN_MODE to bridge or get from driver options
-        let mut macvlan_mode: u32 = constants::MACVLAN_MODE_BRIDGE;
-        if let Some(options_map) = network.options.as_ref() {
-            if let Some(mode) = options_map.get("mode") {
-                match core_utils::CoreUtils::get_macvlan_mode_from_string(mode) {
-                    Ok(mode) => {
-                        macvlan_mode = mode;
-                    }
-                    Err(err) => {
-                        return Err(err);
-                    }
-                }
-            }
-        }
 
-        // mtu to configure, 0 means it was not set do nothing.
-        let mut mtu_config: u32 = 0;
-        if let Some(options_map) = network.options.as_ref() {
-            if let Some(mtu) = options_map.get("mtu") {
-                match mtu.parse() {
-                    Ok(mtu) => {
-                        mtu_config = mtu;
-                    }
-                    Err(err) => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("unable to parse mtu: {}", err),
-                        ))
-                    }
+        // parse mode option
+        let macvlan_mode = match network.options.as_ref().and_then(|map| map.get("mode")) {
+            Some(mode) => match core_utils::CoreUtils::get_macvlan_mode_from_string(mode) {
+                Ok(mode) => mode,
+                Err(err) => {
+                    return Err(err);
                 }
-            }
-        }
+            },
+            // default MACVLAN_MODE is bridge
+            None => constants::MACVLAN_MODE_BRIDGE,
+        };
+
+        // mtu to configure
+        let mtu_config = match network.options.as_ref().and_then(|map| map.get("mtu")) {
+            Some(mtu) => match mtu.parse() {
+                Ok(mtu) => mtu,
+                Err(err) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("unable to parse mtu: {}", err),
+                    ))
+                }
+            },
+            // default mtu is 0 (the kernel will pick one)
+            None => 0,
+        };
 
         // get master interface name
         let master_ifname = match network.network_interface.as_deref() {
