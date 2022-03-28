@@ -243,3 +243,81 @@ fw_driver=iptables
     add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
     test_port_fw ip=6 proto=udp hostip="fd65:8371:648b:0c06::1"
 }
+
+@test "bridge ipam none" {
+           read -r -d '\0' config <<EOF
+{
+   "container_id": "someID",
+   "container_name": "someName",
+   "networks": {
+      "podman": {
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+         "driver": "bridge",
+         "network_interface": "dummy0",
+         "subnets": [],
+         "ipv6_enabled": false,
+         "internal": false,
+         "dns_enabled": false,
+         "ipam_options": {
+            "driver": "none"
+         }
+      }
+   }
+}\0
+EOF
+
+    run_netavark setup $(get_container_netns_path) <<<"$config"
+    result="$output"
+
+    mac=$(jq -r '.podman.interfaces.eth0.mac_address' <<< "$result" )
+    # check that interface exists
+    run_in_container_netns ip -j link show eth0
+    link_info="$output"
+    assert_json "$link_info" ".[].address" "=="  "$mac" "MAC matches container mac"
+    assert_json "$link_info" '.[].flags[] | select(.=="UP")' "=="  "UP" "Container interface is up"
+
+    run_in_container_netns ip -j --details addr show eth0
+    assert_json "$link_info" ".[].addr_info" "==" "null" "No ip addresses configured"
+
+    # check gateway assignment
+    run_in_container_netns ip r
+    assert "$output" "==" "" "No routes configured"
+}
+
+@test "bridge unknown ipam driver" {
+           read -r -d '\0' config <<EOF
+{
+   "container_id": "someID",
+   "container_name": "someName",
+   "networks": {
+      "podman": {
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+         "driver": "bridge",
+         "network_interface": "dummy0",
+         "subnets": [],
+         "ipv6_enabled": false,
+         "internal": false,
+         "dns_enabled": false,
+         "ipam_options": {
+            "driver": "someDriver"
+         }
+      }
+   }
+}\0
+EOF
+
+    expected_rc=1 run_netavark setup $(get_container_netns_path) <<<"$config"
+    assert_json ".error" "unsupported ipam driver someDriver" "Driver is not supported error"
+}

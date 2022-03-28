@@ -1,4 +1,4 @@
-use crate::network::constants;
+use crate::network::{constants, internal_types, types};
 use futures::stream::TryStreamExt;
 use futures::StreamExt;
 use libc;
@@ -23,6 +23,115 @@ use sysctl::{Sysctl, SysctlError};
 
 pub struct CoreUtils {
     pub networkns: String,
+}
+
+pub fn get_ipam_addresses(
+    per_network_opts: &types::PerNetworkOptions,
+    network: &types::Network,
+) -> Result<internal_types::IPAMAddresses, std::io::Error> {
+    let addresses = match network
+        .ipam_options
+        .as_ref()
+        .and_then(|map| map.get("driver").cloned())
+        .as_deref()
+    {
+        // when option is none default to host local
+        Some(constants::IPAM_HOSTLOCAL) | None => {
+            // static ip vector
+            let mut container_addresses = Vec::new();
+            // gateway ip vector
+            let mut gateway_addresses = Vec::new();
+            // network addresses for response
+            let mut net_addresses: Vec<types::NetAddress> = Vec::new();
+            // bool for ipv6
+            let mut ipv6_enabled = false;
+
+            // nameservers which can be configured for this container
+            let mut nameservers: Vec<IpAddr> = Vec::new();
+
+            let static_ips = match per_network_opts.static_ips.as_ref() {
+                None => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "no static ips provided",
+                    ))
+                }
+                Some(i) => i,
+            };
+
+            // prepare a vector of static aps with appropriate cidr
+            for (idx, subnet) in network.subnets.iter().flatten().enumerate() {
+                let subnet_mask_cidr = subnet.subnet.prefix_len();
+                if let Some(gw) = subnet.gateway {
+                    let gw_net = match ipnet::IpNet::new(gw, subnet_mask_cidr) {
+                        Ok(dest) => dest,
+                        Err(err) => {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                format!(
+                                    "failed to parse address {}/{}: {}",
+                                    gw, subnet_mask_cidr, err
+                                ),
+                            ))
+                        }
+                    };
+                    gateway_addresses.push(gw_net);
+                    nameservers.push(gw);
+                }
+
+                // for dual-stack network.ipv6_enabled could be false do explicit check
+                if subnet.subnet.addr().is_ipv6() {
+                    ipv6_enabled = true;
+                }
+
+                // Build up response information
+                let container_address: ipnet::IpNet =
+                    match format!("{}/{}", static_ips[idx], subnet_mask_cidr).parse() {
+                        Ok(i) => i,
+                        Err(e) => {
+                            return Err(Error::new(std::io::ErrorKind::Other, e));
+                        }
+                    };
+                // Add the IP to the address_vector
+                container_addresses.push(container_address);
+                net_addresses.push(types::NetAddress {
+                    gateway: subnet.gateway,
+                    ipnet: container_address,
+                });
+            }
+            internal_types::IPAMAddresses {
+                container_addresses,
+                gateway_addresses,
+                net_addresses,
+                nameservers,
+                ipv6_enabled,
+            }
+        }
+        Some(constants::IPAM_NONE) => {
+            // no ipam just return empty vectors
+            internal_types::IPAMAddresses {
+                container_addresses: vec![],
+                gateway_addresses: vec![],
+                net_addresses: vec![],
+                nameservers: vec![],
+                ipv6_enabled: false,
+            }
+        }
+        Some(constants::IPAM_DHCP) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "dhcp ipam driver is not yet supported",
+            ));
+        }
+        Some(driver) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("unsupported ipam driver {}", driver),
+            ));
+        }
+    };
+
+    Ok(addresses)
 }
 
 impl CoreUtils {

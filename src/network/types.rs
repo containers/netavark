@@ -41,6 +41,11 @@ pub struct Network {
     #[serde(rename = "options")]
     pub options: Option<HashMap<String, String>>,
 
+    /// IPAM options is a set of key-value options that have been applied to
+    /// the Network.
+    #[serde(rename = "ipam_options")]
+    pub ipam_options: Option<HashMap<String, String>>,
+
     /// Subnets to use for this network.
     #[serde(rename = "subnets")]
     pub subnets: Option<Vec<Subnet>>,
