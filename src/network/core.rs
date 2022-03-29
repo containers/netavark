@@ -1,4 +1,3 @@
-use crate::network::types::NetAddress;
 use crate::network::{constants, core_utils, types};
 use ipnet;
 use log::debug;
@@ -38,14 +37,6 @@ impl Core {
             }
             Some(i) => i,
         };
-        // static ip vector
-        let mut address_vector = Vec::new();
-        // gateway ip vector
-        let mut gw_ipaddr_vector = Vec::new();
-        // network addresses for response
-        let mut response_net_addresses: Vec<NetAddress> = Vec::new();
-        // nameservers which can be configured for this container
-        let mut nameservers: Vec<IpAddr> = Vec::new();
         // interfaces map, but we only ever expect one, for response
         let mut interfaces: HashMap<String, types::NetInterface> = HashMap::new();
 
@@ -65,85 +56,31 @@ impl Core {
         };
 
         let container_veth_name: String = per_network_opts.interface_name.to_owned();
-        let static_ips = match per_network_opts.static_ips.as_ref() {
-            None => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "no static ips provided".to_string(),
-                ))
-            }
-            Some(i) => i,
-        };
         let static_mac = match &per_network_opts.static_mac {
             Some(mac) => mac,
             None => "",
         };
 
-        // is ipv6 enabled, we need to propogate this to lower stack
-        let mut ipv6_enabled = network.ipv6_enabled;
-        // for dual-stack network.ipv6_enabled could be false do explicit check
-        for ip in static_ips.iter() {
-            if ip.is_ipv6() {
-                ipv6_enabled = true;
-                break;
-            }
-        }
+        let ipam = core_utils::get_ipam_addresses(per_network_opts, network)?;
 
-        //we have the bridge name but we must iterate for all the available gateways
-        for (idx, subnet) in network.subnets.iter().flatten().enumerate() {
-            let subnet_mask_cidr = subnet.subnet.prefix_len();
-            if let Some(gw) = subnet.gateway {
-                let gw_net = match ipnet::IpNet::new(gw, subnet_mask_cidr) {
-                    Ok(dest) => dest,
-                    Err(err) => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!(
-                                "failed to parse address {}/{}: {}",
-                                gw, subnet_mask_cidr, err
-                            ),
-                        ))
-                    }
-                };
-                gw_ipaddr_vector.push(gw_net)
-            }
-
-            // Build up response information
-            let container_address: ipnet::IpNet =
-                match format!("{}/{}", static_ips[idx], subnet_mask_cidr).parse() {
-                    Ok(i) => i,
-                    Err(e) => {
-                        return Err(Error::new(std::io::ErrorKind::Other, e));
-                    }
-                };
-            // Add the IP to the address_vector
-            address_vector.push(container_address);
-            if let Some(gw) = subnet.gateway {
-                nameservers.push(gw);
-            }
-            response_net_addresses.push(types::NetAddress {
-                gateway: subnet.gateway,
-                ipnet: container_address,
-            });
-        }
         debug!("Container veth name: {:?}", container_veth_name);
         debug!("Brige name: {:?}", bridge_name);
-        debug!("IP address for veth vector: {:?}", address_vector);
-        debug!("Gateway ip address vector: {:?}", gw_ipaddr_vector);
+        debug!("IP address for veth vector: {:?}", ipam.container_addresses);
+        debug!("Gateway ip address vector: {:?}", ipam.gateway_addresses);
 
         // get random name for host veth
         let host_veth_name = format!("veth{:x}", rand::thread_rng().gen::<u32>());
 
         let container_veth_mac = match Core::add_bridge_and_veth(
             &bridge_name,
-            address_vector,
-            gw_ipaddr_vector,
+            ipam.container_addresses,
+            ipam.gateway_addresses,
             static_mac,
             &container_veth_name,
             &host_veth_name,
             netns,
             mtu_config,
-            ipv6_enabled,
+            ipam.ipv6_enabled,
         ) {
             Ok(addr) => addr,
             Err(err) => {
@@ -156,13 +93,13 @@ impl Core {
         debug!("Container veth mac: {:?}", container_veth_mac);
         let interface = types::NetInterface {
             mac_address: container_veth_mac,
-            subnets: Option::from(response_net_addresses),
+            subnets: Option::from(ipam.net_addresses),
         };
         // Add interface to interfaces (part of StatusBlock)
         interfaces.insert(container_veth_name, interface);
         let _ = response.interfaces.insert(interfaces);
         if network.dns_enabled {
-            let _ = response.dns_server_ips.insert(nameservers);
+            let _ = response.dns_server_ips.insert(ipam.nameservers);
             // Note: this is being added so podman setup is backward compatible with the design
             // which we had with dnsname/dnsmasq. I belive this can be fixed in later releases.
             let _ = response
@@ -353,75 +290,27 @@ impl Core {
             Some(interface) => interface.to_string(),
         };
 
-        // static ip vector
-        let mut address_vector = Vec::new();
-        // gateway ip vector
-        let mut gw_ipaddr_vector = Vec::new();
-        // network addresses for response
-        let mut response_net_addresses: Vec<NetAddress> = Vec::new();
         // interfaces map, but we only ever expect one, for response
         let mut interfaces: HashMap<String, types::NetInterface> = HashMap::new();
-
         let container_macvlan_name: String = per_network_opts.interface_name.to_owned();
-        let static_ips = match per_network_opts.static_ips.as_ref() {
-            None => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "no static ips provided",
-                ))
-            }
-            Some(i) => i.clone(),
-        };
-
-        // prepare a vector of static aps with appropriate cidr
-        for (idx, subnet) in network.subnets.iter().flatten().enumerate() {
-            let subnet_mask_cidr = subnet.subnet.prefix_len();
-            // Only add gateway to route if macvlan is not marked as an internal network
-            if !network.internal {
-                if let Some(gw) = subnet.gateway {
-                    let gw_net = match ipnet::IpNet::new(gw, subnet_mask_cidr) {
-                        Ok(dest) => dest,
-                        Err(err) => {
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                format!(
-                                    "failed to parse address {}/{}: {}",
-                                    gw, subnet_mask_cidr, err
-                                ),
-                            ))
-                        }
-                    };
-                    gw_ipaddr_vector.push(gw_net)
-                }
-            }
-
-            // Build up response information
-            let container_address: ipnet::IpNet =
-                match format!("{}/{}", static_ips[idx], subnet_mask_cidr).parse() {
-                    Ok(i) => i,
-                    Err(e) => {
-                        return Err(Error::new(std::io::ErrorKind::Other, e));
-                    }
-                };
-            // Add the IP to the address_vector
-            address_vector.push(container_address);
-            response_net_addresses.push(types::NetAddress {
-                gateway: subnet.gateway,
-                ipnet: container_address,
-            });
+        let mut ipam = core_utils::get_ipam_addresses(per_network_opts, network)?;
+        // Remove gateways when marked as internal network
+        if network.internal {
+            ipam.gateway_addresses = Vec::new();
         }
+
         debug!("Container macvlan name: {:?}", container_macvlan_name);
         debug!("Master interface name: {:?}", master_ifname);
-        debug!("IP address for macvlan: {:?}", address_vector);
+        debug!("IP address for macvlan: {:?}", ipam.container_addresses);
 
         // create macvlan
         let container_macvlan_mac = match Core::add_macvlan(
             &master_ifname,
             &container_macvlan_name,
-            gw_ipaddr_vector,
+            ipam.gateway_addresses,
             macvlan_mode,
             mtu_config,
-            address_vector,
+            ipam.container_addresses,
             netns,
         ) {
             Ok(addr) => addr,
@@ -435,7 +324,7 @@ impl Core {
         debug!("Container macvlan mac: {:?}", container_macvlan_mac);
         let interface = types::NetInterface {
             mac_address: container_macvlan_mac,
-            subnets: Option::from(response_net_addresses),
+            subnets: Option::from(ipam.net_addresses),
         };
         // Add interface to interfaces (part of StatusBlock)
         interfaces.insert(container_macvlan_name, interface);

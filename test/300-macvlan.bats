@@ -70,10 +70,12 @@ function setup() {
     assert_json "$link_info" '.[].flags[] | select(.=="UP")' "=="  "UP" "Container interface is up"
     assert_json "$link_info" ".[].linkinfo.info_kind" "==" "macvlan" "Container interface is a macvlan device"
 
-    ipaddr="10.88.0.2/16"
-    run_in_container_netns ip addr show eth0
-    assert "$output" "=~" "$ipaddr" "IP address matches container address"
-    assert_json "$result" ".podman.interfaces.eth0.subnets[0].ipnet" "==" "$ipaddr" "Result contains correct IP address"
+    ipaddr="10.88.0.2"
+    run_in_container_netns ip -j addr show eth0
+    link_info="$output"
+    assert_json "$link_info" ".[].addr_info[0].local" "==" "$ipaddr" "IP address matches container address"
+    assert_json "$link_info" ".[].addr_info[0].prefixlen" "==" "16" "IP prefix matches container subnet"
+    assert_json "$result" ".podman.interfaces.eth0.subnets[0].ipnet" "==" "$ipaddr/16" "Result contains correct IP address"
 }
 
 @test "macvlan modes" {
@@ -129,4 +131,50 @@ EOF
 
     run_netavark teardown $(get_container_netns_path) <<<"$config"
     done
+}
+
+@test "macvlan ipam none" {
+           read -r -d '\0' config <<EOF
+{
+   "container_id": "someID",
+   "container_name": "someName",
+   "networks": {
+      "podman": {
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+         "driver": "macvlan",
+         "network_interface": "dummy0",
+         "subnets": [],
+         "ipv6_enabled": false,
+         "internal": false,
+         "dns_enabled": false,
+         "ipam_options": {
+            "driver": "none"
+         }
+      }
+   }
+}\0
+EOF
+
+    run_netavark setup $(get_container_netns_path) <<<"$config"
+    result="$output"
+
+    mac=$(jq -r '.podman.interfaces.eth0.mac_address' <<< "$result" )
+    # check that interface exists
+    run_in_container_netns ip -j link show eth0
+    link_info="$output"
+    assert_json "$link_info" ".[].address" "=="  "$mac" "MAC matches container mac"
+    assert_json "$link_info" '.[].flags[] | select(.=="UP")' "=="  "UP" "Container interface is up"
+
+    run_in_container_netns ip -j --details addr show eth0
+    assert_json "$link_info" ".[].addr_info" "==" "null" "No ip addresses configured"
+
+    # check gateway assignment
+    run_in_container_netns ip r
+    assert "$output" "==" "" "No routes configured"
 }

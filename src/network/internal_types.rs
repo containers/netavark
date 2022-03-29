@@ -54,3 +54,14 @@ pub struct PortForwardConfig {
     // Must be set if the v6 address is set.
     pub subnet_v6: Option<Subnet>,
 }
+
+/// IPAMAddresses is used to pass ipam information around
+pub struct IPAMAddresses {
+    // ip addresses for netlink
+    pub container_addresses: Vec<ipnet::IpNet>,
+    pub gateway_addresses: Vec<ipnet::IpNet>,
+    pub ipv6_enabled: bool,
+    // result for podman
+    pub net_addresses: Vec<types::NetAddress>,
+    pub nameservers: Vec<IpAddr>,
+}

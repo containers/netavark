@@ -10,3 +10,8 @@ pub const MACVLAN_MODE_VEPA: u32 = 2;
 pub const MACVLAN_MODE_BRIDGE: u32 = 4;
 pub const MACVLAN_MODE_PASSTHRU: u32 = 8;
 pub const MACVLAN_MODE_SOURCE: u32 = 16;
+
+// IPAM drivers
+pub const IPAM_HOSTLOCAL: &str = "host-local";
+pub const IPAM_DHCP: &str = "dhcp";
+pub const IPAM_NONE: &str = "none";
