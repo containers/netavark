@@ -17,7 +17,7 @@ env:
     # Save a little typing (path relative to $CIRRUS_WORKING_DIR)
     SCRIPT_BASE: "./contrib/cirrus"
     FEDORA_NAME: "fedora-35"
-    IMAGE_SUFFIX: "c6118659411148800"
+    IMAGE_SUFFIX: "c5476394632216576"
     FEDORA_NETAVARK_IMAGE: "fedora-netavark-${IMAGE_SUFFIX}"
 
 
@@ -28,8 +28,8 @@ gcp_credentials: ENCRYPTED[d6efdb7d6d4c61e3831df2193ca6348bb02f26cd931695f69d419
 gce_instance:  &standard_vm
     image_project: "libpod-218412"
     zone: "us-central1-c"
-    cpu: 2
-    memory: "4Gb"
+    cpu: 8 
+    memory: "8Gb"
     disk: 200  # GB, do not set <200 per gcloud warning re: I/O performance
     image_name: "${FEDORA_NETAVARK_IMAGE}"
 
@@ -127,6 +127,19 @@ integration_task:
   alias: "integration"
   depends_on:
     - "unit"
+  cargo_cache: *ro_cargo_cache
+  targets_cache: *ro_targets_cache
+  bin_cache: *ro_bin_cache
+  setup_script: *setup
+  main_script: *main
+
+podman_e2e_task:
+  alias: "podman_e2e"
+    #depends_on:
+    #    - "unit"
+  env:
+    GOPATH: &gopath "/var/tmp/go"
+    GOCACHE: &gocache "/var/tmp/go/cache/go-build"
   cargo_cache: *ro_cargo_cache
   targets_cache: *ro_targets_cache
   bin_cache: *ro_bin_cache

@@ -59,6 +59,10 @@ _run_integration() {
     make integration
 }
 
+_run_podman_e2e() {
+	NETWORK_BACKEND=netavark make -C /var/tmp/go/src/github.com/containers/podman localintegration
+}
+
 show_env_vars
 
 msg "************************************************************"
