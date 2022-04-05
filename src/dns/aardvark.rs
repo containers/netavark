@@ -16,7 +16,7 @@ use std::process::{Command, Stdio};
 const SYSTEMD_CHECK_PATH: &str = "/run/systemd/system";
 const SYSTEMD_RUN: &str = "systemd-run";
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct AardvarkEntry {
     pub network_name: String,
     pub network_gateway_v4: String,

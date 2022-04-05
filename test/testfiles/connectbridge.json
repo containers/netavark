@@ -1,0 +1,32 @@
+{
+    "container_id": "01f0b94d5f4c",
+    "container_name": "isolatedcontainer",
+    "networks": {
+        "podman1": {
+            "interface_name": "eth1",
+            "static_ips": [
+                "10.88.1.3"
+            ]
+        }
+    },
+    "network_info": {
+        "podman1": {
+            "dns_enabled": true,
+            "driver": "bridge",
+            "id": "f3ac3c903b76f20e8a122b1eb2ba393ab2519ba516626be5b490b66dc96b54b7",
+            "internal": false,
+            "ipv6_enabled": false,
+            "name": "podman1",
+            "network_interface": "podman1",
+            "subnets": [
+                {
+                    "gateway": "10.88.1.2",
+                    "subnet": "10.88.1.0/22"
+                }
+            ],
+            "options": {
+                "isolate": "true"
+             }
+        }
+    }
+}

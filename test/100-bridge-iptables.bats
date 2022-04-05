@@ -89,6 +89,7 @@ fw_driver=iptables
     run_in_host_netns iptables -nvL FORWARD
     assert "${lines[2]}" == "    0     0 NETAVARK_FORWARD  all  --  *      *       0.0.0.0/0            0.0.0.0/0            /* netavark firewall plugin rules */" "FORWARD rule"
     run_in_host_netns iptables -nvL NETAVARK_FORWARD
+    # rule 1 should be DROP for any existing networks
     assert "${lines[2]}" == "" "NETAVARK_FORWARD rule 1 is empty"
     assert "${lines[3]}" == "" "NETAVARK_FORWARD rule 2 is empty"
 
@@ -320,4 +321,41 @@ EOF
 
     expected_rc=1 run_netavark setup $(get_container_netns_path) <<<"$config"
     assert_json ".error" "IO error: unsupported ipam driver someDriver" "Driver is not supported error"
+}
+
+@test "$fw_driver - isolate networks" {
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+    result1="$output"
+    assert_json "$result1" 'has("podman")' == "true" "object key exists"
+
+    create_container_ns
+    
+    run_netavark --file ${TESTSDIR}/testfiles/connectbridge.json setup $(get_container_netns_path 1)
+    result2="$output"
+    assert_json "$result2" 'has("podman1")' == "true" "object key exists"
+
+    # check iptables POSTROUTING chain
+    run_in_host_netns iptables -nvL NETAVARK_ISOLATION    
+    assert "${lines[2]}" =~ "   0     0 DROP       all  --  podman1 !podman1  0.0.0.0/0            0.0.0.0/0    "
+
+    run_in_host_netns iptables -nvL FORWARD
+    assert "${lines[2]}" =~ "NETAVARK_ISOLATION"
+
+    # This should fail, right?
+    expected_rc=1 run_in_container_netns 1 ping -c 1 10.88.0.2
+
+    run_netavark --file ${TESTSDIR}/testfiles/connectbridge.json teardown $(get_container_netns_path 1)
+     
+    run_netavark --file ${TESTSDIR}/testfiles/connectbridge.json setup $(get_container_netns_path)
+    result2="$output"
+    assert_json "$result2" 'has("podman1")' == "true" "object key exists"
+
+    # this should not fail
+    run_in_container_netns ping -c 1 10.88.0.2
+
+    run_netavark --file ${TESTSDIR}/testfiles/connectbridge.json teardown $(get_container_netns_path)
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
+
+
+
 }

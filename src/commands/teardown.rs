@@ -161,10 +161,28 @@ impl Teardown {
                         }
                     }
                     if complete_teardown {
+                        // parse isolation option here so we can avoid unwrapping and storing it unecessarily
+                        let isolation_config =
+                            match network.options.as_ref().and_then(|map| map.get("isolate")) {
+                                Some(isolation) => match isolation.parse() {
+                                    Ok(isolation) => isolation,
+                                    Err(err) => {
+                                        return Err(std::io::Error::new(
+                                            std::io::ErrorKind::Other,
+                                            format!("could not parse isolation option: {}", err),
+                                        )
+                                        .into())
+                                    }
+                                },
+                                // default is to not isolate podman networks
+                                None => false,
+                            };
+
                         if !network.internal {
                             let su = SetupNetwork {
                                 net: network.clone(),
                                 network_hash_name: id_network_hash,
+                                isolation: isolation_config,
                             };
                             let ctd = TearDownNetwork {
                                 config: su,

@@ -43,6 +43,17 @@ pub fn new() -> NetavarkResult<Box<dyn firewall::FirewallDriver>> {
 
 impl firewall::FirewallDriver for IptablesDriver {
     fn setup_network(&self, network_setup: SetupNetwork) -> NetavarkResult<()> {
+        let interface = match network_setup.net.network_interface {
+            Some(iface) => iface,
+            None => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "failed to get interface".to_string(),
+                )
+                .into())
+            }
+        };
+
         if let Some(subnet) = network_setup.net.subnets {
             for network in subnet {
                 let is_ipv6 = network.subnet.network().is_ipv6();
@@ -50,15 +61,27 @@ impl firewall::FirewallDriver for IptablesDriver {
                 if is_ipv6 {
                     conn = &self.conn6;
                 }
-                let chains = varktables::types::get_network_chains(
+
+                let chain_result = varktables::types::get_network_chains(
                     conn,
                     network.subnet,
                     network_setup.network_hash_name.clone(),
                     is_ipv6,
+                    interface.to_string(),
+                    network_setup.isolation,
                 );
 
-                for chain in chains {
-                    chain.add_rules()?;
+                match chain_result {
+                    Ok(chains) => {
+                        for c in chains {
+                            c.add_rules()?
+                        }
+                    }
+                    Err(e) => {
+                        return Err(
+                            std::io::Error::new(std::io::ErrorKind::Other, e.to_string()).into(),
+                        )
+                    }
                 }
 
                 add_firewalld_if_possible(&network);
@@ -70,6 +93,17 @@ impl firewall::FirewallDriver for IptablesDriver {
     // teardown_network should only be called in the case of
     // a complete teardown.
     fn teardown_network(&self, tear: TearDownNetwork) -> NetavarkResult<()> {
+        let interface = match tear.config.net.network_interface {
+            Some(iface) => iface,
+            None => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "failed to get interface".to_string(),
+                )
+                .into())
+            }
+        };
+
         // Remove network specific general NAT rules
         if let Some(subnet) = tear.config.net.subnets {
             for network in subnet {
@@ -83,21 +117,32 @@ impl firewall::FirewallDriver for IptablesDriver {
                     network.subnet,
                     tear.config.network_hash_name.clone(),
                     is_ipv6,
+                    interface.to_string(),
+                    tear.config.isolation,
                 );
-                for chain in &chains {
-                    // Because we only call teardown_network on complete teardown, we
-                    // just send true here
-                    chain.remove_rules(true)?;
-                }
 
-                for chain in chains {
-                    match &chain.td_policy {
-                        None => {}
-                        Some(policy) => {
-                            if tear.complete_teardown && *policy == OnComplete {
-                                chain.remove()?;
+                match chains {
+                    Ok(chains) => {
+                        for c in &chains {
+                            // Because we only call teardown_network on complete teardown, we
+                            // just send true here
+                            c.remove_rules(true)?;
+                        }
+                        for c in chains {
+                            match &c.td_policy {
+                                None => {}
+                                Some(policy) => {
+                                    if tear.complete_teardown && *policy == OnComplete {
+                                        c.remove()?;
+                                    }
+                                }
                             }
                         }
+                    }
+                    Err(e) => {
+                        return Err(
+                            std::io::Error::new(std::io::ErrorKind::Other, e.to_string()).into(),
+                        )
                     }
                 }
 
