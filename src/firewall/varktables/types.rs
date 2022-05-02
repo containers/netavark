@@ -1,3 +1,4 @@
+use crate::error::{NetavarkError, NetavarkResult};
 use crate::firewall::varktables::helpers::{
     add_chain_unique, append_unique, remove_if_rule_exists,
 };
@@ -6,7 +7,6 @@ use crate::network::internal_types::PortForwardConfig;
 use crate::network::types::Subnet;
 use ipnet::IpNet;
 use iptables::IPTables;
-use std::error::Error;
 use std::net::IpAddr;
 
 //  Chain names
@@ -97,7 +97,7 @@ impl<'a> VarkChain<'a> {
     }
 
     // actually add the rules to iptables
-    pub fn add_rules(&self) -> Result<(), Box<dyn Error>> {
+    pub fn add_rules(&self) -> NetavarkResult<()> {
         // If the chain needs to be created, we make it
         if self.create {
             add_chain_unique(self.driver, &self.table, &self.chain_name)?;
@@ -110,12 +110,21 @@ impl<'a> VarkChain<'a> {
                     append_unique(self.driver, &self.table, &self.chain_name, rule.to_str())?;
                 }
                 Some(pos) => {
-                    if !self
+                    let exists = match self
                         .driver
-                        .exists(&self.table, &self.chain_name, &rule.rule)?
+                        .exists(&self.table, &self.chain_name, &rule.rule)
                     {
-                        self.driver
-                            .insert(&self.table, &self.chain_name, &rule.rule, pos)?;
+                        Ok(b) => b,
+                        Err(e) => return Err(NetavarkError::Message(e.to_string())),
+                    };
+                    if exists {
+                        match self
+                            .driver
+                            .insert(&self.table, &self.chain_name, &rule.rule, pos)
+                        {
+                            Ok(_) => {}
+                            Err(e) => return Err(NetavarkError::Message(e.to_string())),
+                        };
                     }
                 }
             }
@@ -124,7 +133,7 @@ impl<'a> VarkChain<'a> {
     }
 
     //  remove a vector of rules
-    pub fn remove_rules(&self, complete_teardown: bool) -> Result<(), Box<dyn Error>> {
+    pub fn remove_rules(&self, complete_teardown: bool) -> NetavarkResult<()> {
         for rule in &self.rules.clone() {
             // If the rule policy is Never or this is not a
             // complete teardown of the network, then we skip removal
@@ -143,16 +152,22 @@ impl<'a> VarkChain<'a> {
     }
 
     // remove the chain itself.
-    pub fn remove(&self) -> Result<(), Box<dyn Error>> {
+    pub fn remove(&self) -> NetavarkResult<()> {
         // this might be a perf hit but we are going to start this
         // way and think of faster AND logical approach.
-        let remaining_rules = self.driver.list(&self.table, &self.chain_name)?;
+        let remaining_rules = match self.driver.list(&self.table, &self.chain_name) {
+            Ok(o) => o,
+            Err(e) => return Err(NetavarkError::Message(e.to_string())),
+        };
 
         // if for some reason there is a rule left, dont remove the chain and
         // also dont make this a fatal error.  The vec returned by list always
         // reserves [0] for the chain name (-A chain_name), hence the <= 1
         if remaining_rules.len() <= 1 {
-            self.driver.delete_chain(&self.table, &self.chain_name)?;
+            match self.driver.delete_chain(&self.table, &self.chain_name) {
+                Ok(_) => {}
+                Err(e) => return Err(NetavarkError::Message(e.to_string())),
+            };
         }
         Result::Ok(())
     }

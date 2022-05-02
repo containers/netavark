@@ -1,5 +1,4 @@
-use std::error::Error;
-
+use crate::error::NetavarkResult;
 use clap::Parser;
 use serde::Serialize;
 
@@ -15,7 +14,7 @@ struct Info {
 }
 
 impl Version {
-    pub fn exec(&self) -> Result<(), Box<dyn Error>> {
+    pub fn exec(&self) -> NetavarkResult<()> {
         let info = Info {
             version: env!("CARGO_PKG_VERSION"),
             commit: env!("GIT_COMMIT"),

@@ -1,3 +1,4 @@
+use crate::error::{NetavarkError, NetavarkResult};
 use crate::firewall;
 use crate::firewall::firewalld;
 use crate::firewall::varktables;
@@ -13,7 +14,6 @@ use futures::executor::block_on;
 use iptables;
 use iptables::IPTables;
 use log::{debug, warn};
-use std::error::Error;
 use zbus::Connection;
 
 pub(crate) const MAX_HASH_SIZE: usize = 13;
@@ -24,10 +24,16 @@ pub struct IptablesDriver {
     conn6: IPTables,
 }
 
-pub fn new() -> Result<Box<dyn firewall::FirewallDriver>, Box<dyn Error>> {
+pub fn new() -> NetavarkResult<Box<dyn firewall::FirewallDriver>> {
     // create an iptables connection
-    let ipt = iptables::new(false)?;
-    let ipt6 = iptables::new(true)?;
+    let ipt = match iptables::new(false) {
+        Ok(i) => i,
+        Err(e) => return Err(NetavarkError::Message(e.to_string())),
+    };
+    let ipt6 = match iptables::new(true) {
+        Ok(i) => i,
+        Err(e) => return Err(NetavarkError::Message(e.to_string())),
+    };
     let driver = IptablesDriver {
         conn: ipt,
         conn6: ipt6,
@@ -36,7 +42,7 @@ pub fn new() -> Result<Box<dyn firewall::FirewallDriver>, Box<dyn Error>> {
 }
 
 impl firewall::FirewallDriver for IptablesDriver {
-    fn setup_network(&self, network_setup: SetupNetwork) -> Result<(), Box<dyn Error>> {
+    fn setup_network(&self, network_setup: SetupNetwork) -> NetavarkResult<()> {
         if let Some(subnet) = network_setup.net.subnets {
             for network in subnet {
                 let is_ipv6 = network.subnet.network().is_ipv6();
@@ -63,7 +69,7 @@ impl firewall::FirewallDriver for IptablesDriver {
 
     // teardown_network should only be called in the case of
     // a complete teardown.
-    fn teardown_network(&self, tear: TearDownNetwork) -> Result<(), Box<dyn Error>> {
+    fn teardown_network(&self, tear: TearDownNetwork) -> NetavarkResult<()> {
         // Remove network specific general NAT rules
         if let Some(subnet) = tear.config.net.subnets {
             for network in subnet {
@@ -103,15 +109,16 @@ impl firewall::FirewallDriver for IptablesDriver {
         Result::Ok(())
     }
 
-    fn setup_port_forward(&self, setup_portfw: PortForwardConfig) -> Result<(), Box<dyn Error>> {
+    fn setup_port_forward(&self, setup_portfw: PortForwardConfig) -> NetavarkResult<()> {
         if let Some(v4) = setup_portfw.container_ip_v4 {
             let subnet_v4 = match setup_portfw.subnet_v4.clone() {
                 Some(s) => s,
                 None => {
-                    return Err(Box::new(std::io::Error::new(
+                    return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         "ipv4 address but provided but no v4 subnet provided",
-                    )))
+                    )
+                    .into())
                 }
             };
             let chains =
@@ -124,10 +131,11 @@ impl firewall::FirewallDriver for IptablesDriver {
             let subnet_v6 = match setup_portfw.subnet_v6.clone() {
                 Some(s) => s,
                 None => {
-                    return Err(Box::new(std::io::Error::new(
+                    return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         "ipv6 address but provided but no v4 subnet provided",
-                    )))
+                    )
+                    .into())
                 }
             };
             let chains =
@@ -139,15 +147,16 @@ impl firewall::FirewallDriver for IptablesDriver {
         Result::Ok(())
     }
 
-    fn teardown_port_forward(&self, tear: TeardownPortForward) -> Result<(), Box<dyn Error>> {
+    fn teardown_port_forward(&self, tear: TeardownPortForward) -> NetavarkResult<()> {
         if let Some(v4) = tear.config.container_ip_v4 {
             let subnet_v4 = match tear.config.subnet_v4.clone() {
                 Some(s) => s,
                 None => {
-                    return Err(Box::new(std::io::Error::new(
+                    return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         "ipv4 address but provided but no v4 subnet provided",
-                    )))
+                    )
+                    .into())
                 }
             };
 
@@ -173,10 +182,11 @@ impl firewall::FirewallDriver for IptablesDriver {
             let subnet_v6 = match tear.config.subnet_v6.clone() {
                 Some(s) => s,
                 None => {
-                    return Err(Box::new(std::io::Error::new(
+                    return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         "ipv6 address but provided but no v4 subnet provided",
-                    )))
+                    )
+                    .into())
                 }
             };
 

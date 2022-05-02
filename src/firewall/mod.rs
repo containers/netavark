@@ -1,10 +1,10 @@
+use crate::error::{NetavarkError, NetavarkResult};
 use crate::network::internal_types::{
     PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
 };
 use futures::executor::block_on;
 use log::{debug, info};
 use std::env;
-use std::error::Error;
 use zbus::Connection;
 
 pub mod firewalld;
@@ -15,15 +15,14 @@ mod varktables;
 // and port mappings.
 pub trait FirewallDriver {
     // Set up firewall rules for the given network,
-    fn setup_network(&self, network_setup: SetupNetwork) -> Result<(), Box<dyn Error>>;
+    fn setup_network(&self, network_setup: SetupNetwork) -> NetavarkResult<()>;
     // Tear down firewall rules for the given network.
-    fn teardown_network(&self, tear: TearDownNetwork) -> Result<(), Box<dyn Error>>;
+    fn teardown_network(&self, tear: TearDownNetwork) -> NetavarkResult<()>;
 
     // Set up port-forwarding firewall rules for a given container.
-    fn setup_port_forward(&self, setup_pw: PortForwardConfig) -> Result<(), Box<dyn Error>>;
+    fn setup_port_forward(&self, setup_pw: PortForwardConfig) -> NetavarkResult<()>;
     // Tear down port-forwarding firewall rules for a single container.
-    fn teardown_port_forward(&self, teardown_pf: TeardownPortForward)
-        -> Result<(), Box<dyn Error>>;
+    fn teardown_port_forward(&self, teardown_pf: TeardownPortForward) -> NetavarkResult<()>;
 }
 
 // Types of firewall backend
@@ -34,7 +33,7 @@ enum FirewallImpl {
 }
 
 // What firewall implementations does this system support?
-fn get_firewall_impl() -> Result<FirewallImpl, Box<dyn Error>> {
+fn get_firewall_impl() -> NetavarkResult<FirewallImpl> {
     // First, check the NETAVARK_FW env var.
     // It respects "firewalld", "iptables", "nftables".
     if let Ok(var) = env::var("NETAVARK_FW") {
@@ -43,16 +42,23 @@ fn get_firewall_impl() -> Result<FirewallImpl, Box<dyn Error>> {
             "firewalld" => {
                 let conn = match block_on(Connection::system()) {
                     Ok(c) => c,
-                    Err(e) => bail!(
-                        "Error retrieving dbus connection for requested firewalld backend {}",
-                        e
-                    ),
+                    Err(e) => {
+                        return Err(NetavarkError::make_chain_str(
+                            "Error retrieving dbus connection for requested firewall backend",
+                            e.into(),
+                        ))
+                    }
                 };
                 return Ok(FirewallImpl::Firewalld(conn));
             }
             "iptables" => return Ok(FirewallImpl::Iptables),
             "nftables" => return Ok(FirewallImpl::Nftables),
-            any => bail!("Must provide a valid firewall backend, got {}", any),
+            any => {
+                return Err(NetavarkError::Message(format!(
+                    "Must provide a valid firewall backend, got {}",
+                    any
+                )))
+            }
         }
     }
 
@@ -79,7 +85,7 @@ fn get_firewall_impl() -> Result<FirewallImpl, Box<dyn Error>> {
 
 // Get the preferred firewall implementation for the current system
 // configuration.
-pub fn get_supported_firewall_driver() -> Result<Box<dyn FirewallDriver>, Box<dyn Error>> {
+pub fn get_supported_firewall_driver() -> NetavarkResult<Box<dyn FirewallDriver>> {
     match get_firewall_impl() {
         Ok(fw) => match fw {
             FirewallImpl::Iptables => {
@@ -92,7 +98,9 @@ pub fn get_supported_firewall_driver() -> Result<Box<dyn FirewallDriver>, Box<dy
             }
             FirewallImpl::Nftables => {
                 info!("Using nftables firewall driver");
-                bail!("nftables support not presently available");
+                Err(NetavarkError::from_str(
+                    "nftables support presently not available",
+                ))
             }
         },
         Err(e) => Err(e),

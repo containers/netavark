@@ -54,12 +54,8 @@ fn main() {
     match result {
         Ok(_) => {}
         Err(err) => {
-            let er = netavark::error::NetavarkError {
-                error: format!("{}", err),
-                errno: 1,
-            };
-            er.print_json();
-            std::process::exit(er.errno);
+            err.print_json();
+            std::process::exit(err.get_exit_code());
         }
     }
 }

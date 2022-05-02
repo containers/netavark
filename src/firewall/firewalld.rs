@@ -1,3 +1,4 @@
+use crate::error::{NetavarkError, NetavarkResult};
 use crate::firewall;
 use crate::network::internal_types::{PortForwardConfig, TearDownNetwork, TeardownPortForward};
 use crate::network::types::PortMapping;
@@ -6,7 +7,6 @@ use core::convert::TryFrom;
 use futures::executor::block_on;
 use log::{debug, info};
 use std::collections::HashMap;
-use std::error::Error;
 use std::vec::Vec;
 use zbus::Connection;
 use zvariant::{Array, Signature, Value};
@@ -20,30 +20,42 @@ pub struct FirewallD {
     conn: Connection,
 }
 
-pub fn new(conn: Connection) -> Result<Box<dyn firewall::FirewallDriver>, Box<dyn Error>> {
+pub fn new(conn: Connection) -> Result<Box<dyn firewall::FirewallDriver>, NetavarkError> {
     Ok(Box::new(FirewallD { conn }))
 }
 
 impl firewall::FirewallDriver for FirewallD {
-    fn setup_network(
-        &self,
-        network_setup: internal_types::SetupNetwork,
-    ) -> Result<(), Box<dyn Error>> {
+    fn setup_network(&self, network_setup: internal_types::SetupNetwork) -> NetavarkResult<()> {
         let mut need_reload = false;
 
         need_reload |= match create_zone_if_not_exist(&self.conn, ZONENAME) {
             Ok(b) => b,
-            Err(e) => bail!("Error creating zone {}: {}", ZONENAME, e),
+            Err(e) => {
+                return Err(NetavarkError::make_chain(
+                    format!("Error creating zone {}", ZONENAME),
+                    e.into(),
+                ))
+            }
         };
         need_reload |=
             match add_policy_if_not_exist(&self.conn, POLICYNAME, ZONENAME, "ACCEPT", true) {
                 Ok(b) => b,
-                Err(e) => bail!("Error creating policy {}: {}", POLICYNAME, e),
+                Err(e) => {
+                    return Err(NetavarkError::make_chain(
+                        format!("Error creating policy {}", POLICYNAME),
+                        e.into(),
+                    ))
+                }
             };
         need_reload |=
             match add_policy_if_not_exist(&self.conn, PORTPOLICYNAME, "ANY", "CONTINUE", false) {
                 Ok(b) => b,
-                Err(e) => bail!("Error creating policy {}: {}", PORTPOLICYNAME, e),
+                Err(e) => {
+                    return Err(NetavarkError::make_chain(
+                        format!("Error creating policy {}", POLICYNAME),
+                        e.into(),
+                    ))
+                }
             };
 
         if need_reload {
@@ -62,14 +74,19 @@ impl firewall::FirewallDriver for FirewallD {
         if let Some(nets) = network_setup.net.subnets {
             match add_source_subnets_to_zone(&self.conn, ZONENAME, nets) {
                 Ok(_) => {}
-                Err(e) => bail!("Error adding source subnets to zone {}: {}", ZONENAME, e),
+                Err(e) => {
+                    return Err(NetavarkError::make_chain(
+                        format!("Error adding source subnets to zone {}", ZONENAME),
+                        e.into(),
+                    ))
+                }
             };
         }
 
         Ok(())
     }
 
-    fn teardown_network(&self, tear: TearDownNetwork) -> Result<(), Box<dyn Error>> {
+    fn teardown_network(&self, tear: TearDownNetwork) -> NetavarkResult<()> {
         if !tear.complete_teardown {
             return Ok(());
         }
@@ -90,7 +107,7 @@ impl firewall::FirewallDriver for FirewallD {
         Ok(())
     }
 
-    fn setup_port_forward(&self, setup_portfw: PortForwardConfig) -> Result<(), Box<dyn Error>> {
+    fn setup_port_forward(&self, setup_portfw: PortForwardConfig) -> Result<(), NetavarkError> {
         // NOTE: There is a serious TOCTOU risk in this function if netavark
         // is either run in parallel, or is not the only thing to edit this
         // policy.
@@ -108,25 +125,38 @@ impl firewall::FirewallDriver for FirewallD {
         ))?;
         let policy_config: HashMap<&str, Value> = match policy_config_msg.body() {
             Ok(m) => m,
-            Err(e) => bail!(
-                "Error decoding DBus message for policy {} configuration: {}",
-                PORTPOLICYNAME,
-                e
-            ),
+            Err(e) => {
+                return Err(NetavarkError::make_chain(
+                    format!(
+                        "Error decoding DBus message for policy {} configuration",
+                        PORTPOLICYNAME
+                    ),
+                    e.into(),
+                ))
+            }
         };
 
         let mut port_forwarding_rules: Array;
         match policy_config.get("forward_ports") {
             Some(a) => match a {
                 Value::Array(arr) => port_forwarding_rules = arr.clone(),
-                _ => bail!("forward-port in firewalld policy object has a bad type"),
+                _ => {
+                    return Err(NetavarkError::from_str(
+                        "forward-port in firewalld policy object has a bad type",
+                    ))
+                }
             },
             None => {
                 // No existing rules
                 // Make us a new array.
                 let sig = match Signature::try_from("(ssss)") {
                     Ok(s) => s,
-                    Err(e) => bail!("Error creating signature for new dbus array: {}", e),
+                    Err(e) => {
+                        return Err(NetavarkError::make_chain_str(
+                            "Error creating signature for new DBus array",
+                            e.into(),
+                        ))
+                    }
                 };
 
                 port_forwarding_rules = Array::new(sig);
@@ -172,21 +202,21 @@ impl firewall::FirewallDriver for FirewallD {
                 "Successfully added port-forwarding rules for container {}",
                 setup_portfw.container_id
             ),
-            Err(e) => bail!(
-                "Failed to update policy {} to add container {} port forwarding rules: {}",
-                PORTPOLICYNAME,
-                setup_portfw.container_id,
-                e
-            ),
+            Err(e) => {
+                return Err(NetavarkError::make_chain(
+                    format!(
+                        "Failed to update policy {} to add container {} port forwarding rules",
+                        PORTPOLICYNAME, setup_portfw.container_id
+                    ),
+                    e.into(),
+                ))
+            }
         };
 
         Ok(())
     }
 
-    fn teardown_port_forward(
-        &self,
-        teardown_pf: TeardownPortForward,
-    ) -> Result<(), Box<dyn Error>> {
+    fn teardown_port_forward(&self, teardown_pf: TeardownPortForward) -> NetavarkResult<()> {
         // Get the current configuration for the policy
         let policy_config_msg = block_on(self.conn.call_method(
             Some("org.fedoraproject.FirewallD1"),
@@ -197,17 +227,25 @@ impl firewall::FirewallDriver for FirewallD {
         ))?;
         let policy_config: HashMap<&str, Value> = match policy_config_msg.body() {
             Ok(m) => m,
-            Err(e) => bail!(
-                "Error decoding DBus message for policy {} configuration: {}",
-                PORTPOLICYNAME,
-                e
-            ),
+            Err(e) => {
+                return Err(NetavarkError::make_chain(
+                    format!(
+                        "Error decoding DBus message for policy {} configuration",
+                        PORTPOLICYNAME
+                    ),
+                    e.into(),
+                ))
+            }
         };
 
         let old_port_forwarding_rules: Array = match policy_config.get("forward_ports") {
             Some(a) => match a {
                 Value::Array(arr) => arr.clone(),
-                _ => bail!("forward-port in firewalld policy object has a bad type"),
+                _ => {
+                    return Err(NetavarkError::from_str(
+                        "forward-port in firewalld policy object has a bad type",
+                    ))
+                }
             },
             None => {
                 // No existing rules.
@@ -218,7 +256,12 @@ impl firewall::FirewallDriver for FirewallD {
 
         let sig = match Signature::try_from("(ssss)") {
             Ok(s) => s,
-            Err(e) => bail!("Error creating signature for new dbus array: {}", e),
+            Err(e) => {
+                return Err(NetavarkError::make_chain_str(
+                    "Error creating signature for new dbus array",
+                    e.into(),
+                ))
+            }
         };
         let mut port_forwarding_rules: Array = Array::new(sig);
         // use an invalid string if we don't have a valid v4 or v6 address.
@@ -239,18 +282,24 @@ impl firewall::FirewallDriver for FirewallD {
                 Value::Structure(s) => {
                     let fields = s.clone().into_fields();
                     if fields.len() != 4 {
-                        bail!("Port forwarding rule that was not a 4-tuple encountered");
+                        return Err(NetavarkError::from_str(
+                            "Port forwarding rule that was not a 4-tuple encountered",
+                        ));
                     }
                     let port_ip = match fields[3].clone() {
 			Value::Str(s) => s.as_str().to_string(),
-			_ => bail!("Port forwarding tuples must contain only strings, encountered a non-string object"),
+			_ => return Err(NetavarkError::from_str("Port forwarding tuples must contain only strings, encountered a non-string object")),
 		    };
                     debug!("IP string from firewalld is {}", port_ip);
                     if port_ip != ipv4 && port_ip != ipv6 {
                         port_forwarding_rules.append(port_tuple.clone())?;
                     }
                 }
-                _ => bail!("Port forwarding rule that was not a structure encountered"),
+                _ => {
+                    return Err(NetavarkError::from_str(
+                        "Port forwarding rule that was not a structure encountered",
+                    ))
+                }
             }
         }
 
@@ -270,12 +319,15 @@ impl firewall::FirewallDriver for FirewallD {
                 "Successfully added port-forwarding rules for container {}",
                 teardown_pf.config.container_id
             ),
-            Err(e) => bail!(
-                "Failed to update policy {} to add container {} port forwarding rules: {}",
-                PORTPOLICYNAME,
-                teardown_pf.config.container_id,
-                e
-            ),
+            Err(e) => {
+                return Err(NetavarkError::make_chain(
+                    format!(
+                        "Failed to update policy {} to remove container {} port forwarding rules",
+                        PORTPOLICYNAME, teardown_pf.config.container_id
+                    ),
+                    e.into(),
+                ))
+            }
         };
 
         Ok(())
@@ -283,7 +335,7 @@ impl firewall::FirewallDriver for FirewallD {
 }
 
 // Create a firewalld zone to hold all our interfaces.
-fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> Result<bool, Box<dyn Error>> {
+fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> NetavarkResult<bool> {
     debug!("Creating firewall zone {}", zone_name);
 
     // First, double-check if the zone exists in the running config.
@@ -296,7 +348,12 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> Result<bool, 
     ))?;
     let zones: Vec<&str> = match zones_msg.body() {
         Ok(b) => b,
-        Err(e) => bail!("Error decoding DBus message for active zones: {}", e),
+        Err(e) => {
+            return Err(NetavarkError::make_chain_str(
+                "Error decoding DBus message for active zones",
+                e.into(),
+            ))
+        }
     };
     for (_, &zone) in zones.iter().enumerate() {
         if zone == zone_name {
@@ -315,7 +372,12 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> Result<bool, 
     ))?;
     let zones_perm: Vec<&str> = match perm_zones_msg.body() {
         Ok(b) => b,
-        Err(e) => bail!("Error decoding DBus message for permanent zones: {}", e),
+        Err(e) => {
+            return Err(NetavarkError::make_chain_str(
+                "Error decoding DBus message for permanent zones",
+                e.into(),
+            ))
+        }
     };
     for (_, &zone) in zones_perm.iter().enumerate() {
         if zone == zone_name {
@@ -345,7 +407,7 @@ pub fn add_source_subnets_to_zone(
     conn: &Connection,
     zone_name: &str,
     subnets: Vec<types::Subnet>,
-) -> Result<(), Box<dyn Error>> {
+) -> NetavarkResult<()> {
     for net in subnets {
         // Check if subnet already exists in zone
         let subnet_zone = block_on(conn.call_method(
@@ -357,7 +419,12 @@ pub fn add_source_subnets_to_zone(
         ))?;
         let zone_string: String = match subnet_zone.body() {
             Ok(s) => s,
-            Err(e) => bail!("Error decoding DBus message for zone of subnet: {}", e),
+            Err(e) => {
+                return Err(NetavarkError::make_chain_str(
+                    "Error decoding DBus message for zone of subnet",
+                    e.into(),
+                ))
+            }
         };
         if zone_string == zone_name {
             debug!("Subnet {} already exists in zone {}", net.subnet, zone_name);
@@ -388,7 +455,7 @@ fn add_policy_if_not_exist(
     ingress_zone_name: &str,
     target: &str,
     masquerade: bool,
-) -> Result<bool, Box<dyn Error>> {
+) -> NetavarkResult<bool> {
     debug!(
         "Adding firewalld policy {} (ingress zone {}, egress zone ANY)",
         policy_name, ingress_zone_name
@@ -404,7 +471,12 @@ fn add_policy_if_not_exist(
     ))?;
     let policies: Vec<&str> = match policies_msg.body() {
         Ok(v) => v,
-        Err(e) => bail!("Error decoding policy list response: {}", e),
+        Err(e) => {
+            return Err(NetavarkError::make_chain_str(
+                "Error decoding policy list response",
+                e.into(),
+            ))
+        }
     };
     for (_, &policy) in policies.iter().enumerate() {
         if policy == policy_name {
@@ -423,7 +495,12 @@ fn add_policy_if_not_exist(
     ))?;
     let perm_policies: Vec<&str> = match perm_policies_msg.body() {
         Ok(v) => v,
-        Err(e) => bail!("Error decoding permanent policy list response: {}", e),
+        Err(e) => {
+            return Err(NetavarkError::make_chain_str(
+                "Error decoding permanent policy list response",
+                e.into(),
+            ))
+        }
     };
     for (_, &policy) in perm_policies.iter().enumerate() {
         if policy == policy_name {
