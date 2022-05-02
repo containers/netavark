@@ -84,6 +84,56 @@ impl fmt::Display for NetavarkError {
     }
 }
 
+impl PartialEq for NetavarkError {
+    fn eq(&self, other: &Self) -> bool {
+        match &*self {
+            NetavarkError::Message(s) => {
+                if let NetavarkError::Message(o) = other {
+                    return s == o;
+                }
+            }
+            NetavarkError::ExitCode(s, i) => {
+                if let NetavarkError::ExitCode(s2, i2) = other {
+                    return s == s2 && i == i2;
+                }
+            }
+            NetavarkError::Chain(s, e) => {
+                if let NetavarkError::Chain(s2, e2) = other {
+                    return s == s2 && e == e2;
+                }
+            }
+            NetavarkError::Io(e) => {
+                if let NetavarkError::Io(e2) = other {
+                    return e.to_string() == e2.to_string();
+                }
+            }
+            NetavarkError::Dbus(e) => {
+                if let NetavarkError::Dbus(e2) = other {
+                    return e.to_string() == e2.to_string();
+                }
+            }
+            NetavarkError::DbusVariant(e) => {
+                if let NetavarkError::DbusVariant(e2) = other {
+                    return e.to_string() == e2.to_string();
+                }
+            }
+            NetavarkError::Sysctl(e) => {
+                if let NetavarkError::Sysctl(e2) = other {
+                    return e.to_string() == e2.to_string();
+                }
+            }
+            NetavarkError::Serde(e) => {
+                if let NetavarkError::Serde(e2) = other {
+                    return e.to_string() == e2.to_string();
+                }
+            }
+        }
+        false
+    }
+}
+
+impl Eq for NetavarkError {}
+
 impl Error for NetavarkError {}
 
 impl From<std::io::Error> for NetavarkError {
