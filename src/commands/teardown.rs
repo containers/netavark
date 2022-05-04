@@ -38,7 +38,10 @@ impl Teardown {
         let network_options = match network::types::NetworkOptions::load(&input_file) {
             Ok(opts) => opts,
             Err(e) => {
-		return Err(NetavarkError::Message(format!("failed to load network options: {}", e)));
+                return Err(NetavarkError::Message(format!(
+                    "failed to load network options: {}",
+                    e
+                )));
             }
         };
 

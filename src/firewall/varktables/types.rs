@@ -117,7 +117,7 @@ impl<'a> VarkChain<'a> {
                         Ok(b) => b,
                         Err(e) => return Err(NetavarkError::Message(e.to_string())),
                     };
-                    if exists {
+                    if !exists {
                         match self
                             .driver
                             .insert(&self.table, &self.chain_name, &rule.rule, pos)

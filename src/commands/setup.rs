@@ -43,7 +43,7 @@ impl Setup {
         match network::validation::ns_checks(&self.network_namespace_path) {
             Ok(_) => (),
             Err(e) => {
-                return Err(NetavarkError::make_chain_str("invalid namespace path", e));
+                return Err(NetavarkError::wrap_str("invalid namespace path", e));
             }
         }
         debug!("{:?}", "Setting up...");
@@ -52,7 +52,10 @@ impl Setup {
             Ok(opts) => opts,
             Err(e) => {
                 // TODO: Convert this to a proper typed error
-                return Err(NetavarkError::Message(format!("failed to load network options: {}", e)));
+                return Err(NetavarkError::Message(format!(
+                    "failed to load network options: {}",
+                    e
+                )));
             }
         };
 

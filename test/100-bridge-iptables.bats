@@ -145,7 +145,7 @@ fw_driver=iptables
     run_in_container_netns ip link add eth0 type dummy
 
     expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
-    assert_json ".error" "failed to configure bridge and veth interface: failed while configuring network interface: from network namespace: interface eth0 already exists on container namespace" "interface exists on netns"
+    assert_json ".error" "IO error: failed to configure bridge and veth interface: failed while configuring network interface: from network namespace: interface eth0 already exists on container namespace" "interface exists on netns"
 }
 
 @test "$fw_driver - port forwarding ipv4 - tcp" {
@@ -319,5 +319,5 @@ EOF
 EOF
 
     expected_rc=1 run_netavark setup $(get_container_netns_path) <<<"$config"
-    assert_json ".error" "unsupported ipam driver someDriver" "Driver is not supported error"
+    assert_json ".error" "IO error: unsupported ipam driver someDriver" "Driver is not supported error"
 }

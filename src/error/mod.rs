@@ -31,17 +31,17 @@ struct JsonError {
 
 impl NetavarkError {
     // TODO: There has to be a better way of doing this
-    pub fn from_str(string: &str) -> NetavarkError {
+    pub fn msg_str(string: &str) -> NetavarkError {
         NetavarkError::Message(string.to_string())
     }
 
     // TODO: There has to be a better way of doing this
-    pub fn make_chain(string: String, chained: NetavarkError) -> NetavarkError {
+    pub fn wrap(string: String, chained: NetavarkError) -> NetavarkError {
         NetavarkError::Chain(string, Box::new(chained))
     }
 
     // TODO: There has to be a better way of doing this
-    pub fn make_chain_str(string: &str, chained: NetavarkError) -> NetavarkError {
+    pub fn wrap_str(string: &str, chained: NetavarkError) -> NetavarkError {
         NetavarkError::Chain(string.to_string(), Box::new(chained))
     }
 
