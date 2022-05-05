@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.0.3
+* Updated dependenciess
+* Simplified option parsing for bridge/macvlan
+* Added support for an ipam `none` driver
+
+
 ## v1.0.2
 * Fix issue [#13533](https://github.com/containers/podman/issues/13533) - only use systemd when present
 * Dropped vergen dependency
