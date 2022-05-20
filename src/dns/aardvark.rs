@@ -12,6 +12,7 @@ use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::{thread, time};
 
 const SYSTEMD_CHECK_PATH: &str = "/run/systemd/system";
 const SYSTEMD_RUN: &str = "systemd-run";
@@ -76,9 +77,8 @@ impl Aardvark {
         false
     }
 
-    pub fn start_aardvark_server(&self) -> Result<()> {
+    pub fn start_aardvark_server(&mut self) -> Result<()> {
         log::debug!("Spawning aardvark server");
-
         let mut aardvark_args = vec![];
         // only use systemd when it is booted, see sd_booted(3)
         if Path::new(SYSTEMD_CHECK_PATH).exists() && Aardvark::is_executable_in_path(SYSTEMD_RUN) {
@@ -114,6 +114,24 @@ impl Aardvark {
             // set RUST_LOG for aardvark
             .env("RUST_LOG", log::max_level().as_str())
             .spawn()?;
+
+        // Starting aardvark server is the last task for netavark so in some env
+        // setup netavark will end up exiting way sooner then aardvark process
+        // is actually ready to serve so after starting aardvark we have to wait
+        // till aardvark process is ready. If it does not shows up atleast retry
+        // 10 times with a delay of 500ms and then return.
+        let mut retry_count = 10;
+        while retry_count > 0 {
+            let aardvark_pid = self.get_aardvark_pid();
+            if aardvark_pid != -1
+                && signal::kill(Pid::from_raw(aardvark_pid), Signal::SIGHUP).is_ok()
+            {
+                break;
+            }
+            let duration_millis = time::Duration::from_millis(500);
+            thread::sleep(duration_millis);
+            retry_count -= 1;
+        }
 
         Ok(())
     }
