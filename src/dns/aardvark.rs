@@ -1,5 +1,4 @@
 use crate::network::types;
-use log::log_enabled;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::collections::HashMap;
@@ -103,19 +102,17 @@ impl Aardvark {
 
         log::debug!("start aardvark-dns: {:?}", aardvark_args);
 
-        let output = match log_enabled!(log::Level::Debug) {
-            true => Stdio::inherit(),
-            false => Stdio::null(),
-        };
-
+        // After https://github.com/containers/aardvark-dns/pull/148 this command
+        // will block till aardvark-dns's parent process returns back and let
+        // aardvark inherit all the fds.
         Command::new(&aardvark_args[0])
             .args(&aardvark_args[1..])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(output)
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
             // set RUST_LOG for aardvark
             .env("RUST_LOG", log::max_level().as_str())
-            .spawn()?;
+            .output()?;
 
         Ok(())
     }
