@@ -1,6 +1,6 @@
 //! Configures the given network namespace with provided specs
 use crate::dns::aardvark::Aardvark;
-use crate::error::NetavarkError;
+use crate::error::{NetavarkError, NetavarkResult};
 use crate::firewall;
 use crate::firewall::iptables::MAX_HASH_SIZE;
 use crate::network;
@@ -11,7 +11,6 @@ use crate::network::{core_utils, types};
 use clap::Parser;
 use log::{debug, info};
 use std::collections::HashMap;
-use std::error::Error;
 use std::fs;
 use std::net::IpAddr;
 use std::path::Path;
@@ -40,11 +39,11 @@ impl Setup {
         config_dir: String,
         aardvark_bin: String,
         rootless: bool,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> NetavarkResult<()> {
         match network::validation::ns_checks(&self.network_namespace_path) {
             Ok(_) => (),
             Err(e) => {
-                bail!("invalid namespace path: {}", e);
+                return Err(NetavarkError::wrap_str("invalid namespace path", e));
             }
         }
         debug!("{:?}", "Setting up...");
@@ -52,10 +51,11 @@ impl Setup {
         let network_options = match network::types::NetworkOptions::load(&input_file) {
             Ok(opts) => opts,
             Err(e) => {
-                return Err(Box::new(NetavarkError {
-                    error: format!("failed to load network options: {}", e),
-                    errno: 1,
-                }));
+                // TODO: Convert this to a proper typed error
+                return Err(NetavarkError::Message(format!(
+                    "failed to load network options: {}",
+                    e
+                )));
             }
         };
 

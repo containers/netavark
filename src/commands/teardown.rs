@@ -1,5 +1,5 @@
 use crate::dns::aardvark::Aardvark;
-use crate::error::NetavarkError;
+use crate::error::{NetavarkError, NetavarkResult};
 use crate::firewall::iptables::MAX_HASH_SIZE;
 use crate::network::core_utils::CoreUtils;
 use crate::network::internal_types::{
@@ -9,7 +9,6 @@ use crate::network::types::Subnet;
 use crate::{firewall, network};
 use clap::Parser;
 use log::debug;
-use std::error::Error;
 use std::net::IpAddr;
 use std::path::Path;
 
@@ -34,15 +33,15 @@ impl Teardown {
         config_dir: String,
         aardvark_bin: String,
         rootless: bool,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> NetavarkResult<()> {
         debug!("{:?}", "Tearing down..");
         let network_options = match network::types::NetworkOptions::load(&input_file) {
             Ok(opts) => opts,
             Err(e) => {
-                return Err(Box::new(NetavarkError {
-                    error: format!("failed to load network options: {}", e),
-                    errno: 1,
-                }));
+                return Err(NetavarkError::Message(format!(
+                    "failed to load network options: {}",
+                    e
+                )));
             }
         };
 
