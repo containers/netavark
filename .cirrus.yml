@@ -16,8 +16,8 @@ env:
     CARGO_TARGET_DIR: "$CIRRUS_WORKING_DIR/targets"
     # Save a little typing (path relative to $CIRRUS_WORKING_DIR)
     SCRIPT_BASE: "./contrib/cirrus"
-    FEDORA_NAME: "fedora-35"
-    IMAGE_SUFFIX: "c6118659411148800"
+    FEDORA_NAME: "fedora-36"
+    IMAGE_SUFFIX: "c6457378097856512"
     FEDORA_NETAVARK_IMAGE: "fedora-netavark-${IMAGE_SUFFIX}"
 
 
@@ -155,17 +155,6 @@ meta_task:
     clone_script: &noop mkdir -p $CIRRUS_WORKING_DIR  # source not needed
     script: /usr/local/bin/entrypoint.sh
 
-fedora36_build_task:
-    alias: fedora36_build
-    depends_on:
-      - "build"
-    container:
-        cpu: 2
-        memory: 2
-        image: quay.io/libpod/fedora36rust
-    script:
-        - cargo build
-
 ubuntu20_build_task:
     alias: ubuntu20_build
     depends_on:
@@ -176,6 +165,7 @@ ubuntu20_build_task:
         image: quay.io/libpod/ubuntu20rust
     script:
         - cargo build
+
 
 centos9_build_task:
     alias: centos9_build
@@ -188,6 +178,7 @@ centos9_build_task:
     script:
         - cargo build
 
+
 success_task:
   name: "Total success"
   alias: success
@@ -199,7 +190,6 @@ success_task:
     - "unit"
     - "integration"
     - "meta"
-    - "fedora36_build"
     - "ubuntu20_build"
     - "centos9_build"
   env:
