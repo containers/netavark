@@ -66,7 +66,8 @@ fw_driver=iptables
 
     # check iptables POSTROUTING chain
     run_in_host_netns iptables -S POSTROUTING -t nat
-    assert "${lines[1]}" =~ "-A POSTROUTING -s 10.88.0.0/16 -j NETAVARK-1D8721804F16F" "POSTROUTING container rule"
+    assert "${lines[1]}" =~ "-A POSTROUTING -j NETAVARK-HOSTPORT-MASQ" "POSTROUTING HOSTPORT-MASQ rule"
+    assert "${lines[2]}" =~ "-A POSTROUTING -s 10.88.0.0/16 -j NETAVARK-1D8721804F16F" "POSTROUTING container rule"
 
     # check iptables NETAVARK-1D8721804F16F chain
     run_in_host_netns iptables -S NETAVARK-1D8721804F16F -t nat

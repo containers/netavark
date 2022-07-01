@@ -99,21 +99,14 @@ impl Teardown {
                     );
 
                     if !network.internal {
-                        let port_bindings = network_options.port_mappings.clone();
-                        match port_bindings {
+                        match per_network_opts.static_ips.as_ref() {
                             None => {}
-                            Some(i) => {
-                                let container_ips =
-                                    per_network_opts.static_ips.as_ref().ok_or_else(|| {
-                                        std::io::Error::new(
-                                            std::io::ErrorKind::Other,
-                                            "no container ip provided",
-                                        )
-                                    })?;
+                            Some(container_ips) => {
+                                let port_bindings = network_options.port_mappings.clone();
                                 let networks = network.subnets.as_ref().ok_or_else(|| {
                                     std::io::Error::new(
                                         std::io::ErrorKind::Other,
-                                        "no network address provided",
+                                        "IP assigned but no network address provided",
                                     )
                                 })?;
 
@@ -144,7 +137,7 @@ impl Teardown {
                                 let spf = PortForwardConfig {
                                     net: network.clone(),
                                     container_id: network_options.container_id.clone(),
-                                    port_mappings: i.clone(),
+                                    port_mappings: port_bindings.unwrap_or_default(),
                                     network_name: (*net_name).clone(),
                                     network_hash_name: id_network_hash.clone(),
                                     container_ip_v4: addr_v4,
