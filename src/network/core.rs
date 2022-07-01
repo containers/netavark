@@ -127,7 +127,7 @@ impl Core {
             gw_ipaddr_clone.push(*gw_ip)
         }
         //call configure bridge
-        let _ = match core_utils::CoreUtils::configure_bridge_async(
+        match core_utils::CoreUtils::configure_bridge_async(
             br_name,
             gw_ipaddr,
             mtu_config,
@@ -142,7 +142,7 @@ impl Core {
             }
         };
 
-        let _ = match core_utils::CoreUtils::configure_veth_async(
+        match core_utils::CoreUtils::configure_veth_async(
             host_veth_name,
             container_veth_name,
             br_name,
@@ -341,7 +341,7 @@ impl Core {
         netns_ipaddr: Vec<ipnet::IpNet>,
         netns: &str,
     ) -> Result<String, std::io::Error> {
-        let _ = match core_utils::CoreUtils::configure_macvlan_async(
+        match core_utils::CoreUtils::configure_macvlan_async(
             master_ifname,
             container_macvlan,
             macvlan_mode,
