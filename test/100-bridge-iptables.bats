@@ -65,36 +65,36 @@ fw_driver=iptables
     run_in_host_netns ping -c 1 10.88.0.2
 
     # check iptables POSTROUTING chain
-    run_in_host_netns iptables -nvL POSTROUTING -t nat
-    assert "${lines[2]}" =~ "\s+[0-9]\s+[0-9]+\s+NETAVARK-1D8721804F16F  all  --  \*      \*       10\.88\.0\.0\/16         0\.0\.0\.0\/0\s+" "POSTROUTING rule"
+    run_in_host_netns iptables -S POSTROUTING -t nat
+    assert "${lines[1]}" =~ "-A POSTROUTING -s 10.88.0.0/16 -j NETAVARK-1D8721804F16F" "POSTROUTING container rule"
 
     # check iptables NETAVARK-1D8721804F16F chain
-    run_in_host_netns iptables -nvL NETAVARK-1D8721804F16F -t nat
-    assert "${lines[2]}" =~ "\s+[0-9]\s+[0-9]+\s+ACCEPT     all  --  \*      \*       0\.0\.0\.0\/0            10\.88\.0\.0\/16\s+" "NETAVARK-1D8721804F16F ACCEPT rule"
-    assert "${lines[3]}" == "    0     0 MASQUERADE  all  --  *      *       0.0.0.0/0           !224.0.0.0/4         " "NETAVARK-1D8721804F16F MASQUERADE rule"
+    run_in_host_netns iptables -S NETAVARK-1D8721804F16F -t nat
+    assert "${lines[1]}" =~ "-A NETAVARK-1D8721804F16F -d 10.88.0.0/16 -j ACCEPT" "NETAVARK-1D8721804F16F ACCEPT rule"
+    assert "${lines[2]}" == "-A NETAVARK-1D8721804F16F ! -d 224.0.0.0/4 -j MASQUERADE" "NETAVARK-1D8721804F16F MASQUERADE rule"
 
     # check FORWARD rules
-    run_in_host_netns iptables -nvL FORWARD
-    assert "${lines[2]}" == "    0     0 NETAVARK_FORWARD  all  --  *      *       0.0.0.0/0            0.0.0.0/0            /* netavark firewall plugin rules */" "FORWARD rule"
-    run_in_host_netns iptables -nvL NETAVARK_FORWARD
-    assert "${lines[2]}" == "    0     0 ACCEPT     all  --  *      *       0.0.0.0/0            10.88.0.0/16         ctstate RELATED,ESTABLISHED" "NETAVARK_FORWARD rule 1"
-    assert "${lines[3]}" == "    0     0 ACCEPT     all  --  *      *       10.88.0.0/16         0.0.0.0/0           " "NETAVARK_FORWARD rule 2"
+    run_in_host_netns iptables -S FORWARD
+    assert "${lines[1]}" == "-A FORWARD -m comment --comment \"netavark firewall plugin rules\" -j NETAVARK_FORWARD" "FORWARD rule"
+    run_in_host_netns iptables -S NETAVARK_FORWARD
+    assert "${lines[1]}" == "-A NETAVARK_FORWARD -d 10.88.0.0/16 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT" "NETAVARK_FORWARD rule 1"
+    assert "${lines[2]}" == "-A NETAVARK_FORWARD -s 10.88.0.0/16 -j ACCEPT" "NETAVARK_FORWARD rule 2"
 
     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
 
     # now check that iptables rules are gone
-    run_in_host_netns iptables -nvL
+    run_in_host_netns iptables -S
 
     # check FORWARD rules
-    run_in_host_netns iptables -nvL FORWARD
-    assert "${lines[2]}" == "    0     0 NETAVARK_FORWARD  all  --  *      *       0.0.0.0/0            0.0.0.0/0            /* netavark firewall plugin rules */" "FORWARD rule"
-    run_in_host_netns iptables -nvL NETAVARK_FORWARD
+    run_in_host_netns iptables -S FORWARD
+    assert "${lines[1]}" == "-A FORWARD -m comment --comment \"netavark firewall plugin rules\" -j NETAVARK_FORWARD" "FORWARD rule"
     # rule 1 should be DROP for any existing networks
-    assert "${lines[2]}" == "" "NETAVARK_FORWARD rule 1 is empty"
-    assert "${lines[3]}" == "" "NETAVARK_FORWARD rule 2 is empty"
+    run_in_host_netns iptables -S NETAVARK_FORWARD
+    assert "${lines[1]}" == "" "NETAVARK_FORWARD rule 1 is empty"
+    assert "${lines[2]}" == "" "NETAVARK_FORWARD rule 2 is empty"
 
     # check POSTROUTING nat rules
-    run_in_host_netns iptables -nvL POSTROUTING -t nat
+    run_in_host_netns iptables -S POSTROUTING -t nat
     assert "${lines[2]}" == "" "POSTROUTING rule is empty"
 
     # NETAVARK-1D8721804F16F chain should not exists
