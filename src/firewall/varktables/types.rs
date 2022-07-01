@@ -340,14 +340,15 @@ pub fn get_port_forwarding_chains<'a>(
     );
 
     // NETAVARK_HOSTPORT_DNAT
-    // Determination to create the chain is done only
-    // if there are port mappings
+    // We need to create that chain for prerouting/output chain rules
+    // using it, even if there are no port mappings.
     let mut netavark_hostport_dn_chain = VarkChain::new(
         conn,
         NAT.to_string(),
         NETAVARK_HOSTPORT_DNAT.to_string(),
         None,
     );
+    netavark_hostport_dn_chain.create = true;
 
     // Setup one-off rules that have nothing to do with ports
     // PREROUTING
@@ -409,7 +410,6 @@ pub fn get_port_forwarding_chains<'a>(
 
     //  Determine if we need to create chains
     if !pfwd.port_mappings.is_empty() {
-        netavark_hostport_dn_chain.create = true;
         netavark_hashed_dn_chain.create = true;
     }
 
