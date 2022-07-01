@@ -34,14 +34,17 @@ pub struct Aardvark {
     pub rootless: bool,
     // path to the aardvark-dns binary
     pub aardvark_bin: String,
+    // port to bind to
+    pub port: String,
 }
 
 impl Aardvark {
-    pub fn new(config: String, rootless: bool, aardvark_bin: String) -> Self {
+    pub fn new(config: String, rootless: bool, aardvark_bin: String, port: u16) -> Self {
         Aardvark {
             config,
             rootless,
             aardvark_bin,
+            port: port.to_string(),
         }
     }
 
@@ -94,7 +97,7 @@ impl Aardvark {
             "--config",
             &self.config,
             "-p",
-            "53",
+            &self.port,
             "run",
         ]);
 

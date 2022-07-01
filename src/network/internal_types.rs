@@ -55,6 +55,9 @@ pub struct PortForwardConfig {
     // subnet associated with the ipv6 address.
     // Must be set if the v6 address is set.
     pub subnet_v6: Option<Subnet>,
+    // port used by DNS that should create forwarding rules
+    // forwarding is not setup if this is 53.
+    pub dns_port: u16,
 }
 
 /// IPAMAddresses is used to pass ipam information around

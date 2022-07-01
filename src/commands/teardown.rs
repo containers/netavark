@@ -9,6 +9,7 @@ use crate::network::types::Subnet;
 use crate::{firewall, network};
 use clap::Parser;
 use log::debug;
+use std::env;
 use std::net::IpAddr;
 use std::path::Path;
 
@@ -45,11 +46,25 @@ impl Teardown {
             }
         };
 
+        let dns_port = match env::var("NETAVARK_DNS_PORT") {
+            Ok(port_string) => match port_string.parse() {
+                Ok(port) => port,
+                Err(e) => {
+                    return Err(NetavarkError::Message(format!(
+                        "Invalid NETAVARK_DNS_PORT {}: {}",
+                        port_string, e
+                    )))
+                }
+            },
+            Err(_) => 53,
+        };
+
         if Path::new(&aardvark_bin).exists() {
             // stop dns server first before netavark clears the interface
             let path = Path::new(&config_dir).join("aardvark-dns");
             if let Ok(path_string) = path.into_os_string().into_string() {
-                let mut aardvark_interface = Aardvark::new(path_string, rootless, aardvark_bin);
+                let mut aardvark_interface =
+                    Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
                 if let Err(er) =
                     aardvark_interface.delete_from_netavark_entries(network_options.clone())
                 {
@@ -144,6 +159,7 @@ impl Teardown {
                                     subnet_v4: net_v4,
                                     container_ip_v6: addr_v6,
                                     subnet_v6: net_v6,
+                                    dns_port: if network.dns_enabled { dns_port } else { 53 },
                                 };
                                 let td = TeardownPortForward {
                                     config: spf,

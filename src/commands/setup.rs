@@ -11,6 +11,7 @@ use crate::network::{core_utils, types};
 use clap::Parser;
 use log::{debug, info};
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::net::IpAddr;
 use std::path::Path;
@@ -69,6 +70,19 @@ impl Setup {
         core_utils::CoreUtils::apply_sysctl_value(IPV4_FORWARD, "1")?;
 
         let mut response: HashMap<String, types::StatusBlock> = HashMap::new();
+
+        let dns_port = match env::var("NETAVARK_DNS_PORT") {
+            Ok(port_string) => match port_string.parse() {
+                Ok(port) => port,
+                Err(e) => {
+                    return Err(NetavarkError::Message(format!(
+                        "Invalid NETAVARK_DNS_PORT {}: {}",
+                        port_string, e
+                    )))
+                }
+            },
+            Err(_) => 53,
+        };
 
         // Perform per-network setup
         for (net_name, network) in network_options.network_info.iter() {
@@ -186,6 +200,7 @@ impl Setup {
                                 subnet_v4: net_v4,
                                 container_ip_v6: addr_v6,
                                 subnet_v6: net_v6,
+                                dns_port: if network.dns_enabled { dns_port } else { 53 },
                             };
                             // Need to enable sysctl localnet so that traffic can pass
                             // through localhost to containers
@@ -255,7 +270,8 @@ impl Setup {
                 }
             };
 
-            let mut aardvark_interface = Aardvark::new(path_string, rootless, aardvark_bin);
+            let mut aardvark_interface =
+                Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
 
             if let Err(er) = aardvark_interface.commit_netavark_entries(
                 network_options.container_name,
