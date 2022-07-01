@@ -51,7 +51,7 @@ build_task:
     # all PRs & branches will share caches with other PRs and branches
     # for a given $DEST_BRANCH and vX value.  Adjust vX if cache schema
     # changes.
-    fingerprint_key: "cargo_v1_${DEST_BRANCH}"
+    fingerprint_key: "cargo_v2_${DEST_BRANCH}_amd64"
     # Required to be set explicitly since fingerprint_key is also set
     reupload_on_changes: true
   targets_cache: &targets_cache
@@ -60,14 +60,14 @@ build_task:
     # contexts.  For example, two PRs that happen to coincidentally change
     # and use cache.  Adjust vX if cache schema changes.
     folder: "$CARGO_TARGET_DIR"
-    fingerprint_key: "targets_v1_${CIRRUS_BUILD_ID}" # Cache only within same build
+    fingerprint_key: "targets_v2_${CIRRUS_TAG}${DEST_BRANCH}${CIRRUS_PR}_amd64" # Cache only within same tag, branch, or PR (branch will be 'pull/#')
     reupload_on_changes: true
   bin_cache: &bin_cache
     # This simply prevents rebuilding bin/netavark for every subsequent task.
     folder: "$CIRRUS_WORKING_DIR/bin"
     # Avoid binary pollution by scoping this to only this specific build.
     # Adjust vX if cache schema changes.
-    fingerprint_key: "bin_v1_${CIRRUS_BUILD_ID}" # Cache only within same build
+    fingerprint_key: "bin_v2_${CIRRUS_TAG}${DEST_BRANCH}${CIRRUS_PR}_amd64" # Cache only within same tag, branch, or PR (branch will be 'pull/#')
     reupload_on_changes: true
   setup_script: &setup "$SCRIPT_BASE/setup.sh"
   main_script: &main "$SCRIPT_BASE/runner.sh $CIRRUS_TASK_NAME"
