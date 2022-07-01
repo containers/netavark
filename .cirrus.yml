@@ -74,6 +74,26 @@ build_task:
   upload_caches: [ "cargo", "targets", "bin" ]
 
 
+build_cross_task:
+  alias: "build_cross"
+  cargo_cache:
+    <<: *cargo_cache
+    # Don't confuse cache architectures, bad things will happen.
+    fingerprint_key: "cargo_v2_${DEST_BRANCH}_arm64"
+  targets_cache:
+    <<: *targets_cache
+    fingerprint_key: "targets_v2_${CIRRUS_TAG}${DEST_BRANCH}${CIRRUS_PR}_arm64" # Cache only within same tag, branch, or PR (branch will be 'pull/#')
+  bin_cache:
+    <<: *bin_cache
+    fingerprint_key: "bin_v2_${CIRRUS_TAG}${DEST_BRANCH}${CIRRUS_PR}_arm64" # Cache only within same tag, branch, or PR (branch will be 'pull/#')
+  setup_script: *setup
+  main_script: *main
+  # Upload cross-compiled binary for collection by success task
+  # https://cirrus-ci.org/guide/writing-tasks/#artifacts-instruction
+  binary_artifacts:
+    path: ./bin/netavark*
+
+
 validate_task:
   alias: "validate"
   depends_on:
@@ -105,16 +125,6 @@ verify_vendor_task:
 
 unit_task:
   alias: "unit"
-  depends_on:
-    - "build"
-  cargo_cache: *ro_cargo_cache
-  targets_cache: *ro_targets_cache
-  bin_cache: *ro_bin_cache
-  setup_script: *setup
-  main_script: *main
-
-build_cross_task:
-  alias: "build_cross"
   depends_on:
     - "build"
   cargo_cache: *ro_cargo_cache
@@ -198,6 +208,10 @@ success_task:
   bin_cache: *ro_bin_cache
   # The paths used for uploaded artifacts are relative here and in Cirrus
   script:
+    # Cross-compiled binary artifact is required by other CI systems
+    - curl --fail --location -O --url https://api.cirrus-ci.com/v1/artifact/build/${CIRRUS_BUILD_ID}/build_cross/binary.zip
+    - unzip binary.zip
+    - rm -f binary.zip
     - mv bin/* ./
     - rm -rf bin
   # Upload tested binary for consumption downstream

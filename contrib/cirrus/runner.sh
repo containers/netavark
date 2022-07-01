@@ -41,6 +41,7 @@ _run_validate() {
 }
 
 _run_build_cross() {
+    make build_cross debug=1
     make build_cross
 }
 
