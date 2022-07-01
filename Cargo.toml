@@ -3,7 +3,12 @@ name = "netavark"
 version = "1.0.4-dev"
 edition = "2018"
 authors = ["github.com/containers"]
+license = "Apache-2.0"
+readme = "README.md"
 description = "A container network stack"
+homepage = "https://github.com/containers/netavark"
+repository = "https://github.com/containers/netavark"
+categories = ["containers", "networking", "podman"]
 exclude = ["/.cirrus.yml", "/.github/*", "/hack/*"]
 build = "build.rs"
 
