@@ -326,36 +326,35 @@ EOF
 @test "$fw_driver - isolate networks" {
     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
     result1="$output"
-    assert_json "$result1" 'has("podman")' == "true" "object key exists"
 
     create_container_ns
-    
+
     run_netavark --file ${TESTSDIR}/testfiles/connectbridge.json setup $(get_container_netns_path 1)
     result2="$output"
-    assert_json "$result2" 'has("podman1")' == "true" "object key exists"
 
-    # check iptables POSTROUTING chain
-    run_in_host_netns iptables -nvL NETAVARK_ISOLATION    
+    # check iptables NETAVARK_ISOLATION chain
+    run_in_host_netns iptables -nvL NETAVARK_ISOLATION
     assert "${lines[2]}" =~ "   0     0 DROP       all  --  podman1 !podman1  0.0.0.0/0            0.0.0.0/0    "
 
     run_in_host_netns iptables -nvL FORWARD
     assert "${lines[2]}" =~ "NETAVARK_ISOLATION"
 
-    # This should fail, right?
-    expected_rc=1 run_in_container_netns 1 ping -c 1 10.88.0.2
+    # make sure the isolated network cannot reach the other network
+    expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 10.88.0.2
 
     run_netavark --file ${TESTSDIR}/testfiles/connectbridge.json teardown $(get_container_netns_path 1)
-     
+
     run_netavark --file ${TESTSDIR}/testfiles/connectbridge.json setup $(get_container_netns_path)
     result2="$output"
     assert_json "$result2" 'has("podman1")' == "true" "object key exists"
 
-    # this should not fail
-    run_in_container_netns ping -c 1 10.88.0.2
+    # ping from the not isolated container to isolated should work
+    run_in_container_netns ping -c 1 10.89.0.2
 
     run_netavark --file ${TESTSDIR}/testfiles/connectbridge.json teardown $(get_container_netns_path)
     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
 
-
-
+    # check that isolation rule is deleted
+    run_in_host_netns iptables -nvL NETAVARK_ISOLATION
+    assert "${lines[2]}" == "" "NETAVARK_ISOLATION chain should be empty"
 }

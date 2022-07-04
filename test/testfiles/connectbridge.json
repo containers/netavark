@@ -5,13 +5,13 @@
         "podman1": {
             "interface_name": "eth1",
             "static_ips": [
-                "10.88.1.3"
+                "10.89.0.2"
             ]
         }
     },
     "network_info": {
         "podman1": {
-            "dns_enabled": true,
+            "dns_enabled": false,
             "driver": "bridge",
             "id": "f3ac3c903b76f20e8a122b1eb2ba393ab2519ba516626be5b490b66dc96b54b7",
             "internal": false,
@@ -20,8 +20,8 @@
             "network_interface": "podman1",
             "subnets": [
                 {
-                    "gateway": "10.88.1.2",
-                    "subnet": "10.88.1.0/22"
+                    "gateway": "10.89.0.1",
+                    "subnet": "10.89.0.0/24"
                 }
             ],
             "options": {
