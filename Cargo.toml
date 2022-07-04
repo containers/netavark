@@ -42,4 +42,4 @@ sha2 = "0.10.1"
 netlink-packet-route = "0.12"
 
 [build-dependencies]
-chrono = "*"
+chrono = "0.4.7"
