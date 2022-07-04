@@ -12,11 +12,15 @@ export RUST_BACKTRACE=full
 # export RUST_LOG=netavark=debug
 
 HOST_NS_PID=
-CONTAINER_NS_PID=
+CONTAINER_NS_PIDS=()
+
+function create_container_ns() {
+    CONTAINER_NS_PIDS+=("$(create_netns)")
+}
 
 function basic_setup() {
     HOST_NS_PID=$(create_netns)
-    CONTAINER_NS_PID=$(create_netns)
+    create_container_ns
 
     # make sure to set DBUS_SYSTEM_BUS_ADDRESS to an empty value
     # netavark will try to use firewalld connection when possible
@@ -33,8 +37,9 @@ function basic_setup() {
 
 function basic_teardown() {
     kill -9 $HOST_NS_PID
-    kill -9 $CONTAINER_NS_PID
-
+    for i in "${!CONTAINER_NS_PIDS[@]}"; do
+        kill -9 "${CONTAINER_NS_PIDS[$i]}"
+    done
     rm -rf "$NETAVARK_TMPDIR"
 }
 
@@ -55,7 +60,11 @@ function create_netns() {
 }
 
 function get_container_netns_path() {
-    echo /proc/$CONTAINER_NS_PID/ns/net
+    local which="0"
+    if [[ $# -eq 1 ]]; then
+        which=$1
+    fi 
+    echo /proc/"${CONTAINER_NS_PIDS[$which]}"/ns/net
 }
 
 ################
@@ -74,13 +83,18 @@ function run_netavark() {
 ################
 #
 function run_in_container_netns() {
-    run_helper nsenter -n -t $CONTAINER_NS_PID "$@"
+    local i="0"
+    if [[ $1 -eq "1" ]]; then
+        i=$1
+        shift 1
+    fi
+    run_helper nsenter -n -t "${CONTAINER_NS_PIDS[$i]}" "$@"
+
 }
 
 ################
-#  run_in_host_netns  #  Run args in host netns
+#   run_in_host_netns  #  Run args in host netns
 ################
-#
 function run_in_host_netns() {
     run_helper nsenter -n -t $HOST_NS_PID "$@"
 }
@@ -471,7 +485,7 @@ EOF
                 fi
 
                 if is_ipv4 "$connect_ip"; then
-                    run_nc_test "-4 $nc_proto_arg" $cport $connect_ip $hport
+                    run_nc_test "0" "-4 $nc_proto_arg" $cport $connect_ip $hport
                 fi
             fi
 
@@ -483,7 +497,7 @@ EOF
                 fi
 
                 if is_ipv6 "$connect_ip"; then
-                    run_nc_test "-6 $nc_proto_arg" $cport $connect_ip $hport
+                    run_nc_test "0" "-6 $nc_proto_arg" $cport $connect_ip $hport
                 fi
             fi
 
@@ -522,10 +536,11 @@ function is_ipv4() {
 # $3 == connection ip, the ip address which is used by the client nc to connect to the server
 # $4 == host port, the nc client will connect to this port
 function run_nc_test() {
-    local nc_common_args=$1
-    local container_port=$2
-    local connect_ip=$3
-    local host_port=$4
+    local container_ns=$1
+    local nc_common_args=$2
+    local container_port=$3
+    local connect_ip=$4
+    local host_port=$5
 
     # for some reason we have to attach STDIN to the server only for the sctp proto
     # otherwise it will just exit for unknown reasons. However we must not add STDIN
@@ -535,10 +550,9 @@ function run_nc_test() {
         stdin=/dev/zero
     fi
 
-    # start the server in the container
-    nsenter -n -t $CONTAINER_NS_PID timeout --foreground -v --kill=10 5 \
+    nsenter -n -t "${CONTAINER_NS_PIDS[$container_ns]}" timeout --foreground -v --kill=10 5 \
         nc $nc_common_args -l -p $container_port &>"$NETAVARK_TMPDIR/nc-out" <$stdin &
-
+    
     data=$(random_string)
     run_in_host_netns nc $nc_common_args $connect_ip $host_port <<<"$data"
 

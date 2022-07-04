@@ -98,7 +98,7 @@ function teardown() {
     run_in_host_netns sh -c "echo 0 > /proc/sys/net/ipv6/conf/default/accept_dad"
     #run_in_container_netns sh -c "echo 0 > /proc/sys/net/ipv6/conf/default/accept_dad"
 
-    #run_in_host_netns sh -c "echo 0 > /proc/sys/net/ipv6/conf/default/accept_ra"
+    # run_in_host_netns sh -c "echo 0 > /proc/sys/net/ipv6/conf/default/accept_ra"
 
     run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge.json setup $(get_container_netns_path)
     result="$output"

@@ -17,6 +17,8 @@ pub struct SetupNetwork {
     pub net: types::Network,
     // hash id for the network
     pub network_hash_name: String,
+    // isolation determines whether the network can communicate with others outside of its interface
+    pub isolation: bool,
 }
 
 #[derive(Clone, Debug)]

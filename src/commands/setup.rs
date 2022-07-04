@@ -117,10 +117,29 @@ impl Setup {
                         };
                         continue;
                     }
+
+                    // parse isolation option here so we can avoid unwrapping and storing it unecessarily
+                    let isolation_config =
+                        match network.options.as_ref().and_then(|map| map.get("isolate")) {
+                            Some(isolation) => match isolation.parse() {
+                                Ok(isolation) => isolation,
+                                Err(err) => {
+                                    return Err(std::io::Error::new(
+                                        std::io::ErrorKind::Other,
+                                        format!("could not parse isolation option: {}", err),
+                                    )
+                                    .into())
+                                }
+                            },
+                            // default is to not isolate podman networks
+                            None => false,
+                        };
+
                     let id_network_hash = CoreUtils::create_network_hash(net_name, MAX_HASH_SIZE);
                     let sn = SetupNetwork {
                         net: network.clone(),
                         network_hash_name: id_network_hash.clone(),
+                        isolation: isolation_config,
                     };
                     firewall_driver.setup_network(sn)?;
                     let port_bindings = network_options.port_mappings.clone();
