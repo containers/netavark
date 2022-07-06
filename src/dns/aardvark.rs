@@ -296,27 +296,22 @@ impl Aardvark {
     pub fn delete_entry(&mut self, container_id: String, network_name: String) -> Result<()> {
         let path = Path::new(&self.config).join(network_name);
         let file_content = fs::read_to_string(&path)?;
-        let lines: Vec<&str> = file_content.split('\n').collect();
+        let lines: Vec<&str> = file_content.split_terminator('\n').collect();
 
-        let mut idx = 1;
+        let mut idx = 0;
         let mut file = File::create(&path)?;
 
-        for line in &lines {
+        for line in lines {
             if line.contains(&container_id) {
-                if lines.len() <= 3 {
-                    // delete the file and return
-                    // since there is nothing in the network
-                    fs::remove_file(&path)?;
-                    return Ok(());
-                }
-                idx += 1;
                 continue;
             }
             file.write_all(line.as_bytes())?;
-            if idx < lines.len() {
-                file.write_all(b"\n")?;
-            }
+            file.write_all(b"\n")?;
             idx += 1;
+        }
+        // nothing left in file (only header), remove it
+        if idx <= 1 {
+            fs::remove_file(&path)?
         }
         Ok(())
     }
