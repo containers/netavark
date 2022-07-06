@@ -111,6 +111,9 @@ impl Setup {
                         network,
                         &self.network_namespace_path,
                     )?;
+                    // get DNS server IPs
+                    let dns_server_ips: Vec<IpAddr> =
+                        status_block.dns_server_ips.clone().unwrap_or_default();
                     response.insert(net_name.to_owned(), status_block);
                     if network.internal {
                         match &network.network_interface {
@@ -200,7 +203,8 @@ impl Setup {
                                 subnet_v4: net_v4,
                                 container_ip_v6: addr_v6,
                                 subnet_v6: net_v6,
-                                dns_port: if network.dns_enabled { dns_port } else { 53 },
+                                dns_port,
+                                dns_server_ips,
                             };
                             // Need to enable sysctl localnet so that traffic can pass
                             // through localhost to containers

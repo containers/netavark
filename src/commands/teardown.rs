@@ -101,11 +101,14 @@ impl Teardown {
                             )
                         })?;
                     //Remove container interfaces
-                    network::core::Core::remove_interface_per_podman_network(
+                    let status_block = network::core::Core::remove_interface_per_podman_network(
                         per_network_opts,
                         network,
                         &self.network_namespace_path,
                     )?;
+                    // get DNS server IPs
+                    let dns_server_ips: Vec<IpAddr> =
+                        status_block.dns_server_ips.unwrap_or_default();
                     // Teardown basic firewall port forwarding
 
                     let id_network_hash = network::core_utils::CoreUtils::create_network_hash(
@@ -159,7 +162,8 @@ impl Teardown {
                                     subnet_v4: net_v4,
                                     container_ip_v6: addr_v6,
                                     subnet_v6: net_v6,
-                                    dns_port: if network.dns_enabled { dns_port } else { 53 },
+                                    dns_port,
+                                    dns_server_ips,
                                 };
                                 let td = TeardownPortForward {
                                     config: spf,

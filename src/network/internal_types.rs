@@ -58,6 +58,8 @@ pub struct PortForwardConfig {
     // port used by DNS that should create forwarding rules
     // forwarding is not setup if this is 53.
     pub dns_port: u16,
+    // dns servers IPs where forwarding rule to port 53 from dns_port are necessary
+    pub dns_server_ips: Vec<IpAddr>,
 }
 
 /// IPAMAddresses is used to pass ipam information around

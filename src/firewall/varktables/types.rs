@@ -415,16 +415,19 @@ pub fn get_port_forwarding_chains<'a>(
 
     // Create redirection for aardvark-dns on non-standard port
     if pfwd.dns_port != 53 {
-        if let Some(gateway) = network_address.gateway {
-            let mut gateway_ip_value = gateway.to_string();
+        for dns_ip in &pfwd.dns_server_ips {
+            if is_ipv6 != dns_ip.is_ipv6() {
+                continue;
+            }
+            let mut ip_value = dns_ip.to_string();
             if is_ipv6 {
-                gateway_ip_value = format!("[{}]", gateway_ip_value)
+                ip_value = format!("[{}]", ip_value)
             }
             netavark_hostport_dn_chain.create = true;
             netavark_hostport_dn_chain.build_rule(VarkRule::new(
                 format!(
                     "-j {} -d {} -p {} --dport {} --to-destination {}:{}",
-                    DNAT, gateway, "udp", 53, gateway_ip_value, pfwd.dns_port
+                    DNAT, dns_ip, "udp", 53, ip_value, pfwd.dns_port
                 ),
                 Some(TeardownPolicy::OnComplete),
             ));
