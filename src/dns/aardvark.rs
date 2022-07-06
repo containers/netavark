@@ -19,8 +19,7 @@ const SYSTEMD_RUN: &str = "systemd-run";
 #[derive(Clone, Debug)]
 pub struct AardvarkEntry {
     pub network_name: String,
-    pub network_gateway_v4: String,
-    pub network_gateway_v6: String,
+    pub network_gateway: String,
     pub container_id: String,
     pub container_ip_v4: String,
     pub container_ip_v6: String,
@@ -144,9 +143,24 @@ impl Aardvark {
 
         Ok(())
     }
-    pub fn commit_entries(&mut self, entries: Vec<AardvarkEntry>) -> Result<()> {
-        for entry in entries {
-            match self.commit_entry(entry.clone()) {
+    pub fn commit_entries(&self, entries: Vec<AardvarkEntry>) -> Result<()> {
+        for entry in &entries {
+            let path = Path::new(&self.config).join(&entry.network_name);
+            if !path.exists() {
+                // create file with all gateways IPs first, as that info will
+                // not be available to commit_entry()
+                let mut file = OpenOptions::new().write(true).create(true).open(&path)?;
+                let gateways = entries
+                    .clone()
+                    .into_iter()
+                    .filter(|e| e.network_name == entry.network_name)
+                    .map(|e| e.network_gateway)
+                    .collect::<Vec<String>>()
+                    .join(",");
+                file.write_all(gateways.as_bytes())?;
+                file.write_all("\n".as_bytes())?;
+            }
+            match self.commit_entry(entry) {
                 Err(er) => {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -160,26 +174,9 @@ impl Aardvark {
         Ok(())
     }
 
-    pub fn commit_entry(&mut self, entry: AardvarkEntry) -> Result<()> {
-        let mut data: String;
-        let path = Path::new(&self.config).join(entry.network_name);
-        let file_exists = path.exists();
-        let mut file = OpenOptions::new().append(true).create(true).open(&path)?;
-        // check if this is the first container in this network
-        if !file_exists {
-            // write first line as gateway ip
-            if !entry.network_gateway_v4.is_empty() && !entry.network_gateway_v6.is_empty() {
-                data = format!(
-                    "{},{}\n",
-                    entry.network_gateway_v4, entry.network_gateway_v6
-                );
-            } else if !entry.network_gateway_v4.is_empty() {
-                data = format!("{}\n", entry.network_gateway_v4);
-            } else {
-                data = format!("{}\n", entry.network_gateway_v6);
-            }
-            file.write_all(data.as_bytes())?;
-        }
+    fn commit_entry(&self, entry: &AardvarkEntry) -> Result<()> {
+        let path = Path::new(&self.config).join(&entry.network_name);
+        let mut file = OpenOptions::new().append(true).open(&path)?;
 
         let container_names = entry
             .container_name
@@ -187,7 +184,7 @@ impl Aardvark {
             .map(|x| x.to_string())
             .collect::<Vec<_>>()
             .join(",");
-        data = format!(
+        let data = format!(
             "{} {} {} {}\n",
             entry.container_id, entry.container_ip_v4, entry.container_ip_v6, container_names
         );
@@ -235,8 +232,7 @@ impl Aardvark {
                                 match interface.subnets {
                                     Some(subnets) => {
                                         for subnet in subnets {
-                                            let mut network_gateway_v4: String = "".to_string();
-                                            let mut network_gateway_v6: String = "".to_string();
+                                            let mut network_gateway: String = "".to_string();
                                             let mut container_ip_v4: String = "".to_string();
                                             let mut container_ip_v6: String = "".to_string();
                                             let container_ip = subnet.ipnet.addr();
@@ -246,11 +242,7 @@ impl Aardvark {
                                             };
 
                                             if !gateway.is_unspecified() {
-                                                if gateway.is_ipv4() {
-                                                    network_gateway_v4 = gateway.to_string();
-                                                } else {
-                                                    network_gateway_v6 = gateway.to_string();
-                                                }
+                                                network_gateway = gateway.to_string();
                                             }
 
                                             if container_ip.is_ipv4() {
@@ -272,8 +264,7 @@ impl Aardvark {
 
                                             result.push(AardvarkEntry {
                                                 network_name: network_name.clone(),
-                                                network_gateway_v4,
-                                                network_gateway_v6,
+                                                network_gateway,
                                                 container_id: container_id.clone(),
                                                 container_ip_v6,
                                                 container_ip_v4,
