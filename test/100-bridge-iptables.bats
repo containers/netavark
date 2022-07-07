@@ -149,6 +149,39 @@ fw_driver=iptables
     run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge.json teardown $(get_container_netns_path)
 }
 
+@test "$fw_driver - dual stack dns with alt port" {
+    dns_port=$(random_port)
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json setup $(get_container_netns_path)
+    run_in_host_netns iptables -t nat -S NETAVARK-HOSTPORT-DNAT
+    assert "${lines[1]}" == "-A NETAVARK-HOSTPORT-DNAT -d 10.89.3.1/32 -p udp -m udp --dport 53 -j DNAT --to-destination 10.89.3.1:$dns_port" "ipv4 dns forward rule"
+    run_in_host_netns ip6tables -t nat -S NETAVARK-HOSTPORT-DNAT
+    assert "${lines[1]}" == "-A NETAVARK-HOSTPORT-DNAT -d fd10:88:a::1/128 -p udp -m udp --dport 53 -j DNAT --to-destination [fd10:88:a::1]:$dns_port" "ipv6 dns forward rule"
+
+    # test redirection actually works -- we can't use run_nc_test
+    # we _also_ cannot use run_in_host_ns for this command as it echoes
+    # the command back, and we only want nc reply...
+    nsenter -n -t $HOST_NS_PID timeout --foreground -v --kill=10 5 \
+        nc -4 --udp -l -p "$dns_port" &>"$NETAVARK_TMPDIR/nc-out" </dev/null &
+    data=$(random_string)
+    run_in_container_netns nc -4 --udp 10.89.3.1 53 <<<"$data"
+    got=$(cat "$NETAVARK_TMPDIR/nc-out")
+    assert "$got" == "$data" "ncat received data"
+
+    # same for ipv6
+    nsenter -n -t $HOST_NS_PID timeout --foreground -v --kill=10 5 \
+        nc -6 --udp -l -p "$dns_port" &>"$NETAVARK_TMPDIR/nc-out" </dev/null &
+    data=$(random_string)
+    run_in_container_netns nc -6 --udp fd10:88:a::1 53 <<<"$data"
+    got=$(cat "$NETAVARK_TMPDIR/nc-out")
+    assert "$got" == "$data" "ncat received data"
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json teardown $(get_container_netns_path)
+    run_in_host_netns iptables -t nat -S NETAVARK-HOSTPORT-DNAT
+    assert "${#lines[@]}" = 1 "too many v4 NETAVARK_HOSTPORT-DNAT rules after teardown"
+    run_in_host_netns ip6tables -t nat -S NETAVARK-HOSTPORT-DNAT
+    assert "${#lines[@]}" = 1 "too many v6 NETAVARK_HOSTPORT-DNAT rules after teardown"
+}
+
 @test "$fw_driver - check error message from netns thread" {
     # create interface in netns to force error
     run_in_container_netns ip link add eth0 type dummy
