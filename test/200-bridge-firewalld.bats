@@ -134,6 +134,39 @@ function teardown() {
     run_in_host_netns ping6 -c 1 fd10:88:a::2
 }
 
+@test "$fw_driver - dual stack dns with alt port" {
+    dns_port=$(random_port)
+    NETAVARK_FW=firewalld NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json setup $(get_container_netns_path)
+
+    # firewall-cmd --list-rich-rules does not guarantee order, use sort
+    run_in_host_netns sh -c 'firewall-cmd --policy netavark_portfwd --list-rich-rules | sort'
+    assert "${lines[0]}" =~ "rule family=\"ipv4\" destination address=\"10.89.3.1\" forward-port port=\"53\" protocol=\"udp\" to-port=\"$dns_port\" to-addr=\"10.89.3.1\"" "ipv4 dns redirection"
+    assert "${lines[1]}" =~ "rule family=\"ipv6\" destination address=\"fd10:88:a::1\" forward-port port=\"53\" protocol=\"udp\" to-port=\"$dns_port\" to-addr=\"fd10:88:a::1\"" "ipv6 dns redirection"
+    assert "${#lines[@]}" = 2 "too many rich rules"
+
+    # test redirection actually works -- we can't use run_nc_test
+    # we _also_ cannot use run_in_host_ns for this command as it echoes
+    # the command back, and we only want nc reply...
+    nsenter -n -t $HOST_NS_PID timeout --foreground -v --kill=10 5 \
+        nc -4 --udp -l -p "$dns_port" &>"$NETAVARK_TMPDIR/nc-out" </dev/null &
+    data=$(random_string)
+    run_in_container_netns nc -4 --udp 10.89.3.1 53 <<<"$data"
+    got=$(cat "$NETAVARK_TMPDIR/nc-out")
+    assert "$got" == "$data" "ncat received data"
+
+    # same for ipv6
+    nsenter -n -t $HOST_NS_PID timeout --foreground -v --kill=10 5 \
+        nc -6 --udp -l -p "$dns_port" &>"$NETAVARK_TMPDIR/nc-out" </dev/null &
+    data=$(random_string)
+    run_in_container_netns nc -6 --udp fd10:88:a::1 53 <<<"$data"
+    got=$(cat "$NETAVARK_TMPDIR/nc-out")
+    assert "$got" == "$data" "ncat received data"
+
+    NETAVARK_FW=firewalld NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json teardown $(get_container_netns_path)
+    run_in_host_netns firewall-cmd --policy netavark_portfwd --list-rich-rules
+    assert "${#lines[@]}" = 0 "rich rules did not get removed on teardown"
+}
+
 @test "$fw_driver - check error message from netns thread" {
     # create interface in netns to force error
     run_in_container_netns ip link add eth0 type dummy
