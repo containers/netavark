@@ -68,18 +68,23 @@ fw_driver=iptables
     run_in_host_netns iptables -S POSTROUTING -t nat
     assert "${lines[1]}" =~ "-A POSTROUTING -j NETAVARK-HOSTPORT-MASQ" "POSTROUTING HOSTPORT-MASQ rule"
     assert "${lines[2]}" =~ "-A POSTROUTING -s 10.88.0.0/16 -j NETAVARK-1D8721804F16F" "POSTROUTING container rule"
+    assert "${#lines[@]}" = 3 "too many POSTROUTING rules"
 
     # check iptables NETAVARK-1D8721804F16F chain
     run_in_host_netns iptables -S NETAVARK-1D8721804F16F -t nat
     assert "${lines[1]}" =~ "-A NETAVARK-1D8721804F16F -d 10.88.0.0/16 -j ACCEPT" "NETAVARK-1D8721804F16F ACCEPT rule"
     assert "${lines[2]}" == "-A NETAVARK-1D8721804F16F ! -d 224.0.0.0/4 -j MASQUERADE" "NETAVARK-1D8721804F16F MASQUERADE rule"
+    assert "${#lines[@]}" = 3 "too many NETAVARK-1D8721804F16F rules"
 
     # check FORWARD rules
     run_in_host_netns iptables -S FORWARD
     assert "${lines[1]}" == "-A FORWARD -m comment --comment \"netavark firewall plugin rules\" -j NETAVARK_FORWARD" "FORWARD rule"
+    assert "${#lines[@]}" = 2 "too many FORWARD rules"
+
     run_in_host_netns iptables -S NETAVARK_FORWARD
     assert "${lines[1]}" == "-A NETAVARK_FORWARD -d 10.88.0.0/16 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT" "NETAVARK_FORWARD rule 1"
     assert "${lines[2]}" == "-A NETAVARK_FORWARD -s 10.88.0.0/16 -j ACCEPT" "NETAVARK_FORWARD rule 2"
+    assert "${#lines[@]}" = 3 "too many NETAVARK_FORWARD rules"
 
     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
 
@@ -89,14 +94,16 @@ fw_driver=iptables
     # check FORWARD rules
     run_in_host_netns iptables -S FORWARD
     assert "${lines[1]}" == "-A FORWARD -m comment --comment \"netavark firewall plugin rules\" -j NETAVARK_FORWARD" "FORWARD rule"
+    assert "${#lines[@]}" = 2 "too many FORWARD rules after teardown"
+
     # rule 1 should be DROP for any existing networks
     run_in_host_netns iptables -S NETAVARK_FORWARD
-    assert "${lines[1]}" == "" "NETAVARK_FORWARD rule 1 is empty"
-    assert "${lines[2]}" == "" "NETAVARK_FORWARD rule 2 is empty"
+    assert "${#lines[@]}" = 1 "too many NETAVARK_FORWARD rules after teardown"
 
     # check POSTROUTING nat rules
     run_in_host_netns iptables -S POSTROUTING -t nat
-    assert "${lines[2]}" == "" "POSTROUTING rule is empty"
+    assert "${lines[1]}" =~ "-A POSTROUTING -j NETAVARK-HOSTPORT-MASQ" "POSTROUTING HOSTPORT-MASQ rule"
+    assert "${#lines[@]}" = 2 "too many POSTROUTING rules after teardown"
 
     # NETAVARK-1D8721804F16F chain should not exists
     expected_rc=1 run_in_host_netns iptables -nvL NETAVARK-1D8721804F16F -t nat
