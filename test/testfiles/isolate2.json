@@ -1,0 +1,37 @@
+{
+    "container_id": "01f0b94d5f4c1",
+    "container_name": "isolatedcontainer1",
+    "networks": {
+        "isolate2": {
+            "interface_name": "eth2",
+            "static_ips": [
+                "10.89.1.2",
+                "fd99::2"
+            ]
+        }
+    },
+    "network_info": {
+        "isolate2": {
+            "dns_enabled": false,
+            "driver": "bridge",
+            "id": "f3ac3c903b76f20e8a122b1eb2ba393ab2519ba516626be5b490b66dc96b54b7",
+            "internal": false,
+            "ipv6_enabled": false,
+            "name": "isolate2",
+            "network_interface": "isolate2",
+            "subnets": [
+                {
+                    "gateway": "10.89.1.1",
+                    "subnet": "10.89.1.0/24"
+                },
+                {
+                    "subnet": "fd99::/64",
+                    "gateway": "fd99::1"
+               }
+            ],
+            "options": {
+                "isolate": "true"
+             }
+        }
+    }
+}
