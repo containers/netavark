@@ -63,7 +63,7 @@ function get_container_netns_path() {
     local which="0"
     if [[ $# -eq 1 ]]; then
         which=$1
-    fi 
+    fi
     echo /proc/"${CONTAINER_NS_PIDS[$which]}"/ns/net
 }
 
@@ -84,7 +84,8 @@ function run_netavark() {
 #
 function run_in_container_netns() {
     local i="0"
-    if [[ $1 -eq "1" ]]; then
+    isnum='^[0-9]+$'
+    if [[ $1 =~ $isnum ]]; then
         i=$1
         shift 1
     fi
@@ -552,7 +553,7 @@ function run_nc_test() {
 
     nsenter -n -t "${CONTAINER_NS_PIDS[$container_ns]}" timeout --foreground -v --kill=10 5 \
         nc $nc_common_args -l -p $container_port &>"$NETAVARK_TMPDIR/nc-out" <$stdin &
-    
+
     data=$(random_string)
     run_in_host_netns nc $nc_common_args $connect_ip $host_port <<<"$data"
 

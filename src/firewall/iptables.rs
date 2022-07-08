@@ -1,10 +1,9 @@
 use crate::error::{NetavarkError, NetavarkResult};
 use crate::firewall;
 use crate::firewall::firewalld;
-use crate::firewall::varktables;
 use crate::firewall::varktables::types::TeardownPolicy::OnComplete;
 use crate::firewall::varktables::types::{
-    get_network_chains, get_port_forwarding_chains, TeardownPolicy,
+    create_network_chains, get_network_chains, get_port_forwarding_chains, TeardownPolicy,
 };
 use crate::network::internal_types::{
     PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
@@ -62,7 +61,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                     conn = &self.conn6;
                 }
 
-                let chain_result = varktables::types::get_network_chains(
+                let chains = get_network_chains(
                     conn,
                     network.subnet,
                     network_setup.network_hash_name.clone(),
@@ -71,18 +70,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                     network_setup.isolation,
                 );
 
-                match chain_result {
-                    Ok(chains) => {
-                        for c in chains {
-                            c.add_rules()?
-                        }
-                    }
-                    Err(e) => {
-                        return Err(
-                            std::io::Error::new(std::io::ErrorKind::Other, e.to_string()).into(),
-                        )
-                    }
-                }
+                create_network_chains(chains)?;
 
                 add_firewalld_if_possible(&network);
             }
@@ -121,28 +109,19 @@ impl firewall::FirewallDriver for IptablesDriver {
                     tear.config.isolation,
                 );
 
-                match chains {
-                    Ok(chains) => {
-                        for c in &chains {
-                            // Because we only call teardown_network on complete teardown, we
-                            // just send true here
-                            c.remove_rules(true)?;
-                        }
-                        for c in chains {
-                            match &c.td_policy {
-                                None => {}
-                                Some(policy) => {
-                                    if tear.complete_teardown && *policy == OnComplete {
-                                        c.remove()?;
-                                    }
-                                }
+                for c in &chains {
+                    // Because we only call teardown_network on complete teardown, we
+                    // just send true here
+                    c.remove_rules(true)?;
+                }
+                for c in chains {
+                    match &c.td_policy {
+                        None => {}
+                        Some(policy) => {
+                            if tear.complete_teardown && *policy == OnComplete {
+                                c.remove()?;
                             }
                         }
-                    }
-                    Err(e) => {
-                        return Err(
-                            std::io::Error::new(std::io::ErrorKind::Other, e.to_string()).into(),
-                        )
                     }
                 }
 
@@ -168,9 +147,7 @@ impl firewall::FirewallDriver for IptablesDriver {
             };
             let chains =
                 get_port_forwarding_chains(&self.conn, &setup_portfw, &v4, &subnet_v4, false);
-            for chain in chains {
-                chain.add_rules()?;
-            }
+            create_network_chains(chains)?;
         }
         if let Some(v6) = setup_portfw.container_ip_v6 {
             let subnet_v6 = match setup_portfw.subnet_v6.clone() {
@@ -185,9 +162,7 @@ impl firewall::FirewallDriver for IptablesDriver {
             };
             let chains =
                 get_port_forwarding_chains(&self.conn6, &setup_portfw, &v6, &subnet_v6, true);
-            for chain in chains {
-                chain.add_rules()?;
-            }
+            create_network_chains(chains)?;
         };
         Result::Ok(())
     }

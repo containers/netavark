@@ -8,7 +8,6 @@ use crate::network::types::Subnet;
 use ipnet::IpNet;
 use iptables::IPTables;
 use log::debug;
-use std::error::Error;
 use std::net::IpAddr;
 
 //  Chain names
@@ -26,6 +25,8 @@ const NETAVARK_HOSTPORT_MASK: &str = "NETAVARK-HOSTPORT-MASQ";
 const MASQUERADE: &str = "MASQUERADE";
 const MARK: &str = "MARK";
 const DNAT: &str = "DNAT";
+const NETAVARK_ISOLATION_1: &str = "NETAVARK_ISOLATION_1";
+const NETAVARK_ISOLATION_2: &str = "NETAVARK_ISOLATION_2";
 
 const CONTAINER_DN_CHAIN: &str = "NETAVARK-DN-";
 
@@ -45,6 +46,8 @@ pub struct VarkRule {
     // Formatted string of the rule itself
     pub rule: String,
     pub td_policy: Option<TeardownPolicy>,
+    /// position can be set to specify the exact rule position,
+    /// if None the rule will be appended.
     pub position: Option<i32>,
 }
 
@@ -100,10 +103,6 @@ impl<'a> VarkChain<'a> {
 
     // actually add the rules to iptables
     pub fn add_rules(&self) -> NetavarkResult<()> {
-        // If the chain needs to be created, we make it
-        if self.create {
-            add_chain_unique(self.driver, &self.table, &self.chain_name)?;
-        }
         for rule in &self.rules {
             // If the rule comes with an optional position, then instead of append
             // we should use insert if it does not already exist
@@ -175,6 +174,21 @@ impl<'a> VarkChain<'a> {
     }
 }
 
+pub fn create_network_chains(chains: Vec<VarkChain<'_>>) -> NetavarkResult<()> {
+    // we have to create first all chains because some might be referenced by other rules
+    // and this will fail if they do not exist yet
+    for c in &chains {
+        // If the chain needs to be created, we make it
+        if c.create {
+            add_chain_unique(c.driver, &c.table, &c.chain_name)?;
+        }
+    }
+    for c in &chains {
+        c.add_rules()?
+    }
+    Ok(())
+}
+
 pub fn get_network_chains(
     conn: &'_ IPTables,
     network: IpNet,
@@ -182,7 +196,7 @@ pub fn get_network_chains(
     is_ipv6: bool,
     interface_name: String,
     isolation: bool,
-) -> Result<Vec<VarkChain<'_>>, Box<dyn Error>> {
+) -> Vec<VarkChain<'_>> {
     let mut chains = Vec::new();
     let prefixed_network_hash_name = format!("{}-{}", "NETAVARK", network_hash_name);
 
@@ -218,95 +232,98 @@ pub fn get_network_chains(
         Some(TeardownPolicy::OnComplete),
     ));
     chains.push(postrouting_chain);
-    if !is_ipv6 {
-        // FORWARD chain
-        let mut forward_chain = VarkChain::new(conn, FILTER.to_string(), FORWARD.to_string(), None);
-        // if we do not create the chains as we need them with isolation,
-        // the entire process fails since when you finally do get around to creating the chains
-        // within the []chains array, they reference and jump to locations
-        // that do not exist yet, causing errors
-        add_chain_unique(
-            forward_chain.driver,
-            &forward_chain.table,
-            &forward_chain.chain_name,
-        )?;
 
-        // used to prepend specific rules
-        let mut ind = 1;
+    // FORWARD chain
+    let mut forward_chain = VarkChain::new(conn, FILTER.to_string(), FORWARD.to_string(), None);
 
-        debug!("Isolate this network?: {}", isolation);
-        if isolation {
-            // NETAVARK_ISOLATION_1
-            let mut netavark_isolation_chain = VarkChain::new(
-                conn,
-                FILTER.to_string(),
-                "NETAVARK_ISOLATION".to_string(),
-                None,
-            );
-            netavark_isolation_chain.create = true;
+    // used to prepend specific rules
+    let mut ind = 1;
 
-            // -A FORWARD -j NETAVARK_ISOLATION_1
-            forward_chain.build_rule(VarkRule {
-                rule: format!("-j {}", "NETAVARK_ISOLATION"),
-                position: Some(ind),
-                td_policy: Some(TeardownPolicy::OnComplete),
-            });
-            ind += 1;
+    if isolation {
+        debug!("Add extra isolate rules");
+        // NETAVARK_ISOLATION_1
+        let mut netavark_isolation_chain_1 = VarkChain::new(
+            conn,
+            FILTER.to_string(),
+            NETAVARK_ISOLATION_1.to_string(),
+            None,
+        );
+        netavark_isolation_chain_1.create = true;
 
-            // NETAVARK_ISOLATION -i bridge_name ! -o bridge_name -j DROP
-            netavark_isolation_chain.build_rule(VarkRule::new(
-                format!(
-                    "-i {} ! -o {} -j {}",
-                    interface_name, interface_name, "DROP"
-                ),
-                Some(TeardownPolicy::OnComplete),
-            ));
+        // NETAVARK_ISOLATION_2
+        let mut netavark_isolation_chain_2 = VarkChain::new(
+            conn,
+            FILTER.to_string(),
+            NETAVARK_ISOLATION_2.to_string(),
+            None,
+        );
+        netavark_isolation_chain_2.create = true;
 
-            // PUSH CHAIN
-            chains.push(netavark_isolation_chain);
-        }
-
-        // forward needs to be added to "chains" first so its rule are created before NETAVARK_FORWARD. To do this we
-        // need to create the chain so its rules can be referenced
-        add_chain_unique(conn, FILTER, NETAVARK_FORWARD)?;
-
+        // -A FORWARD -j NETAVARK_ISOLATION_1
         forward_chain.build_rule(VarkRule {
+            rule: format!("-j {}", NETAVARK_ISOLATION_1),
+            position: Some(ind),
+            td_policy: Some(TeardownPolicy::OnComplete),
+        });
+
+        // NETAVARK_ISOLATION_1 -i bridge_name ! -o bridge_name -j DROP
+        netavark_isolation_chain_1.build_rule(VarkRule {
             rule: format!(
-                "-m comment --comment 'netavark firewall plugin rules' -j {}",
-                NETAVARK_FORWARD
+                "-i {} ! -o {} -j {}",
+                interface_name, interface_name, NETAVARK_ISOLATION_2
             ),
             position: Some(ind),
-            td_policy: Some(TeardownPolicy::Never),
+            td_policy: Some(TeardownPolicy::OnComplete),
         });
-        chains.push(forward_chain);
 
-        // NETAVARK_FORWARD
-        let mut netavark_forward_chain =
-            VarkChain::new(conn, FILTER.to_string(), NETAVARK_FORWARD.to_string(), None);
-        netavark_forward_chain.create = true;
+        // NETAVARK_ISOLATION_2 -i bridge_name ! -o bridge_name -j DROP
+        netavark_isolation_chain_2.build_rule(VarkRule {
+            rule: format!("-o {} -j {}", interface_name, "DROP"),
+            position: Some(ind),
+            td_policy: Some(TeardownPolicy::OnComplete),
+        });
 
-        if !isolation {
-            // Create incoming traffic rule
-            // CNI did this by IP address, this is implemented per subnet
-            netavark_forward_chain.build_rule(VarkRule::new(
-                format!(
-                    "-d {} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
-                    network
-                ),
-                Some(TeardownPolicy::OnComplete),
-            ));
+        ind += 1;
 
-            // Create outgoing traffic rule
-            // CNI did this by IP address, this is implemented per subnet
-            netavark_forward_chain.build_rule(VarkRule::new(
-                format!("-s {} -j ACCEPT", network),
-                Some(TeardownPolicy::OnComplete),
-            ));
-        }
-        chains.push(netavark_forward_chain);
+        // PUSH CHAIN
+        chains.push(netavark_isolation_chain_1);
+        chains.push(netavark_isolation_chain_2)
     }
 
-    Result::Ok(chains)
+    forward_chain.build_rule(VarkRule {
+        rule: format!(
+            "-m comment --comment 'netavark firewall plugin rules' -j {}",
+            NETAVARK_FORWARD
+        ),
+        position: Some(ind),
+        td_policy: Some(TeardownPolicy::Never),
+    });
+    chains.push(forward_chain);
+
+    // NETAVARK_FORWARD
+    let mut netavark_forward_chain =
+        VarkChain::new(conn, FILTER.to_string(), NETAVARK_FORWARD.to_string(), None);
+    netavark_forward_chain.create = true;
+
+    // Create incoming traffic rule
+    // CNI did this by IP address, this is implemented per subnet
+    netavark_forward_chain.build_rule(VarkRule::new(
+        format!(
+            "-d {} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+            network
+        ),
+        Some(TeardownPolicy::OnComplete),
+    ));
+
+    // Create outgoing traffic rule
+    // CNI did this by IP address, this is implemented per subnet
+    netavark_forward_chain.build_rule(VarkRule::new(
+        format!("-s {} -j ACCEPT", network),
+        Some(TeardownPolicy::OnComplete),
+    ));
+    chains.push(netavark_forward_chain);
+
+    chains
 }
 
 pub fn get_port_forwarding_chains<'a>(

@@ -1,28 +1,33 @@
 {
-    "container_id": "01f0b94d5f4c",
-    "container_name": "isolatedcontainer",
+    "container_id": "01f0b94d5f4c1",
+    "container_name": "isolatedcontainer1",
     "networks": {
-        "podman1": {
+        "isolate1": {
             "interface_name": "eth1",
             "static_ips": [
-                "10.89.0.2"
+                "10.89.0.2",
+                "fd90::2"
             ]
         }
     },
     "network_info": {
-        "podman1": {
+        "isolate1": {
             "dns_enabled": false,
             "driver": "bridge",
             "id": "f3ac3c903b76f20e8a122b1eb2ba393ab2519ba516626be5b490b66dc96b54b7",
             "internal": false,
             "ipv6_enabled": false,
-            "name": "podman1",
-            "network_interface": "podman1",
+            "name": "isolate1",
+            "network_interface": "isolate1",
             "subnets": [
                 {
                     "gateway": "10.89.0.1",
                     "subnet": "10.89.0.0/24"
-                }
+                },
+                {
+                    "subnet": "fd90::/64",
+                    "gateway": "fd90::1"
+               }
             ],
             "options": {
                 "isolate": "true"
