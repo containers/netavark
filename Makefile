@@ -113,6 +113,15 @@ vendor-rm-windows:
 		rm -fr vendor/winapi*gnu*/lib/*.a; \
 	fi
 
+.PHONY: vendor-tarball
+vendor-tarball: build vendor
+	VERSION=$(shell bin/netavark --version | cut -f2 -d" ") && \
+	[[ $$VERSION == *-dev ]] && echo "version ends with -dev" && exit 1; \
+	tar cvf netavark-$$VERSION-vendor.tar.gz vendor/ && \
+	gzip -c bin/netavark > netavark.gz && \
+	sha256sum netavark.gz netavark-$$VERSION-vendor.tar.gz > sha256sum
+	rm -rf vendor/
+
 .PHONY: mock-rpm
 mock-rpm:
 	rpkg local
