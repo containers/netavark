@@ -11,11 +11,11 @@
     },
     "network_info": {
         "podman": {
-            "dns_enabled": true,
+            "dns_enabled": false,
             "driver": "bridge",
             "id": "53ce4390f2adb1681eb1a90ec8b48c49c015e0a8d336c197637e7f65e365fa9e",
             "internal": false,
-            "ipv6_enabled": true,
+            "ipv6_enabled": false,
             "name": "podman",
             "network_interface": "podman0",
             "subnets": [

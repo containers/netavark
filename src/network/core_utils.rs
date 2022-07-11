@@ -1349,13 +1349,6 @@ impl CoreUtils {
         response.to_string()
     }
 
-    // get a sysctl value by the value's namespace
-    pub fn lookup_sysctl_value(ns_value: &str) -> Result<String, SysctlError> {
-        debug!("Getting sysctl value for {}", ns_value);
-        let ctl = sysctl::Ctl::new(ns_value)?;
-        ctl.value_string()
-    }
-
     /// Set a sysctl value by value's namespace.
     pub fn apply_sysctl_value(
         ns_value: impl AsRef<str>,
@@ -1365,6 +1358,14 @@ impl CoreUtils {
         let val = val.as_ref();
         debug!("Setting sysctl value for {} to {}", ns_value, val);
         let ctl = sysctl::Ctl::new(ns_value)?;
+        match ctl.value_string() {
+            Ok(result) => {
+                if result == val {
+                    return Ok(result);
+                }
+            }
+            Err(e) => return Err(e),
+        }
         ctl.set_value_string(val)
     }
 }
