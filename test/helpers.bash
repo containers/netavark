@@ -55,7 +55,7 @@ function teardown() {
 function create_netns() {
     # create a new netns and mountns and run a sleep process to keep it alive
     # we have to redirect stdout/err to /dev/null otherwise bats will hang
-    unshare -n sleep inf &>/dev/null &
+    unshare -nm sleep inf &>/dev/null &
     echo $!
 }
 
@@ -89,7 +89,7 @@ function run_in_container_netns() {
         i=$1
         shift 1
     fi
-    run_helper nsenter -n -t "${CONTAINER_NS_PIDS[$i]}" "$@"
+    run_helper nsenter -n -m -w -t "${CONTAINER_NS_PIDS[$i]}" "$@"
 
 }
 
@@ -97,7 +97,7 @@ function run_in_container_netns() {
 #   run_in_host_netns  #  Run args in host netns
 ################
 function run_in_host_netns() {
-    run_helper nsenter -n -t $HOST_NS_PID "$@"
+    run_helper nsenter -n -m -w -t $HOST_NS_PID "$@"
 }
 
 #### Functions below are taken from podman and buildah and adapted to netavark.

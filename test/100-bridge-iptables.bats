@@ -373,3 +373,23 @@ EOF
     run_in_host_netns iptables -nvL NETAVARK_ISOLATION_2
     assert "${lines[2]}" == "" "NETAVARK_ISOLATION_2 chain should be empty"
 }
+
+@test "$fw_driver - test read only /proc" {
+    if [ -n "$_CONTAINERS_ROOTLESS_UID" ]; then
+        skip "test only supported when run as real root"
+    fi
+
+    # when the sysctl value is already set correctly we should not error
+    run_in_host_netns sh -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
+    run_in_host_netns mount -t proc -o ro,nosuid,nodev,noexec proc /proc
+
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
+
+    run_in_host_netns mount -t proc -o remount,rw /proc
+    run_in_host_netns sh -c "echo 0 > /proc/sys/net/ipv4/ip_forward"
+    run_in_host_netns mount -t proc -o remount,ro /proc
+
+    expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+    assert_json ".error" "Sysctl error: IO Error: Read-only file system (os error 30)" "Sysctl error because fs is read only"
+}
