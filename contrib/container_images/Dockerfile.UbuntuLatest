@@ -1,0 +1,2 @@
+FROM docker.io/library/ubuntu:latest
+RUN apt-get update && apt-get -y install cargo
