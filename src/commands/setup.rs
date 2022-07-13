@@ -206,16 +206,19 @@ impl Setup {
                                 dns_port,
                                 dns_server_ips,
                             };
-                            // Need to enable sysctl localnet so that traffic can pass
-                            // through localhost to containers
-                            match spf.net.network_interface.clone() {
-                                None => {}
-                                Some(i) => {
-                                    let localnet_path =
-                                        format!("net.ipv4.conf.{}.route_localnet", i);
-                                    CoreUtils::apply_sysctl_value(localnet_path, "1")?;
+                            if !spf.port_mappings.is_empty() {
+                                // Need to enable sysctl localnet so that traffic can pass
+                                // through localhost to containers
+                                match spf.net.network_interface.clone() {
+                                    None => {}
+                                    Some(i) => {
+                                        let localnet_path =
+                                            format!("net.ipv4.conf.{}.route_localnet", i);
+                                        CoreUtils::apply_sysctl_value(localnet_path, "1")?;
+                                    }
                                 }
                             }
+
                             firewall_driver.setup_port_forward(spf)?;
                         }
                     }
