@@ -65,37 +65,45 @@ fw_driver=iptables
     run_in_host_netns ping -c 1 10.88.0.2
 
     # check iptables POSTROUTING chain
-    run_in_host_netns iptables -nvL POSTROUTING -t nat
-    assert "${lines[2]}" =~ "\s+[0-9]\s+[0-9]+\s+NETAVARK-1D8721804F16F  all  --  \*      \*       10\.88\.0\.0\/16         0\.0\.0\.0\/0\s+" "POSTROUTING rule"
+    run_in_host_netns iptables -S POSTROUTING -t nat
+    assert "${lines[1]}" =~ "-A POSTROUTING -j NETAVARK-HOSTPORT-MASQ" "POSTROUTING HOSTPORT-MASQ rule"
+    assert "${lines[2]}" =~ "-A POSTROUTING -s 10.88.0.0/16 -j NETAVARK-1D8721804F16F" "POSTROUTING container rule"
+    assert "${#lines[@]}" = 3 "too many POSTROUTING rules"
 
     # check iptables NETAVARK-1D8721804F16F chain
-    run_in_host_netns iptables -nvL NETAVARK-1D8721804F16F -t nat
-    assert "${lines[2]}" =~ "\s+[0-9]\s+[0-9]+\s+ACCEPT     all  --  \*      \*       0\.0\.0\.0\/0            10\.88\.0\.0\/16\s+" "NETAVARK-1D8721804F16F ACCEPT rule"
-    assert "${lines[3]}" == "    0     0 MASQUERADE  all  --  *      *       0.0.0.0/0           !224.0.0.0/4         " "NETAVARK-1D8721804F16F MASQUERADE rule"
+    run_in_host_netns iptables -S NETAVARK-1D8721804F16F -t nat
+    assert "${lines[1]}" =~ "-A NETAVARK-1D8721804F16F -d 10.88.0.0/16 -j ACCEPT" "NETAVARK-1D8721804F16F ACCEPT rule"
+    assert "${lines[2]}" == "-A NETAVARK-1D8721804F16F ! -d 224.0.0.0/4 -j MASQUERADE" "NETAVARK-1D8721804F16F MASQUERADE rule"
+    assert "${#lines[@]}" = 3 "too many NETAVARK-1D8721804F16F rules"
 
     # check FORWARD rules
-    run_in_host_netns iptables -nvL FORWARD
-    assert "${lines[2]}" == "    0     0 NETAVARK_FORWARD  all  --  *      *       0.0.0.0/0            0.0.0.0/0            /* netavark firewall plugin rules */" "FORWARD rule"
-    run_in_host_netns iptables -nvL NETAVARK_FORWARD
-    assert "${lines[2]}" == "    0     0 ACCEPT     all  --  *      *       0.0.0.0/0            10.88.0.0/16         ctstate RELATED,ESTABLISHED" "NETAVARK_FORWARD rule 1"
-    assert "${lines[3]}" == "    0     0 ACCEPT     all  --  *      *       10.88.0.0/16         0.0.0.0/0           " "NETAVARK_FORWARD rule 2"
+    run_in_host_netns iptables -S FORWARD
+    assert "${lines[1]}" == "-A FORWARD -m comment --comment \"netavark firewall plugin rules\" -j NETAVARK_FORWARD" "FORWARD rule"
+    assert "${#lines[@]}" = 2 "too many FORWARD rules"
+
+    run_in_host_netns iptables -S NETAVARK_FORWARD
+    assert "${lines[1]}" == "-A NETAVARK_FORWARD -d 10.88.0.0/16 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT" "NETAVARK_FORWARD rule 1"
+    assert "${lines[2]}" == "-A NETAVARK_FORWARD -s 10.88.0.0/16 -j ACCEPT" "NETAVARK_FORWARD rule 2"
+    assert "${#lines[@]}" = 3 "too many NETAVARK_FORWARD rules"
 
     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
 
     # now check that iptables rules are gone
-    run_in_host_netns iptables -nvL
+    run_in_host_netns iptables -S
 
     # check FORWARD rules
-    run_in_host_netns iptables -nvL FORWARD
-    assert "${lines[2]}" == "    0     0 NETAVARK_FORWARD  all  --  *      *       0.0.0.0/0            0.0.0.0/0            /* netavark firewall plugin rules */" "FORWARD rule"
-    run_in_host_netns iptables -nvL NETAVARK_FORWARD
+    run_in_host_netns iptables -S FORWARD
+    assert "${lines[1]}" == "-A FORWARD -m comment --comment \"netavark firewall plugin rules\" -j NETAVARK_FORWARD" "FORWARD rule"
+    assert "${#lines[@]}" = 2 "too many FORWARD rules after teardown"
+
     # rule 1 should be DROP for any existing networks
-    assert "${lines[2]}" == "" "NETAVARK_FORWARD rule 1 is empty"
-    assert "${lines[3]}" == "" "NETAVARK_FORWARD rule 2 is empty"
+    run_in_host_netns iptables -S NETAVARK_FORWARD
+    assert "${#lines[@]}" = 1 "too many NETAVARK_FORWARD rules after teardown"
 
     # check POSTROUTING nat rules
-    run_in_host_netns iptables -nvL POSTROUTING -t nat
-    assert "${lines[2]}" == "" "POSTROUTING rule is empty"
+    run_in_host_netns iptables -S POSTROUTING -t nat
+    assert "${lines[1]}" =~ "-A POSTROUTING -j NETAVARK-HOSTPORT-MASQ" "POSTROUTING HOSTPORT-MASQ rule"
+    assert "${#lines[@]}" = 2 "too many POSTROUTING rules after teardown"
 
     # NETAVARK-1D8721804F16F chain should not exists
     expected_rc=1 run_in_host_netns iptables -nvL NETAVARK-1D8721804F16F -t nat
@@ -139,6 +147,66 @@ fw_driver=iptables
     run_in_host_netns ping6 -c 1 fd10:88:a::2
 
     run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge.json teardown $(get_container_netns_path)
+}
+
+@test "$fw_driver - dual stack dns with alt port" {
+    # get a random port directly to avoid low ports e.g. 53 would not create iptables
+    dns_port=$((RANDOM+10000))
+
+    # hack to make aardvark-dns run when really root or when running as user with
+    # podman unshare --rootless-netns; since netavark runs aardvark with systemd-run
+    # it needs to know if it should use systemd user instance or not.
+    # iptables are still setup identically.
+    rootless=false
+    if [[ ! -e "/run/dbus/system_bus_socket" ]]; then
+        rootless=true
+    fi
+
+    mkdir -p "$NETAVARK_TMPDIR/config"
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
+        --rootless "$rootless" --config "$NETAVARK_TMPDIR/config" \
+        setup $(get_container_netns_path)
+
+    # check iptables
+    run_in_host_netns iptables -t nat -S NETAVARK-HOSTPORT-DNAT
+    assert "${lines[1]}" == "-A NETAVARK-HOSTPORT-DNAT -d 10.89.3.1/32 -p udp -m udp --dport 53 -j DNAT --to-destination 10.89.3.1:$dns_port" "ipv4 dns forward rule"
+    run_in_host_netns ip6tables -t nat -S NETAVARK-HOSTPORT-DNAT
+    assert "${lines[1]}" == "-A NETAVARK-HOSTPORT-DNAT -d fd10:88:a::1/128 -p udp -m udp --dport 53 -j DNAT --to-destination [fd10:88:a::1]:$dns_port" "ipv6 dns forward rule"
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "[0-9a-f]* 10.89.3.2  somename" "aardvark config's container ipv4"
+    assert "${lines[2]}" =~ "[0-9a-f]*  fd10:88:a::2 somename" "aardvark config's container ipv6"
+    assert "${#lines[@]}" = 3 "too many liness in aardvark config"
+
+    aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
+    run_helper ps "$aardvark_pid"
+    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p $dns_port run" "aardvark not running or bad options"
+
+    # test redirection actually works
+    run_in_container_netns dig +short "somename.dns.podman" @10.89.3.1
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv4 dns resolution works 1/2"
+    assert "${lines[1]}" =~ "fd10:88:a::2" "ipv4 dns resolution works 2/2"
+
+    run_in_container_netns dig +short "somename.dns.podman" @fd10:88:a::1
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv6 dns resolution works"
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
+        --rootless "$rootless" --config "$NETAVARK_TMPDIR/config" \
+        teardown $(get_container_netns_path)
+
+    # check iptables got removed
+    run_in_host_netns iptables -t nat -S NETAVARK-HOSTPORT-DNAT
+    assert "${#lines[@]}" = 1 "too many v4 NETAVARK_HOSTPORT-DNAT rules after teardown"
+    run_in_host_netns ip6tables -t nat -S NETAVARK-HOSTPORT-DNAT
+    assert "${#lines[@]}" = 1 "too many v6 NETAVARK_HOSTPORT-DNAT rules after teardown"
+
+    # check aardvark config got cleared, process killed
+    expected_rc=2 run_helper ls "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    expected_rc=1 run_helper ps "$aardvark_pid"
 }
 
 @test "$fw_driver - check error message from netns thread" {

@@ -187,10 +187,13 @@ impl firewall::FirewallDriver for IptablesDriver {
                 chain.remove_rules(tear.complete_teardown)?;
             }
             for chain in &chains {
+                if !tear.complete_teardown || !chain.create {
+                    continue;
+                }
                 match &chain.td_policy {
                     None => {}
                     Some(policy) => {
-                        if tear.complete_teardown && *policy == TeardownPolicy::OnComplete {
+                        if *policy == TeardownPolicy::OnComplete {
                             chain.remove()?;
                         }
                     }
@@ -217,10 +220,13 @@ impl firewall::FirewallDriver for IptablesDriver {
                 chain.remove_rules(tear.complete_teardown)?;
             }
             for chain in &chains {
+                if !tear.complete_teardown || !chain.create {
+                    continue;
+                }
                 match &chain.td_policy {
                     None => {}
                     Some(policy) => {
-                        if tear.complete_teardown && *policy == TeardownPolicy::OnComplete {
+                        if *policy == TeardownPolicy::OnComplete {
                             chain.remove()?;
                         }
                     }

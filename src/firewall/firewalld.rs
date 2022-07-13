@@ -184,11 +184,53 @@ impl firewall::FirewallDriver for FirewallD {
             }
         }
 
+        // dns port forwarding requires rich rules as we also want to match destination ip
+        // only bother if configured dns port isn't 53
+        let mut rich_rules_option: Option<Array> = None;
+        if setup_portfw.dns_port != 53 && !setup_portfw.dns_server_ips.is_empty() {
+            let mut rich_rules: Array;
+            match policy_config.get("rich_rules") {
+                Some(a) => match a {
+                    Value::Array(arr) => rich_rules = arr.clone(),
+                    _ => {
+                        return Err(NetavarkError::msg_str(
+                            "forward-port in firewalld policy object has a bad type",
+                        ))
+                    }
+                },
+                None => {
+                    // No existing rules
+                    // Make us a new array.
+                    let sig = match Signature::try_from("s") {
+                        Ok(s) => s,
+                        Err(e) => {
+                            return Err(NetavarkError::wrap_str(
+                                "Error creating signature for new DBus array",
+                                e.into(),
+                            ))
+                        }
+                    };
+                    rich_rules = Array::new(sig);
+                }
+            }
+            for dns_ip in &setup_portfw.dns_server_ips {
+                let ip_family = if dns_ip.is_ipv6() { "ipv6" } else { "ipv4" };
+                let rule = format!("rule family=\"{}\" destination address=\"{}\" forward-port port=\"53\" protocol=\"udp\" to-port=\"{}\" to-addr=\"{}\"",
+                                   ip_family, dns_ip, setup_portfw.dns_port, dns_ip);
+                rich_rules.append(Value::new(rule))?;
+            }
+            rich_rules_option = Some(rich_rules)
+        }
+
         // Firewalld won't alter keys we don't mention, so make a new config
         // map - with only the changes to ports.
-        let new_rules = Value::new(port_forwarding_rules);
+        let new_pf_rules = Value::new(port_forwarding_rules);
         let mut new_policy_config = HashMap::<&str, &Value>::new();
-        new_policy_config.insert("forward_ports", &new_rules);
+        new_policy_config.insert("forward_ports", &new_pf_rules);
+        let new_rich_rules = rich_rules_option.map(Value::new);
+        if let Some(rich) = &new_rich_rules {
+            new_policy_config.insert("rich_rules", rich);
+        }
 
         // Send the updated configuration back to firewalld.
         match block_on(self.conn.call_method(
@@ -238,74 +280,141 @@ impl firewall::FirewallDriver for FirewallD {
             }
         };
 
-        let old_port_forwarding_rules: Array = match policy_config.get("forward_ports") {
-            Some(a) => match a {
-                Value::Array(arr) => arr.clone(),
-                _ => {
-                    return Err(NetavarkError::msg_str(
-                        "forward-port in firewalld policy object has a bad type",
-                    ))
-                }
-            },
-            None => {
-                // No existing rules.
-                // Nothing to do - the array must have been wiped already?
-                return Ok(());
-            }
-        };
-
-        let sig = match Signature::try_from("(ssss)") {
-            Ok(s) => s,
-            Err(e) => {
-                return Err(NetavarkError::wrap_str(
-                    "Error creating signature for new dbus array",
-                    e.into(),
-                ))
-            }
-        };
-        let mut port_forwarding_rules: Array = Array::new(sig);
-        // use an invalid string if we don't have a valid v4 or v6 address.
-        // This is ugly, but easiest code-wise.
-        let ipv4 = match teardown_pf.config.container_ip_v4 {
-            Some(i) => i.to_string(),
-            None => "DOES NOT EXIST".to_string(),
-        };
-        let ipv6 = match teardown_pf.config.container_ip_v6 {
-            Some(i) => i.to_string(),
-            None => "DOES NOT EXIST".to_string(),
-        };
-
-        // Iterate through old rules, remove anything with the IPv4 or IPv6 of
-        // this container as the destination IP.
-        for port_tuple in old_port_forwarding_rules.iter() {
-            match port_tuple {
-                Value::Structure(s) => {
-                    let fields = s.clone().into_fields();
-                    if fields.len() != 4 {
+        let old_port_forwarding_rules_option: Option<Array> =
+            match policy_config.get("forward_ports") {
+                Some(a) => match a {
+                    Value::Array(arr) => Some(arr.clone()),
+                    _ => {
                         return Err(NetavarkError::msg_str(
-                            "Port forwarding rule that was not a 4-tuple encountered",
-                        ));
+                            "forward-port in firewalld policy object has a bad type",
+                        ))
                     }
-                    let port_ip = match fields[3].clone() {
-			Value::Str(s) => s.as_str().to_string(),
-			_ => return Err(NetavarkError::msg_str("Port forwarding tuples must contain only strings, encountered a non-string object")),
-		    };
-                    debug!("IP string from firewalld is {}", port_ip);
-                    if port_ip != ipv4 && port_ip != ipv6 {
-                        port_forwarding_rules.append(port_tuple.clone())?;
+                },
+                None => {
+                    // No existing rules - skip
+                    None
+                }
+            };
+
+        let mut port_forwarding_rules_option: Option<Array> = None;
+        if let Some(old_port_forwarding_rules) = old_port_forwarding_rules_option {
+            let sig = match Signature::try_from("(ssss)") {
+                Ok(s) => s,
+                Err(e) => {
+                    return Err(NetavarkError::wrap_str(
+                        "Error creating signature for new dbus array",
+                        e.into(),
+                    ))
+                }
+            };
+            let mut port_forwarding_rules = Array::new(sig);
+            // use an invalid string if we don't have a valid v4 or v6 address.
+            // This is ugly, but easiest code-wise.
+            let ipv4 = match teardown_pf.config.container_ip_v4 {
+                Some(i) => i.to_string(),
+                None => "DOES NOT EXIST".to_string(),
+            };
+            let ipv6 = match teardown_pf.config.container_ip_v6 {
+                Some(i) => i.to_string(),
+                None => "DOES NOT EXIST".to_string(),
+            };
+
+            // Iterate through old rules, remove anything with the IPv4 or IPv6 of
+            // this container as the destination IP.
+            for port_tuple in old_port_forwarding_rules.iter() {
+                match port_tuple {
+                    Value::Structure(s) => {
+                        let fields = s.clone().into_fields();
+                        if fields.len() != 4 {
+                            return Err(NetavarkError::msg_str(
+                                "Port forwarding rule that was not a 4-tuple encountered",
+                            ));
+                        }
+                        let port_ip = match fields[3].clone() {
+                            Value::Str(s) => s.as_str().to_string(),
+                            _ => return Err(NetavarkError::msg_str("Port forwarding tuples must contain only strings, encountered a non-string object")),
+                        };
+                        debug!("IP string from firewalld is {}", port_ip);
+                        if port_ip != ipv4 && port_ip != ipv6 {
+                            port_forwarding_rules.append(port_tuple.clone())?;
+                        }
+                    }
+                    _ => {
+                        return Err(NetavarkError::msg_str(
+                            "Port forwarding rule that was not a structure encountered",
+                        ))
                     }
                 }
-                _ => {
-                    return Err(NetavarkError::msg_str(
-                        "Port forwarding rule that was not a structure encountered",
-                    ))
+            }
+            port_forwarding_rules_option = Some(port_forwarding_rules)
+        }
+
+        // iterate through rich rules to remove dns forwarding if this
+        // is the last container of the network e.g. teardown complete
+        // only bother if configured dns port isn't 53
+        let mut rich_rules_option: Option<Array> = None;
+        let mut old_rich_rules_option: Option<Array> = None;
+        if teardown_pf.complete_teardown
+            && teardown_pf.config.dns_port != 53
+            && !teardown_pf.config.dns_server_ips.is_empty()
+        {
+            if let Some(a) = policy_config.get("rich_rules") {
+                match a {
+                    Value::Array(arr) => old_rich_rules_option = Some(arr.clone()),
+                    _ => {
+                        return Err(NetavarkError::msg_str(
+                            "forward-port in firewalld policy object has a bad type",
+                        ))
+                    }
                 }
             }
         }
+        if let Some(old_rich_rules) = old_rich_rules_option {
+            let mut rules_to_delete: Vec<String> = vec![];
+            for dns_ip in &teardown_pf.config.dns_server_ips {
+                let ip_family = if dns_ip.is_ipv6() { "ipv6" } else { "ipv4" };
+                let rule = format!("rule family=\"{}\" destination address=\"{}\" forward-port port=\"53\" protocol=\"udp\" to-port=\"{}\" to-addr=\"{}\"",
+                                   ip_family, dns_ip, teardown_pf.config.dns_port, dns_ip);
+                rules_to_delete.push(rule);
+            }
+            let sig = match Signature::try_from("s") {
+                Ok(s) => s,
+                Err(e) => {
+                    return Err(NetavarkError::wrap_str(
+                        "Error creating signature for new DBus array",
+                        e.into(),
+                    ))
+                }
+            };
+            let mut rich_rules = Array::new(sig);
+            for rule in old_rich_rules.iter() {
+                match rule {
+                    Value::Str(old_rule) => {
+                        if !rules_to_delete.contains(&old_rule.to_string()) {
+                            rich_rules.append(rule.clone())?;
+                        }
+                    }
+                    _ => {
+                        return Err(NetavarkError::msg_str(
+                            "Rich rule that was not a string encountered",
+                        ))
+                    }
+                }
+            }
+            rich_rules_option = Some(rich_rules);
+        }
 
-        let new_rules = Value::new(port_forwarding_rules);
+        // Firewalld won't alter keys we don't mention, so make a new config
+        // map - with only the changes to ports.
         let mut new_policy_config = HashMap::<&str, &Value>::new();
-        new_policy_config.insert("forward_ports", &new_rules);
+        let new_pf_rules = port_forwarding_rules_option.map(Value::new);
+        if let Some(pf) = &new_pf_rules {
+            new_policy_config.insert("forward_ports", pf);
+        }
+        let new_rich_rules = rich_rules_option.map(Value::new);
+        if let Some(rich) = &new_rich_rules {
+            new_policy_config.insert("rich_rules", rich);
+        }
 
         // Send the updated configuration back to firewalld.
         match block_on(self.conn.call_method(

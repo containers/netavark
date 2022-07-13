@@ -357,14 +357,15 @@ pub fn get_port_forwarding_chains<'a>(
     );
 
     // NETAVARK_HOSTPORT_DNAT
-    // Determination to create the chain is done only
-    // if there are port mappings
+    // We need to create that chain for prerouting/output chain rules
+    // using it, even if there are no port mappings.
     let mut netavark_hostport_dn_chain = VarkChain::new(
         conn,
         NAT.to_string(),
         NETAVARK_HOSTPORT_DNAT.to_string(),
         None,
     );
+    netavark_hostport_dn_chain.create = true;
 
     // Setup one-off rules that have nothing to do with ports
     // PREROUTING
@@ -426,8 +427,28 @@ pub fn get_port_forwarding_chains<'a>(
 
     //  Determine if we need to create chains
     if !pfwd.port_mappings.is_empty() {
-        netavark_hostport_dn_chain.create = true;
         netavark_hashed_dn_chain.create = true;
+    }
+
+    // Create redirection for aardvark-dns on non-standard port
+    if pfwd.dns_port != 53 {
+        for dns_ip in &pfwd.dns_server_ips {
+            if is_ipv6 != dns_ip.is_ipv6() {
+                continue;
+            }
+            let mut ip_value = dns_ip.to_string();
+            if is_ipv6 {
+                ip_value = format!("[{}]", ip_value)
+            }
+            netavark_hostport_dn_chain.create = true;
+            netavark_hostport_dn_chain.build_rule(VarkRule::new(
+                format!(
+                    "-j {} -d {} -p {} --dport {} --to-destination {}:{}",
+                    DNAT, dns_ip, "udp", 53, ip_value, pfwd.dns_port
+                ),
+                Some(TeardownPolicy::OnComplete),
+            ));
+        }
     }
 
     for i in pfwd.port_mappings.clone() {

@@ -11,6 +11,7 @@ use crate::network::{core_utils, types};
 use clap::Parser;
 use log::{debug, info};
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::net::IpAddr;
 use std::path::Path;
@@ -70,6 +71,19 @@ impl Setup {
 
         let mut response: HashMap<String, types::StatusBlock> = HashMap::new();
 
+        let dns_port = match env::var("NETAVARK_DNS_PORT") {
+            Ok(port_string) => match port_string.parse() {
+                Ok(port) => port,
+                Err(e) => {
+                    return Err(NetavarkError::Message(format!(
+                        "Invalid NETAVARK_DNS_PORT {}: {}",
+                        port_string, e
+                    )))
+                }
+            },
+            Err(_) => 53,
+        };
+
         // Perform per-network setup
         for (net_name, network) in network_options.network_info.iter() {
             debug!(
@@ -97,6 +111,9 @@ impl Setup {
                         network,
                         &self.network_namespace_path,
                     )?;
+                    // get DNS server IPs
+                    let dns_server_ips: Vec<IpAddr> =
+                        status_block.dns_server_ips.clone().unwrap_or_default();
                     response.insert(net_name.to_owned(), status_block);
                     if network.internal {
                         match &network.network_interface {
@@ -142,21 +159,14 @@ impl Setup {
                         isolation: isolation_config,
                     };
                     firewall_driver.setup_network(sn)?;
-                    let port_bindings = network_options.port_mappings.clone();
-                    match port_bindings {
+                    match per_network_opts.static_ips.as_ref() {
                         None => {}
-                        Some(i) => {
-                            let container_ips =
-                                per_network_opts.static_ips.as_ref().ok_or_else(|| {
-                                    std::io::Error::new(
-                                        std::io::ErrorKind::Other,
-                                        "no container ip provided",
-                                    )
-                                })?;
+                        Some(container_ips) => {
+                            let port_bindings = network_options.port_mappings.clone();
                             let networks = network.subnets.as_ref().ok_or_else(|| {
                                 std::io::Error::new(
                                     std::io::ErrorKind::Other,
-                                    "no network address provided",
+                                    "IP assigned but no network address provided",
                                 )
                             })?;
                             let mut has_ipv4 = false;
@@ -186,13 +196,15 @@ impl Setup {
                             let spf = PortForwardConfig {
                                 net: network.clone(),
                                 container_id: network_options.container_id.clone(),
-                                port_mappings: i.clone(),
+                                port_mappings: port_bindings.unwrap_or_default(),
                                 network_name: (*net_name).clone(),
                                 network_hash_name: id_network_hash.clone(),
                                 container_ip_v4: addr_v4,
                                 subnet_v4: net_v4,
                                 container_ip_v6: addr_v6,
                                 subnet_v6: net_v6,
+                                dns_port,
+                                dns_server_ips,
                             };
                             // Need to enable sysctl localnet so that traffic can pass
                             // through localhost to containers
@@ -262,7 +274,8 @@ impl Setup {
                 }
             };
 
-            let mut aardvark_interface = Aardvark::new(path_string, rootless, aardvark_bin);
+            let mut aardvark_interface =
+                Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
 
             if let Err(er) = aardvark_interface.commit_netavark_entries(
                 network_options.container_name,

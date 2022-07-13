@@ -9,6 +9,7 @@ use crate::network::types::Subnet;
 use crate::{firewall, network};
 use clap::Parser;
 use log::debug;
+use std::env;
 use std::net::IpAddr;
 use std::path::Path;
 
@@ -45,11 +46,25 @@ impl Teardown {
             }
         };
 
+        let dns_port = match env::var("NETAVARK_DNS_PORT") {
+            Ok(port_string) => match port_string.parse() {
+                Ok(port) => port,
+                Err(e) => {
+                    return Err(NetavarkError::Message(format!(
+                        "Invalid NETAVARK_DNS_PORT {}: {}",
+                        port_string, e
+                    )))
+                }
+            },
+            Err(_) => 53,
+        };
+
         if Path::new(&aardvark_bin).exists() {
             // stop dns server first before netavark clears the interface
             let path = Path::new(&config_dir).join("aardvark-dns");
             if let Ok(path_string) = path.into_os_string().into_string() {
-                let mut aardvark_interface = Aardvark::new(path_string, rootless, aardvark_bin);
+                let mut aardvark_interface =
+                    Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
                 if let Err(er) =
                     aardvark_interface.delete_from_netavark_entries(network_options.clone())
                 {
@@ -86,11 +101,14 @@ impl Teardown {
                             )
                         })?;
                     //Remove container interfaces
-                    network::core::Core::remove_interface_per_podman_network(
+                    let status_block = network::core::Core::remove_interface_per_podman_network(
                         per_network_opts,
                         network,
                         &self.network_namespace_path,
                     )?;
+                    // get DNS server IPs
+                    let dns_server_ips: Vec<IpAddr> =
+                        status_block.dns_server_ips.unwrap_or_default();
                     // Teardown basic firewall port forwarding
 
                     let id_network_hash = network::core_utils::CoreUtils::create_network_hash(
@@ -99,21 +117,14 @@ impl Teardown {
                     );
 
                     if !network.internal {
-                        let port_bindings = network_options.port_mappings.clone();
-                        match port_bindings {
+                        match per_network_opts.static_ips.as_ref() {
                             None => {}
-                            Some(i) => {
-                                let container_ips =
-                                    per_network_opts.static_ips.as_ref().ok_or_else(|| {
-                                        std::io::Error::new(
-                                            std::io::ErrorKind::Other,
-                                            "no container ip provided",
-                                        )
-                                    })?;
+                            Some(container_ips) => {
+                                let port_bindings = network_options.port_mappings.clone();
                                 let networks = network.subnets.as_ref().ok_or_else(|| {
                                     std::io::Error::new(
                                         std::io::ErrorKind::Other,
-                                        "no network address provided",
+                                        "IP assigned but no network address provided",
                                     )
                                 })?;
 
@@ -144,13 +155,15 @@ impl Teardown {
                                 let spf = PortForwardConfig {
                                     net: network.clone(),
                                     container_id: network_options.container_id.clone(),
-                                    port_mappings: i.clone(),
+                                    port_mappings: port_bindings.unwrap_or_default(),
                                     network_name: (*net_name).clone(),
                                     network_hash_name: id_network_hash.clone(),
                                     container_ip_v4: addr_v4,
                                     subnet_v4: net_v4,
                                     container_ip_v6: addr_v6,
                                     subnet_v6: net_v6,
+                                    dns_port,
+                                    dns_server_ips,
                                 };
                                 let td = TeardownPortForward {
                                     config: spf,

@@ -241,7 +241,6 @@ impl Core {
         netns: &str,
     ) -> Result<types::StatusBlock, std::io::Error> {
         //  StatusBlock response
-        //  StatusBlock response
         let mut response = types::StatusBlock {
             dns_server_ips: Some(Vec::<IpAddr>::new()),
             dns_search_domains: Some(Vec::<String>::new()),
@@ -430,9 +429,15 @@ impl Core {
 
     pub fn remove_interface_per_podman_network(
         per_network_opts: &types::PerNetworkOptions,
-        _network: &types::Network,
+        network: &types::Network,
         netns: &str,
-    ) -> Result<(), std::io::Error> {
+    ) -> Result<types::StatusBlock, std::io::Error> {
+        //  StatusBlock response
+        let mut response = types::StatusBlock {
+            dns_server_ips: Some(Vec::<IpAddr>::new()),
+            dns_search_domains: Some(Vec::<String>::new()),
+            interfaces: Some(HashMap::new()),
+        };
         let container_veth_name: String = per_network_opts.interface_name.to_owned();
         debug!(
             "Container veth name being removed: {:?}",
@@ -448,7 +453,16 @@ impl Core {
 
         debug!("Container veth removed: {:?}", container_veth_name);
 
-        Ok(())
+        let ipam = core_utils::get_ipam_addresses(per_network_opts, network)?;
+        if network.dns_enabled {
+            let _ = response.dns_server_ips.insert(ipam.nameservers);
+            // Note: this is being added so podman setup is backward compatible with the design
+            // which we had with dnsname/dnsmasq. I belive this can be fixed in later releases.
+            let _ = response
+                .dns_search_domains
+                .insert(vec![constants::PODMAN_DEFAULT_SEARCH_DOMAIN.to_string()]);
+        }
+        Ok(response)
     }
 
     fn remove_container_veth(ifname: &str, netns: &str) -> Result<(), std::io::Error> {

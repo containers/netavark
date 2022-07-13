@@ -134,6 +134,67 @@ function teardown() {
     run_in_host_netns ping6 -c 1 fd10:88:a::2
 }
 
+@test "$fw_driver - dual stack dns with alt port" {
+    # get a random port directly to avoid low ports e.g. 53 would not create iptables
+    dns_port=$((RANDOM+10000))
+
+    # hack to make aardvark-dns run when really root or when running as user with
+    # podman unshare --rootless-netns; since netavark runs aardvark with systemd-run
+    # it needs to know if it should use systemd user instance or not.
+    # iptables are still setup identically.
+    rootless=false
+    if [[ ! -e "/run/dbus/system_bus_socket" ]]; then
+        rootless=true
+    fi
+
+    mkdir -p "$NETAVARK_TMPDIR/config"
+
+    NETAVARK_FW=firewalld NETAVARK_DNS_PORT="$dns_port" \
+        run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
+        --rootless "$rootless" --config "$NETAVARK_TMPDIR/config" \
+        setup $(get_container_netns_path)
+
+    # check iptables
+    # firewall-cmd --list-rich-rules does not guarantee order, use sort
+    run_in_host_netns sh -c 'firewall-cmd --policy netavark_portfwd --list-rich-rules | sort'
+    assert "${lines[0]}" =~ "rule family=\"ipv4\" destination address=\"10.89.3.1\" forward-port port=\"53\" protocol=\"udp\" to-port=\"$dns_port\" to-addr=\"10.89.3.1\"" "ipv4 dns redirection"
+    assert "${lines[1]}" =~ "rule family=\"ipv6\" destination address=\"fd10:88:a::1\" forward-port port=\"53\" protocol=\"udp\" to-port=\"$dns_port\" to-addr=\"fd10:88:a::1\"" "ipv6 dns redirection"
+    assert "${#lines[@]}" = 2 "too many rich rules"
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "[0-9a-f]* 10.89.3.2  somename" "aardvark config's container ipv4"
+    assert "${lines[2]}" =~ "[0-9a-f]*  fd10:88:a::2 somename" "aardvark config's container ipv6"
+    assert "${#lines[@]}" = 3 "too many liness in aardvark config"
+
+    aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
+    run_helper ps "$aardvark_pid"
+    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p $dns_port run" "aardvark not running or bad options"
+
+    # test redirection actually works
+    run_in_container_netns dig +short "somename.dns.podman" @10.89.3.1
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv4 dns resolution works 1/2"
+    assert "${lines[1]}" =~ "fd10:88:a::2" "ipv4 dns resolution works 2/2"
+
+    run_in_container_netns dig +short "somename.dns.podman" @fd10:88:a::1
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv6 dns resolution works"
+
+    NETAVARK_FW=firewalld NETAVARK_DNS_PORT="$dns_port" \
+        run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
+        --rootless "$rootless" --config "$NETAVARK_TMPDIR/config" \
+        teardown $(get_container_netns_path)
+
+    # check iptables got removed
+    run_in_host_netns firewall-cmd --policy netavark_portfwd --list-rich-rules
+    assert "${#lines[@]}" = 0 "rich rules did not get removed on teardown"
+
+    # check aardvark config got cleared, process killed
+    expected_rc=2 run_helper ls "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    expected_rc=1 run_helper ps "$aardvark_pid"
+}
+
 @test "$fw_driver - check error message from netns thread" {
     # create interface in netns to force error
     run_in_container_netns ip link add eth0 type dummy
