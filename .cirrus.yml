@@ -17,8 +17,10 @@ env:
     # Save a little typing (path relative to $CIRRUS_WORKING_DIR)
     SCRIPT_BASE: "./contrib/cirrus"
     FEDORA_NAME: "fedora-36"
-    IMAGE_SUFFIX: "c6457378097856512"
+    IMAGE_SUFFIX: "c5353795591864320"
     FEDORA_NETAVARK_IMAGE: "fedora-netavark-${IMAGE_SUFFIX}"
+    AARDVARK_DNS_BRANCH: "main"
+    AARDVARK_DNS_URL: "https://api.cirrus-ci.com/v1/artifact/github/containers/aardvark-dns/success/binary.zip?branch=${AARDVARK_DNS_BRANCH}"
 
 
 gcp_credentials: ENCRYPTED[d6efdb7d6d4c61e3831df2193ca6348bb02f26cd931695f69d41930b1965f7dab72a838ca0902f6ed8cde66c7deddae2]
