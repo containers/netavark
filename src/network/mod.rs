@@ -2,10 +2,13 @@ pub mod types;
 pub mod validation;
 use anyhow::Result;
 use std::fs::File;
+pub mod bridge;
 pub mod constants;
 pub mod core;
 pub mod core_utils;
+pub mod driver;
 pub mod internal_types;
+pub mod macvlan;
 
 impl types::NetworkOptions {
     pub fn load(path: &str) -> Result<types::NetworkOptions> {

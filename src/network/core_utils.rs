@@ -1,3 +1,4 @@
+use crate::error::{NetavarkError, NetavarkResult};
 use crate::network::{constants, internal_types, types};
 use futures::stream::TryStreamExt;
 use futures::StreamExt;
@@ -11,13 +12,15 @@ use rtnetlink::packet::rtnl::link::nlas::Nla;
 use rtnetlink::packet::NetlinkPayload;
 use rtnetlink::packet::RouteMessage;
 use sha2::{Digest, Sha512};
-use std::fs::File;
+use std::collections::HashMap;
+use std::fmt::Display;
 use std::io::Error;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
 use std::os::unix::prelude::*;
 use std::process;
+use std::str::FromStr;
 use std::thread;
 use sysctl::{Sysctl, SysctlError};
 
@@ -25,9 +28,35 @@ pub struct CoreUtils {
     pub networkns: String,
 }
 
-pub fn get_ipam_addresses(
-    per_network_opts: &types::PerNetworkOptions,
-    network: &types::Network,
+pub fn parse_option<T>(
+    opts: &Option<HashMap<String, String>>,
+    name: &str,
+    default: T,
+) -> NetavarkResult<T>
+where
+    T: FromStr,
+    <T as FromStr>::Err: Display,
+    T: Default,
+{
+    let val = match opts.as_ref().and_then(|map| map.get(name)) {
+        Some(val) => match val.parse::<T>() {
+            Ok(mtu) => mtu,
+            Err(err) => {
+                return Err(NetavarkError::Message(format!(
+                    "unable to parse \"{}\": {}",
+                    name, err
+                )));
+            }
+        },
+        // if no option is set return the default value
+        None => default,
+    };
+    Ok(val)
+}
+
+pub fn get_ipam_addresses<'a>(
+    per_network_opts: &'a types::PerNetworkOptions,
+    network: &'a types::Network,
 ) -> Result<internal_types::IPAMAddresses, std::io::Error> {
     let addresses = match network
         .ipam_options
@@ -145,7 +174,7 @@ impl CoreUtils {
         address
     }
 
-    fn decode_address_from_hex(input: &str) -> Result<Vec<u8>, std::io::Error> {
+    pub fn decode_address_from_hex(input: &str) -> Result<Vec<u8>, std::io::Error> {
         let bytes: Result<Vec<u8>, _> = input
             .split(|c| c == ':' || c == '-')
             .into_iter()
@@ -177,7 +206,7 @@ impl CoreUtils {
         // Replace to constant from library once this gets merged.
         // TODO: use actual constants after https://github.com/little-dude/netlink/pull/200
         match mode {
-            "bridge" => Ok(constants::MACVLAN_MODE_BRIDGE),
+            "" | "bridge" => Ok(constants::MACVLAN_MODE_BRIDGE),
             "private" => Ok(constants::MACVLAN_MODE_PRIVATE),
             "vepa" => Ok(constants::MACVLAN_MODE_VEPA),
             "passthru" => Ok(constants::MACVLAN_MODE_PASSTHRU),
@@ -596,25 +625,14 @@ impl CoreUtils {
     async fn set_link_mac(
         handle: &rtnetlink::Handle,
         ifname: &str,
-        mac: &str,
+        mac: Vec<u8>,
     ) -> Result<(), std::io::Error> {
-        // convert mac from string to u8
-        let mac_addr = match CoreUtils::decode_address_from_hex(mac) {
-            Ok(addr) => addr,
-            Err(err) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("failed while decoding static mac: {}", err),
-                ))
-            }
-        };
-
         let mut links = handle.link().get().match_name(ifname.to_string()).execute();
         match links.try_next().await {
             Ok(Some(link)) => match handle
                 .link()
                 .set(link.header.index)
-                .address(mac_addr)
+                .address(mac)
                 .execute()
                 .await
             {
@@ -713,7 +731,7 @@ impl CoreUtils {
         macvlan_ifname: &str,
         macvlan_mode: u32,
         mtu: u32,
-        netns_path: &str,
+        netns: RawFd,
     ) -> Result<(), Error> {
         let (_connection, handle, _) = match rtnetlink::new_connection() {
             Ok((conn, handle, messages)) => (conn, handle, messages),
@@ -780,88 +798,76 @@ impl CoreUtils {
         }
 
         // change network namespace of macvlan interface
-        match File::open(netns_path) {
-            Ok(netns_file) => {
-                let netns_fd = netns_file.as_raw_fd();
-                let mut links = handle
+        let mut links = handle
+            .link()
+            .get()
+            .match_name(macvlan_tmp_name.to_string())
+            .execute();
+        match links.try_next().await {
+            Ok(Some(link)) => {
+                match handle
                     .link()
-                    .get()
-                    .match_name(macvlan_tmp_name.to_string())
-                    .execute();
-                match links.try_next().await {
-                    Ok(Some(link)) => {
-                        match handle
-                            .link()
-                            .set(link.header.index)
-                            .setns_by_fd(netns_fd)
-                            .execute()
-                            .await
-                        {
-                            Ok(_) => (),
-                            Err(err) => {
-                                return Err(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    format!(
-                                        "failed to set macvlan {} to netns: {}",
-                                        &macvlan_tmp_name, err
-                                    ),
-                                ))
-                            }
-                        }
-                    }
-                    Ok(None) => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("macvlan interface {} not found", &macvlan_tmp_name),
-                        ))
-                    }
+                    .set(link.header.index)
+                    .setns_by_fd(netns)
+                    .execute()
+                    .await
+                {
+                    Ok(_) => (),
                     Err(err) => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("failed to get interface {}: {}", &macvlan_tmp_name, err),
-                        ))
-                    }
-                }
-
-                let macvlan_tmp_ifname: String = macvlan_tmp_name.to_owned();
-                let macvlan_ifname_clone: String = macvlan_ifname.to_owned();
-                // we have to also swtich to network namespace. rename macvlan interface and turn
-                // up interface
-                let thread_handle = thread::spawn(move || -> Result<(), Error> {
-                    if let Err(err) = sched::setns(netns_fd, sched::CloneFlags::CLONE_NEWNET) {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::Other,
                             format!(
-                                "failed to setns on container network namespace fd={}: {}",
-                                netns_fd, err
+                                "failed to set macvlan {} to netns: {}",
+                                &macvlan_tmp_name, err
                             ),
-                        ));
-                    }
-
-                    if let Err(err) = CoreUtils::rename_macvlan_internal(
-                        &macvlan_tmp_ifname,
-                        &macvlan_ifname_clone,
-                    ) {
-                        return Err(err);
-                    }
-
-                    Ok(())
-                });
-                match thread_handle.join() {
-                    Ok(_) => {}
-                    Err(err) => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("from container namespace: {:?}", err),
-                        ));
+                        ))
                     }
                 }
+            }
+            Ok(None) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("macvlan interface {} not found", &macvlan_tmp_name),
+                ))
             }
             Err(err) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("failed to open the netns file: {}", err),
+                    format!("failed to get interface {}: {}", &macvlan_tmp_name, err),
                 ))
+            }
+        }
+
+        let macvlan_tmp_ifname: String = macvlan_tmp_name.to_owned();
+        let macvlan_ifname_clone: String = macvlan_ifname.to_owned();
+        // we have to also swtich to network namespace. rename macvlan interface and turn
+        // up interface
+        let thread_handle = thread::spawn(move || -> Result<(), Error> {
+            if let Err(err) = sched::setns(netns, sched::CloneFlags::CLONE_NEWNET) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "failed to setns on container network namespace fd={}: {}",
+                        netns, err
+                    ),
+                ));
+            }
+
+            if let Err(err) =
+                CoreUtils::rename_macvlan_internal(&macvlan_tmp_ifname, &macvlan_ifname_clone)
+            {
+                return Err(err);
+            }
+
+            Ok(())
+        });
+        match thread_handle.join() {
+            Ok(_) => {}
+            Err(err) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("from container namespace: {:?}", err),
+                ));
             }
         }
 
@@ -871,7 +877,7 @@ impl CoreUtils {
     #[tokio::main]
     pub async fn configure_bridge_async(
         ifname: &str,
-        ips: Vec<ipnet::IpNet>,
+        ips: &[ipnet::IpNet],
         mtu: u32,
         ipv6_enabled: bool,
     ) -> Result<(), Error> {
@@ -955,8 +961,8 @@ impl CoreUtils {
                 }
             }
         }
-        for ip_net in ips.into_iter() {
-            if let Err(err) = CoreUtils::add_ip_address(&handle, ifname, &ip_net).await {
+        for ip_net in ips.iter() {
+            if let Err(err) = CoreUtils::add_ip_address(&handle, ifname, ip_net).await {
                 return Err(err);
             }
         }
@@ -1103,7 +1109,7 @@ impl CoreUtils {
         host_veth: &str,
         container_veth: &str,
         br_if: &str,
-        netns_path: &str,
+        netns_fd: RawFd,
         mtu: u32,
         ipv6_enabled: bool,
     ) -> Result<(), Error> {
@@ -1144,53 +1150,42 @@ impl CoreUtils {
         };
 
         //generate veth pair in container namespace and move host end back to hostnamespace
-        match File::open(netns_path) {
-            Ok(file) => {
-                let netns_fd = file.as_raw_fd();
-                let ctr_veth: String = container_veth.to_owned();
-                let hst_veth: String = host_veth.to_owned();
-                //we are going to use this pid to move back one end to host
-                let netavark_pid: u32 = process::id();
-                let thread_handle = thread::spawn(move || -> Result<(), Error> {
-                    if let Err(err) = sched::setns(netns_fd, sched::CloneFlags::CLONE_NEWNET) {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!(
-                                "failed to setns on container network namespace fd={}: {}",
-                                netns_fd, err
-                            ),
-                        ));
-                    }
+        let ctr_veth: String = container_veth.to_owned();
+        let hst_veth: String = host_veth.to_owned();
+        //we are going to use this pid to move back one end to host
+        let netavark_pid: u32 = process::id();
+        let thread_handle = thread::spawn(move || -> Result<(), Error> {
+            if let Err(err) = sched::setns(netns_fd, sched::CloneFlags::CLONE_NEWNET) {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "failed to setns on container network namespace fd={}: {}",
+                        netns_fd, err
+                    ),
+                ));
+            }
 
-                    if let Err(err) = CoreUtils::generate_veth_pair_internal(
-                        netavark_pid,
-                        &hst_veth,
-                        &ctr_veth,
-                        mtu,
-                        ipv6_enabled,
-                    ) {
-                        return Err(err);
-                    }
+            if let Err(err) = CoreUtils::generate_veth_pair_internal(
+                netavark_pid,
+                &hst_veth,
+                &ctr_veth,
+                mtu,
+                ipv6_enabled,
+            ) {
+                return Err(err);
+            }
 
-                    Ok(())
-                });
-                match thread_handle.join() {
-                    Ok(ok) => {
-                        // read the result from the thread
-                        match ok {
-                            Ok(_) => {}
-                            Err(err) => {
-                                return Err(std::io::Error::new(
-                                    std::io::ErrorKind::Other,
-                                    format!("from network namespace: {}", err),
-                                ));
-                            }
-                        }
-                    }
+            Ok(())
+        });
+        match thread_handle.join() {
+            Ok(ok) => {
+                // read the result from the thread
+                match ok {
+                    Ok(_) => {}
                     Err(err) => {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::Other,
-                            format!("error waiting for thread: {:?}", err),
+                            format!("from network namespace: {}", err),
                         ));
                     }
                 }
@@ -1198,10 +1193,11 @@ impl CoreUtils {
             Err(err) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("failed to open network namespace: {}", err),
-                ))
+                    format!("error waiting for thread: {:?}", err),
+                ));
             }
         }
+
         if ipv6_enabled {
             // Disable duplicate address detection on host veth if ipv6 enabled
             let k = format!("/proc/sys/net/ipv6/conf/{}/accept_dad", &host_veth);
@@ -1269,8 +1265,8 @@ impl CoreUtils {
     pub async fn configure_netns_interface_async(
         ifname: &str,
         ips: Vec<ipnet::IpNet>,
-        gw_ip_addrs: Vec<ipnet::IpNet>,
-        static_mac: &str,
+        gw_ip_addrs: &Vec<ipnet::IpNet>,
+        static_mac: Option<Vec<u8>>,
     ) -> Result<(), Error> {
         let (_connection, handle, _) = match rtnetlink::new_connection() {
             Ok((conn, handle, messages)) => (conn, handle, messages),
@@ -1295,11 +1291,14 @@ impl CoreUtils {
         }
 
         // set static mac here
-        if !static_mac.is_empty() {
-            if let Err(err) = CoreUtils::set_link_mac(&handle, ifname, static_mac).await {
-                return Err(err);
+        match static_mac {
+            Some(mac) => {
+                if let Err(err) = CoreUtils::set_link_mac(&handle, ifname, mac).await {
+                    return Err(err);
+                }
             }
-        }
+            None => {}
+        };
 
         // ip netns exec <namespace> ip route add default via <gateway> dev <ifname>
         for gw_ip_add in gw_ip_addrs {

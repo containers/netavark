@@ -4,8 +4,8 @@ use std::net::IpAddr;
 
 //  Teardown contains options for tearing down behind a container
 #[derive(Clone, Debug)]
-pub struct TeardownPortForward {
-    pub config: PortForwardConfig,
+pub struct TeardownPortForward<'a> {
+    pub config: PortForwardConfig<'a>,
     // remove network related information
     pub complete_teardown: bool,
 }
@@ -28,9 +28,7 @@ pub struct TearDownNetwork {
 }
 
 #[derive(Clone, Debug)]
-pub struct PortForwardConfig {
-    //  network object
-    pub net: types::Network,
+pub struct PortForwardConfig<'a> {
     // id of container
     pub container_id: String,
     // port mappings
@@ -59,7 +57,7 @@ pub struct PortForwardConfig {
     // forwarding is not setup if this is 53.
     pub dns_port: u16,
     // dns servers IPs where forwarding rule to port 53 from dns_port are necessary
-    pub dns_server_ips: Vec<IpAddr>,
+    pub dns_server_ips: &'a Vec<IpAddr>,
 }
 
 /// IPAMAddresses is used to pass ipam information around
