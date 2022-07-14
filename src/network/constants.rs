@@ -15,3 +15,12 @@ pub const MACVLAN_MODE_SOURCE: u32 = 16;
 pub const IPAM_HOSTLOCAL: &str = "host-local";
 pub const IPAM_DHCP: &str = "dhcp";
 pub const IPAM_NONE: &str = "none";
+
+pub const DRIVER_BRIDGE: &str = "bridge";
+pub const DRIVER_MACVLAN: &str = "macvlan";
+
+pub const OPTION_ISOLATE: &str = "isolate";
+pub const OPTION_MTU: &str = "mtu";
+pub const OPTION_MODE: &str = "mode";
+
+pub const NO_CONTAINER_INTERFACE_ERROR: &str = "no container interface name given";
