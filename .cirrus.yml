@@ -21,28 +21,24 @@ env:
     FEDORA_NETAVARK_IMAGE: "fedora-netavark-${IMAGE_SUFFIX}"
     AARDVARK_DNS_BRANCH: "main"
     AARDVARK_DNS_URL: "https://api.cirrus-ci.com/v1/artifact/github/containers/aardvark-dns/success/binary.zip?branch=${AARDVARK_DNS_BRANCH}"
+    FEDORA_NETAVARK_AARCH64_AMI_ID: "ami-00d7ccde5eaacc50e"
 
 
 gcp_credentials: ENCRYPTED[d6efdb7d6d4c61e3831df2193ca6348bb02f26cd931695f69d41930b1965f7dab72a838ca0902f6ed8cde66c7deddae2]
 
-
-# Default VM to use unless set or modified by task
-gce_instance:  &standard_vm
-    image_project: "libpod-218412"
-    zone: "us-central1-c"
-    cpu: 2
-    memory: "4Gb"
-    disk: 200  # GB, do not set <200 per gcloud warning re: I/O performance
-    image_name: "${FEDORA_NETAVARK_IMAGE}"
+aws_credentials: ENCRYPTED[949b114326ca5686a3aa2990536a479cf8e5a931611b443e50579ea787faa21eb172f6fc0ebc79d7e817e4bebf417940]
 
 
 build_task:
   alias: "build"
   # Compiling is very CPU intensive, make it chooch quicker for this task only
-  gce_instance:
-    <<: *standard_vm
-    cpu: 8
-    memory: "8Gb"
+  gce_instance: &standard_build_gce_x86_64
+     image_project: "libpod-218412"
+     zone: "us-central1-c"
+     disk: 200  # GB, do not set <200 per gcloud warning re: I/O performance
+     cpu: 8
+     memory: "8Gb"
+     image_name: "${FEDORA_NETAVARK_IMAGE}"
   cargo_cache: &cargo_cache
     # Populating this cache depends on execution of setup.sh, and runner.sh
     # to builds of all release, debug, plus unit-tests.
@@ -76,30 +72,47 @@ build_task:
   upload_caches: [ "cargo", "targets", "bin" ]
 
 
-build_cross_task:
-  alias: "build_cross"
-  cargo_cache:
-    <<: *cargo_cache
-    # Don't confuse cache architectures, bad things will happen.
-    fingerprint_key: "cargo_v2_${DEST_BRANCH}_arm64"
-  targets_cache:
-    <<: *targets_cache
-    fingerprint_key: "targets_v2_${CIRRUS_TAG}${DEST_BRANCH}${CIRRUS_PR}_arm64" # Cache only within same tag, branch, or PR (branch will be 'pull/#')
-  bin_cache:
-    <<: *bin_cache
-    fingerprint_key: "bin_v2_${CIRRUS_TAG}${DEST_BRANCH}${CIRRUS_PR}_arm64" # Cache only within same tag, branch, or PR (branch will be 'pull/#')
+build_aarch64_task:
+  alias: "build_aarch64"
+  ec2_instance: &standard_build_ec2_aarch64
+    image: "${FEDORA_NETAVARK_AARCH64_AMI_ID}"
+    type: t4g.xlarge
+    region: us-east-1
+    architecture: arm64  # CAUTION: This has to be "arm64", not "aarch64"
+  cargo_cache: &cargo_cache_aarch64
+    folder: "$CARGO_HOME"
+    fingerprint_key: "cargo_v2_${DEST_BRANCH}_aarch64"
+    reupload_on_changes: true
+  targets_cache: &targets_cache_aarch64
+    folder: "$CARGO_TARGET_DIR"
+    fingerprint_key: "targets_v2_${CIRRUS_TAG}${DEST_BRANCH}${CIRRUS_PR}_aarch64" # Cache only within same tag, branch, or PR (branch will be 'pull/#')
+    reupload_on_changes: true
+  bin_cache: &bin_cache_aarch64
+    # This simply prevents rebuilding bin/netavark for every subsequent task.
+    folder: "$CIRRUS_WORKING_DIR/bin"
+    fingerprint_key: "bin_v2_${CIRRUS_TAG}${DEST_BRANCH}${CIRRUS_PR}_aarch64" # Cache only within same tag, branch, or PR (branch will be 'pull/#')
+    reupload_on_changes: true
   setup_script: *setup
   main_script: *main
-  # Upload cross-compiled binary for collection by success task
-  # https://cirrus-ci.org/guide/writing-tasks/#artifacts-instruction
-  binary_artifacts:
-    path: ./bin/netavark*
+  upload_caches: [ "cargo", "targets", "bin" ]
+  # Downstream CI needs the aarch64 binaries from this CI system.
+  # However, we don't want to confuse architectures.
+  art_prep_script:
+    - cd bin
+    - ln netavark netavark.$(uname -m)-unknown-linux-gnu
+    - ln netavark.debug netavark.debug.$(uname -m)-unknown-linux-gnu
+  armbinary_artifacts:  # See success_task
+    path: ./bin/netavark*-unknown-linux-gnu
 
 
 validate_task:
   alias: "validate"
   depends_on:
     - "build"
+  gce_instance: &standard_gce_x86_64
+    <<: *standard_build_gce_x86_64
+    cpu: 2
+    memory: "4Gb"
   # From this point forward, all cache's become read-only - meaning
   # any changes made in this task aren't re-uploaded to the cache.
   # This avoids some flapping between tasks, along with the upload time.
@@ -115,33 +128,93 @@ validate_task:
   setup_script: *setup
   main_script: *main
 
+
+validate_aarch64_task:
+  alias: "validate_aarch64"
+  depends_on:
+    - "build_aarch64"
+  ec2_instance: *standard_build_ec2_aarch64
+  cargo_cache: &ro_cargo_cache_aarch64
+    <<: *cargo_cache_aarch64
+    reupload_on_changes: false
+  targets_cache: &ro_targets_cache_aarch64
+    <<: *targets_cache_aarch64
+    reupload_on_changes: false
+  bin_cache: &ro_bin_cache_aarch64
+    <<: *bin_cache_aarch64
+    reupload_on_changes: false
+  setup_script: *setup
+  main_script: *main
+
+
 verify_vendor_task:
   alias: "verify_vendor"
   depends_on:
     - "build"
+  gce_instance: *standard_gce_x86_64
   cargo_cache: *ro_cargo_cache
   targets_cache: *ro_targets_cache
   bin_cache: *ro_bin_cache
   setup_script: *setup
   main_script: *main
+
+
+verify_vendor_aarch64_task:
+  alias: "verify_vendor_aarch64"
+  depends_on:
+    - "build_aarch64"
+  ec2_instance: *standard_build_ec2_aarch64
+  cargo_cache: *ro_cargo_cache_aarch64
+  targets_cache: *ro_targets_cache_aarch64
+  bin_cache: *ro_bin_cache_aarch64
+  setup_script: *setup
+  main_script: *main
+
 
 unit_task:
   alias: "unit"
   depends_on:
     - "build"
+  gce_instance: *standard_gce_x86_64
   cargo_cache: *ro_cargo_cache
   targets_cache: *ro_targets_cache
   bin_cache: *ro_bin_cache
   setup_script: *setup
   main_script: *main
 
+
+unit_aarch64_task:
+  alias: "unit_aarch64"
+  depends_on:
+    - "build_aarch64"
+  ec2_instance: *standard_build_ec2_aarch64
+  cargo_cache: *ro_cargo_cache_aarch64
+  targets_cache: *ro_targets_cache_aarch64
+  bin_cache: *ro_bin_cache_aarch64
+  setup_script: *setup
+  main_script: *main
+
+
 integration_task:
   alias: "integration"
   depends_on:
     - "unit"
+  gce_instance: *standard_gce_x86_64
   cargo_cache: *ro_cargo_cache
   targets_cache: *ro_targets_cache
   bin_cache: *ro_bin_cache
+  setup_script: *setup
+  main_script: *main
+
+
+integration_aarch64_task:
+  alias: "integration_aarch64"
+  depends_on:
+    - "unit_aarch64"
+  ec2_instance: *standard_build_ec2_aarch64
+  cargo_cache: *ro_cargo_cache_aarch64
+  targets_cache: *ro_targets_cache_aarch64
+  bin_cache: *ro_bin_cache_aarch64
   setup_script: *setup
   main_script: *main
 
@@ -171,6 +244,7 @@ ubuntu20_build_task:
     alias: ubuntu20_build
     depends_on:
       - "build"
+    gce_instance: *standard_gce_x86_64
     container:
         cpu: 2
         memory: 2
@@ -183,6 +257,7 @@ centos9_build_task:
     alias: centos9_build
     depends_on:
       - "build"
+    gce_instance: *standard_gce_x86_64
     container:
         cpu: 2
         memory: 2
@@ -196,24 +271,29 @@ success_task:
   alias: success
   depends_on:
     - "build"
-    - "build_cross"
+    - "build_aarch64"
     - "validate"
+    - "validate_aarch64"
     - "verify_vendor"
+    - "verify_vendor_aarch64"
     - "unit"
+    - "unit_aarch64"
     - "integration"
+    - "integration_aarch64"
     - "meta"
     - "ubuntu20_build"
     - "centos9_build"
+  gce_instance: *standard_gce_x86_64
   env:
     CIRRUS_SHELL: "/bin/sh"
   clone_script: *noop
-  bin_cache: *ro_bin_cache
+  bin_cache: *ro_bin_cache_aarch64
   # The paths used for uploaded artifacts are relative here and in Cirrus
   script:
     # Cross-compiled binary artifact is required by other CI systems
-    - curl --fail --location -O --url https://api.cirrus-ci.com/v1/artifact/build/${CIRRUS_BUILD_ID}/build_cross/binary.zip
-    - unzip binary.zip
-    - rm -f binary.zip
+    - curl --fail --location -O --url https://api.cirrus-ci.com/v1/artifact/build/${CIRRUS_BUILD_ID}/build_aarch64/armbinary.zip
+    - unzip armbinary.zip
+    - rm -f armbinary.zip
     - mv bin/* ./
     - rm -rf bin
   # Upload tested binary for consumption downstream

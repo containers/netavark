@@ -34,15 +34,16 @@ task: https://cirrus-ci.com/task/$CIRRUS_TASK_ID
 EOF
 }
 
+_run_build_aarch64() {
+    _run_build
+}
+
 _run_validate() {
-    rustup install stable
-    rustup default stable
     make validate
 }
 
-_run_build_cross() {
-    make build_cross debug=1
-    make build_cross
+_run_validate_aarch64() {
+    _run_validate
 }
 
 _run_verify_vendor() {
@@ -52,12 +53,24 @@ _run_verify_vendor() {
     fi
 }
 
+_run_verify_vendor_aarch64() {
+    _run_verify_vendor
+}
+
 _run_unit() {
     make unit
 }
 
+_run_unit_aarch64() {
+    _run_unit
+}
+
 _run_integration() {
     make integration
+}
+
+_run_integration_aarch64() {
+    _run_integration
 }
 
 show_env_vars
@@ -65,6 +78,15 @@ show_env_vars
 msg "************************************************************"
 msg "Toolchain details"
 msg "************************************************************"
+
+# FIXME (@lsm5): rustup commands should be moved to c/automation_images repo
+# https://github.com/containers/automation_images/issues/150
+rustup install stable
+rustup default stable
+if [[ $(uname -m) == "aarch64" ]]; then
+    rustup target add aarch64-unknown-linux-gnu
+fi
+
 rustc --version
 cargo --version
 
