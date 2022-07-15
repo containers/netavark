@@ -75,19 +75,6 @@ test: unit integration
 build_unit: $(CARGO_TARGET_DIR)
 	cargo test --no-run
 
-# Test build cross-architecture
-# Ref: https://github.com/cross-rs/cross
-.PHONY: build_cross
-build_cross: build_cross.aarch64-unknown-linux-gnu build_cross.arm-unknown-linux-gnueabi
-
-.PHONY: build_cross.%
-build_cross.%: bin $(CARGO_TARGET_DIR)
-	cargo install cross
-	rustup target add $*
-	cross build --target $* $(release)
-	cp $(CARGO_TARGET_DIR)/$*/$(profile)/netavark \
-		bin/netavark.$(*)$(if $(debug),.debug,)
-
 .PHONY: unit
 unit: $(CARGO_TARGET_DIR)
 	cargo test
