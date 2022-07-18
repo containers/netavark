@@ -287,7 +287,7 @@ success_task:
   env:
     CIRRUS_SHELL: "/bin/sh"
   clone_script: *noop
-  bin_cache: *ro_bin_cache_aarch64
+  bin_cache: *ro_bin_cache
   # The paths used for uploaded artifacts are relative here and in Cirrus
   script:
     # Cross-compiled binary artifact is required by other CI systems
