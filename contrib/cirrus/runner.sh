@@ -24,7 +24,7 @@ _run_build() {
     make all  # optimized/non-debug binaries
     # This will get scooped up and become part of the artifact archive.
     # Identify where the binary came from to benefit downstream consumers.
-    cat >> bin/netavark.info << EOF
+    cat | tee bin/netavark.info << EOF
 repo: $CIRRUS_REPO_CLONE_URL
 branch: $CIRRUS_BASE_BRANCH
 title: $CIRRUS_CHANGE_TITLE

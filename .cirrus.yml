@@ -99,10 +99,12 @@ build_aarch64_task:
   # However, we don't want to confuse architectures.
   art_prep_script:
     - cd bin
-    - ln netavark netavark.$(uname -m)-unknown-linux-gnu
-    - ln netavark.debug netavark.debug.$(uname -m)-unknown-linux-gnu
+    - ls -la
+    - mv netavark netavark.$(uname -m)-unknown-linux-gnu
+    - mv netavark.debug netavark.debug.$(uname -m)-unknown-linux-gnu
+    - mv netavark.info netavark.info.$(uname -m)-unknown-linux-gnu
   armbinary_artifacts:  # See success_task
-    path: ./bin/netavark*-unknown-linux-gnu
+    path: ./bin/netavark*
 
 
 validate_task:
@@ -285,17 +287,28 @@ success_task:
     - "centos9_build"
   gce_instance: *standard_gce_x86_64
   env:
-    CIRRUS_SHELL: "/bin/sh"
+    API_URL_BASE: "https://api.cirrus-ci.com/v1/artifact/build/${CIRRUS_BUILD_ID}"
+    EXP_BINS: >-
+        netavark
+        netavark.debug
+        netavark.info
+        netavark.aarch64-unknown-linux-gnu
+        netavark.debug.aarch64-unknown-linux-gnu
+        netavark.info.aarch64-unknown-linux-gnu
   clone_script: *noop
   bin_cache: *ro_bin_cache
   # The paths used for uploaded artifacts are relative here and in Cirrus
   script:
-    # Cross-compiled binary artifact is required by other CI systems
-    - curl --fail --location -O --url https://api.cirrus-ci.com/v1/artifact/build/${CIRRUS_BUILD_ID}/build_aarch64/armbinary.zip
+    - set -x
+    - curl --fail --location -O --url ${API_URL_BASE}/build_aarch64/armbinary.zip
     - unzip armbinary.zip
     - rm -f armbinary.zip
     - mv bin/* ./
     - rm -rf bin
+  artifacts_test_script:  # Other CI systems depend on all files being present
+    - ls -la
+    # If there's a missing file, show what it was in the output
+    - for fn in $EXP_BINS; do [[ -r "$(echo $fn|tee /dev/stderr)" ]] || exit 1; done
   # Upload tested binary for consumption downstream
   # https://cirrus-ci.org/guide/writing-tasks/#artifacts-instruction
   binary_artifacts:
