@@ -32,14 +32,14 @@ serde_json = "1.0.82"
 sysctl = "0.4.4"
 url = "2.1.0"
 zbus = "2.2.0"
-rtnetlink = "0.10.1"
+rtnetlink = "0.11.0"
 futures = "0.3.21"
 nix = "0.24.2"
 rand = "0.8.5"
 tokio = { version = "1.20.0", features = ["full"] }
 zvariant = "3.4.1"
 sha2 = "0.10.1"
-netlink-packet-route = "0.12"
+netlink-packet-route = "0.13"
 
 [build-dependencies]
 chrono = "0.4.7"
