@@ -1,7 +1,7 @@
 PREFIX ?= /usr/local
 DATADIR ?= ${PREFIX}/share
 MANDIR ?= $(DATADIR)/man
-MANDOWN ?= $(shell command -v mandown)
+MANDOWN ?= $(shell export PATH; command -v mandown)
 
 docs: $(patsubst %.md,%,$(wildcard *.md))
 
