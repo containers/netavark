@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.1.0
+* Netavark is now capable of starting Aardvark on a port other than 53 (controlled by `dns_bind_port` in `containers.conf`). Firewall rules are added to ensure DNS still functions properly despite the port change.
+* Added the ability to isolate networks. Networks with the isolate option set cannot communicate with other networks with the isolate option set.
+* Improved the way Aardvark is launched to avoid potential race conditions where DNS would not be ready when containers were started.
+* Fixed a bug where Aardvark could not be run in environments with a read-only `/proc` (e.g. inside a container).
+
 ## v1.0.3
 * Updated dependenciess
 * Simplified option parsing for bridge/macvlan
