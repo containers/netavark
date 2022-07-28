@@ -4,7 +4,7 @@ use crate::error::{NetavarkError, NetavarkResult};
 use crate::firewall;
 use crate::network;
 use crate::network::driver::{get_network_driver, DriverInfo};
-use crate::network::{core_utils, types};
+use crate::network::types;
 use clap::Parser;
 use log::{debug, error, info};
 use std::collections::HashMap;
@@ -12,8 +12,6 @@ use std::env;
 use std::fs::{self, File};
 use std::os::unix::prelude::AsRawFd;
 use std::path::Path;
-
-const IPV4_FORWARD: &str = "net.ipv4.ip_forward";
 
 #[derive(Parser, Debug)]
 pub struct Setup {
@@ -60,14 +58,6 @@ impl Setup {
             Ok(driver) => driver,
             Err(e) => return Err(e),
         };
-
-        // Sysctl setup
-        // set ipv4 forwarding to 1
-        core_utils::CoreUtils::apply_sysctl_value(IPV4_FORWARD, "1")?;
-        // set ipv6 forwarding to 1
-        // if network.ipv6_enabled {
-        //     core_utils::CoreUtils::apply_sysctl_value(IPV6_FORWARD, "1")?;
-        // }
 
         let mut response: HashMap<String, types::StatusBlock> = HashMap::new();
 

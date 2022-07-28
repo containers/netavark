@@ -1,4 +1,4 @@
-use std::{collections::HashMap, net::IpAddr};
+use std::{collections::HashMap, net::IpAddr, sync::Once};
 
 use ipnet::IpNet;
 use log::{debug, error};
@@ -101,6 +101,11 @@ impl driver::NetworkDriver for Bridge<'_> {
             "Bridge name: {} with IP addresses {:?}",
             data.bridge_interface_name, data.ipam.gateway_addresses
         );
+
+        setup_ipv4_fw_sysctl()?;
+        if data.ipam.ipv6_enabled {
+            setup_ipv6_fw_sysctl()?;
+        }
 
         // get random name for host veth, TODO let kernel assign name
         let host_veth_name = format!("veth{:x}", rand::thread_rng().gen::<u32>());
@@ -376,4 +381,40 @@ impl<'a> Bridge<'a> {
         self.info.firewall.teardown_port_forward(tpf)?;
         Ok(())
     }
+}
+
+// sysctl forward
+
+static IPV4_FORWARD_ONCE: Once = Once::new();
+static IPV6_FORWARD_ONCE: Once = Once::new();
+
+const IPV4_FORWARD: &str = "net.ipv4.ip_forward";
+const IPV6_FORWARD: &str = "net.ipv6.conf.all.forwarding";
+
+fn setup_ipv4_fw_sysctl() -> NetavarkResult<()> {
+    let mut result = Ok("".to_string());
+
+    IPV4_FORWARD_ONCE.call_once(|| {
+        result = CoreUtils::apply_sysctl_value(IPV4_FORWARD, "1");
+    });
+
+    match result {
+        Ok(_) => {}
+        Err(e) => return Err(e.into()),
+    };
+    Ok(())
+}
+
+fn setup_ipv6_fw_sysctl() -> NetavarkResult<()> {
+    let mut result = Ok("".to_string());
+
+    IPV6_FORWARD_ONCE.call_once(|| {
+        result = CoreUtils::apply_sysctl_value(IPV6_FORWARD, "1");
+    });
+
+    match result {
+        Ok(_) => {}
+        Err(e) => return Err(e.into()),
+    };
+    Ok(())
 }
