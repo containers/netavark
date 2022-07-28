@@ -213,7 +213,7 @@ impl firewall::FirewallDriver for FirewallD {
                     rich_rules = Array::new(sig);
                 }
             }
-            for dns_ip in &setup_portfw.dns_server_ips {
+            for dns_ip in setup_portfw.dns_server_ips {
                 let ip_family = if dns_ip.is_ipv6() { "ipv6" } else { "ipv4" };
                 let rule = format!("rule family=\"{}\" destination address=\"{}\" forward-port port=\"53\" protocol=\"udp\" to-port=\"{}\" to-addr=\"{}\"",
                                    ip_family, dns_ip, setup_portfw.dns_port, dns_ip);
@@ -371,7 +371,7 @@ impl firewall::FirewallDriver for FirewallD {
         }
         if let Some(old_rich_rules) = old_rich_rules_option {
             let mut rules_to_delete: Vec<String> = vec![];
-            for dns_ip in &teardown_pf.config.dns_server_ips {
+            for dns_ip in teardown_pf.config.dns_server_ips {
                 let ip_family = if dns_ip.is_ipv6() { "ipv6" } else { "ipv4" };
                 let rule = format!("rule family=\"{}\" destination address=\"{}\" forward-port port=\"53\" protocol=\"udp\" to-port=\"{}\" to-addr=\"{}\"",
                                    ip_family, dns_ip, teardown_pf.config.dns_port, dns_ip);

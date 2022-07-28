@@ -1,16 +1,13 @@
 use crate::dns::aardvark::Aardvark;
 use crate::error::{NetavarkError, NetavarkResult};
-use crate::firewall::iptables::MAX_HASH_SIZE;
-use crate::network::core_utils::CoreUtils;
-use crate::network::internal_types::{
-    PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
-};
-use crate::network::types::Subnet;
+use crate::network::driver::{get_network_driver, DriverInfo};
+
 use crate::{firewall, network};
 use clap::Parser;
 use log::debug;
 use std::env;
-use std::net::IpAddr;
+use std::fs::File;
+use std::os::unix::prelude::AsRawFd;
 use std::path::Path;
 
 #[derive(Parser, Debug)]
@@ -79,162 +76,29 @@ impl Teardown {
             Ok(driver) => driver,
             Err(e) => return Err(e),
         };
+
+        let f = File::open(&self.network_namespace_path)?;
+        let ns_fd = f.as_raw_fd();
+
         for (net_name, network) in network_options.network_info.iter() {
-            debug!(
-                "Setting up network {} with driver {}",
-                net_name, network.driver
-            );
-            let interface_name: String = match network.network_interface.clone() {
-                None => "".to_string(),
-                Some(name) => name,
-            };
-            let count = CoreUtils::bridge_count_connected_interfaces(&interface_name)?;
-            let complete_teardown = count.len() == 1;
+            let per_network_opts = network_options.networks.get(net_name).ok_or_else(|| {
+                NetavarkError::Message(format!(
+                    "network options for network {} not found",
+                    net_name
+                ))
+            })?; //handle error and continue
 
-            match network.driver.as_str() {
-                "bridge" => {
-                    let per_network_opts =
-                        network_options.networks.get(net_name).ok_or_else(|| {
-                            std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                format!("network options for network {} not found", net_name),
-                            )
-                        })?;
-                    //Remove container interfaces
-                    let status_block = network::core::Core::remove_interface_per_podman_network(
-                        per_network_opts,
-                        network,
-                        &self.network_namespace_path,
-                    )?;
-                    // get DNS server IPs
-                    let dns_server_ips: Vec<IpAddr> =
-                        status_block.dns_server_ips.unwrap_or_default();
-                    // Teardown basic firewall port forwarding
+            let driver = get_network_driver(DriverInfo {
+                firewall: firewall_driver.as_ref(),
+                container_id: &network_options.container_id,
+                netns_container: ns_fd,
+                network,
+                per_network_opts,
+                port_mappings: &network_options.port_mappings,
+                dns_port,
+            })?; //handle error and continue
 
-                    let id_network_hash = network::core_utils::CoreUtils::create_network_hash(
-                        net_name,
-                        MAX_HASH_SIZE,
-                    );
-
-                    if !network.internal {
-                        match per_network_opts.static_ips.as_ref() {
-                            None => {}
-                            Some(container_ips) => {
-                                let port_bindings = network_options.port_mappings.clone();
-                                let networks = network.subnets.as_ref().ok_or_else(|| {
-                                    std::io::Error::new(
-                                        std::io::ErrorKind::Other,
-                                        "IP assigned but no network address provided",
-                                    )
-                                })?;
-
-                                let mut has_ipv4 = false;
-                                let mut has_ipv6 = false;
-                                let mut addr_v4: Option<IpAddr> = None;
-                                let mut addr_v6: Option<IpAddr> = None;
-                                let mut net_v4: Option<Subnet> = None;
-                                let mut net_v6: Option<Subnet> = None;
-                                for (idx, ip) in container_ips.iter().enumerate() {
-                                    if ip.is_ipv4() {
-                                        if has_ipv4 {
-                                            continue;
-                                        }
-                                        addr_v4 = Some(*ip);
-                                        net_v4 = Some(networks[idx].clone());
-                                        has_ipv4 = true;
-                                    }
-                                    if ip.is_ipv6() {
-                                        if has_ipv6 {
-                                            continue;
-                                        }
-                                        addr_v6 = Some(*ip);
-                                        net_v6 = Some(networks[idx].clone());
-                                        has_ipv6 = true;
-                                    }
-                                }
-                                let spf = PortForwardConfig {
-                                    net: network.clone(),
-                                    container_id: network_options.container_id.clone(),
-                                    port_mappings: port_bindings.unwrap_or_default(),
-                                    network_name: (*net_name).clone(),
-                                    network_hash_name: id_network_hash.clone(),
-                                    container_ip_v4: addr_v4,
-                                    subnet_v4: net_v4,
-                                    container_ip_v6: addr_v6,
-                                    subnet_v6: net_v6,
-                                    dns_port,
-                                    dns_server_ips,
-                                };
-                                let td = TeardownPortForward {
-                                    config: spf,
-                                    complete_teardown,
-                                };
-                                firewall_driver.teardown_port_forward(td)?;
-                            }
-                        }
-                    }
-                    if complete_teardown {
-                        // parse isolation option here so we can avoid unwrapping and storing it unecessarily
-                        let isolation_config =
-                            match network.options.as_ref().and_then(|map| map.get("isolate")) {
-                                Some(isolation) => match isolation.parse() {
-                                    Ok(isolation) => isolation,
-                                    Err(err) => {
-                                        return Err(std::io::Error::new(
-                                            std::io::ErrorKind::Other,
-                                            format!("could not parse isolation option: {}", err),
-                                        )
-                                        .into())
-                                    }
-                                },
-                                // default is to not isolate podman networks
-                                None => false,
-                            };
-
-                        if !network.internal {
-                            let su = SetupNetwork {
-                                net: network.clone(),
-                                network_hash_name: id_network_hash,
-                                isolation: isolation_config,
-                            };
-                            let ctd = TearDownNetwork {
-                                config: su,
-                                complete_teardown,
-                            };
-                            if !network.internal {
-                                firewall_driver.teardown_network(ctd)?;
-                            }
-                        }
-                        // Teardown the interface now
-                        network::core_utils::CoreUtils::remove_interface(&interface_name)?;
-                    }
-                }
-                "macvlan" => {
-                    let per_network_opts = network_options
-                        .networks
-                        .get(&(net_name).clone())
-                        .ok_or_else(|| {
-                            std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                format!("network options for network {} not found", net_name),
-                            )
-                        })?;
-                    //Remove container interfaces
-                    network::core::Core::remove_interface_per_podman_network(
-                        per_network_opts,
-                        network,
-                        &self.network_namespace_path,
-                    )?;
-                }
-                // unknown driver
-                _ => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("unknown network driver {}", network.driver),
-                    )
-                    .into());
-                }
-            }
+            driver.teardown()?; //handle error and continue
         }
 
         debug!("{:?}", "Teardown complete");

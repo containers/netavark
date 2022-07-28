@@ -432,7 +432,7 @@ pub fn get_port_forwarding_chains<'a>(
 
     // Create redirection for aardvark-dns on non-standard port
     if pfwd.dns_port != 53 {
-        for dns_ip in &pfwd.dns_server_ips {
+        for dns_ip in pfwd.dns_server_ips {
             if is_ipv6 != dns_ip.is_ipv6() {
                 continue;
             }

@@ -178,3 +178,55 @@ EOF
     run_in_container_netns ip r
     assert "$output" "==" "" "No routes configured"
 }
+
+
+@test "macvlan static mac" {
+   mac="aa:bb:cc:dd:ee:ff"
+
+           read -r -d '\0' config <<EOF
+{
+   "container_id": "someID",
+   "container_name": "someName",
+   "networks": {
+      "podman": {
+         "static_ips": [
+            "10.88.0.2"
+         ],
+         "static_mac": "$mac",
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+         "driver": "macvlan",
+         "network_interface": "dummy0",
+         "subnets": [
+            {
+               "subnet": "10.88.0.0/16",
+               "gateway": "10.88.0.1"
+            }
+         ],
+         "ipv6_enabled": false,
+         "internal": false,
+         "dns_enabled": false,
+         "ipam_options": {
+            "driver": "host-local"
+         }
+      }
+   }
+}\0
+EOF
+
+   run_netavark setup $(get_container_netns_path) <<<"$config"
+   result="$output"
+
+
+   assert_json "$result" ".podman.interfaces.eth0.mac_address" == "$mac" "MAC matches input mac"
+   # check that interface exists
+   run_in_container_netns ip -j link show eth0
+   link_info="$output"
+   assert_json "$link_info" ".[].address" "=="  "$mac" "MAC matches container mac"
+   assert_json "$link_info" '.[].flags[] | select(.=="UP")' "=="  "UP" "Container interface is up"
+}
