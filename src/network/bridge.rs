@@ -204,7 +204,9 @@ impl driver::NetworkDriver for Bridge<'_> {
                             }
                         };
 
-                    CoreUtils::remove_interface(&bridge_name)?; // handle error and continue
+                    if complete_teardown {
+                        CoreUtils::remove_interface(&bridge_name)?; // handle error and continue
+                    }
                     complete_teardown
                 }
                 Err(e) => {
