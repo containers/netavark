@@ -169,20 +169,26 @@ impl firewall::FirewallDriver for FirewallD {
         // prevention - if two ports end up mapped to different containers,
         // that is not detected, and firewalld will allow it to happen.
         // Only one of them will win and be active, though.
-        for port in setup_portfw.port_mappings {
-            if !port.host_ip.is_empty() {
-                port_forwarding_rules.append(Value::new(make_port_tuple(&port, &port.host_ip)))?;
-            } else {
-                if let Some(v4) = setup_portfw.container_ip_v4 {
-                    port_forwarding_rules
-                        .append(Value::new(make_port_tuple(&port, &v4.to_string())))?;
-                }
-                if let Some(v6) = setup_portfw.container_ip_v6 {
-                    port_forwarding_rules
-                        .append(Value::new(make_port_tuple(&port, &v6.to_string())))?;
+        match setup_portfw.port_mappings {
+            Some(ports) => {
+                for port in ports {
+                    if !port.host_ip.is_empty() {
+                        port_forwarding_rules
+                            .append(Value::new(make_port_tuple(port, &port.host_ip)))?;
+                    } else {
+                        if let Some(v4) = setup_portfw.container_ip_v4 {
+                            port_forwarding_rules
+                                .append(Value::new(make_port_tuple(port, &v4.to_string())))?;
+                        }
+                        if let Some(v6) = setup_portfw.container_ip_v6 {
+                            port_forwarding_rules
+                                .append(Value::new(make_port_tuple(port, &v6.to_string())))?;
+                        }
+                    }
                 }
             }
-        }
+            None => {}
+        };
 
         // dns port forwarding requires rich rules as we also want to match destination ip
         // only bother if configured dns port isn't 53

@@ -285,7 +285,7 @@ impl<'a> Bridge<'a> {
         }
         let spf = PortForwardConfig {
             container_id: self.info.container_id.clone(),
-            port_mappings: self.info.port_mappings.clone().unwrap_or_default(),
+            port_mappings: self.info.port_mappings,
             network_name: self.info.network.name.clone(),
             network_hash_name: id_network_hash,
             container_ip_v4: addr_v4,
@@ -307,7 +307,7 @@ impl<'a> Bridge<'a> {
 
         self.info.firewall.setup_network(sn)?;
 
-        if !spf.port_mappings.is_empty() {
+        if spf.port_mappings.is_some() {
             // Need to enable sysctl localnet so that traffic can pass
             // through localhost to containers
 
