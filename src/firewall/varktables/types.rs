@@ -4,7 +4,6 @@ use crate::firewall::varktables::helpers::{
 };
 use crate::firewall::varktables::types::TeardownPolicy::{Never, OnComplete};
 use crate::network::internal_types::PortForwardConfig;
-use crate::network::types::Subnet;
 use ipnet::IpNet;
 use iptables::IPTables;
 use log::debug;
@@ -330,7 +329,7 @@ pub fn get_port_forwarding_chains<'a>(
     conn: &'a IPTables,
     pfwd: &PortForwardConfig,
     container_ip: &IpAddr,
-    network_address: &Subnet,
+    network_address: &IpNet,
     is_ipv6: bool,
 ) -> Vec<VarkChain<'a>> {
     let mut localhost_ip = "127.0.0.1";
@@ -486,7 +485,7 @@ pub fn get_port_forwarding_chains<'a>(
 
         let mut dn_setmark_rule_localhost = format!(
             "-j {} -s {} -p {} --dport {}",
-            NETAVARK_HOSTPORT_SETMARK, network_address.subnet, i.protocol, &host_port
+            NETAVARK_HOSTPORT_SETMARK, network_address, i.protocol, &host_port
         );
 
         let mut dn_setmark_rule_subnet = format!(

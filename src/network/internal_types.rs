@@ -1,5 +1,4 @@
 use crate::network::types;
-use crate::network::types::Subnet;
 use std::net::IpAddr;
 
 //  Teardown contains options for tearing down behind a container
@@ -44,7 +43,7 @@ pub struct PortForwardConfig<'a> {
     pub container_ip_v4: Option<IpAddr>,
     // subnet associated with the IPv4 address.
     // Must be set if v4 address is set.
-    pub subnet_v4: Option<Subnet>,
+    pub subnet_v4: Option<ipnet::IpNet>,
     // ipv6 address of the container.
     // If multiple v6 addresses are present, use the first one for this.
     // At least one of container_ip_v6 and container_ip_v6 must be set. Both can
@@ -52,7 +51,7 @@ pub struct PortForwardConfig<'a> {
     pub container_ip_v6: Option<IpAddr>,
     // subnet associated with the ipv6 address.
     // Must be set if the v6 address is set.
-    pub subnet_v6: Option<Subnet>,
+    pub subnet_v6: Option<ipnet::IpNet>,
     // port used by DNS that should create forwarding rules
     // forwarding is not setup if this is 53.
     pub dns_port: u16,

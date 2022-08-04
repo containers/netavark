@@ -19,7 +19,7 @@ use super::{
     internal_types::{
         IPAMAddresses, PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
     },
-    types::{StatusBlock, Subnet},
+    types::StatusBlock,
 };
 
 const NO_BRIDGE_NAME_ERROR: &str = "no bridge interface name given";
@@ -260,8 +260,8 @@ impl<'a> Bridge<'a> {
         let mut has_ipv6 = false;
         let mut addr_v4: Option<IpAddr> = None;
         let mut addr_v6: Option<IpAddr> = None;
-        let mut net_v4: Option<Subnet> = None;
-        let mut net_v6: Option<Subnet> = None;
+        let mut net_v4: Option<IpNet> = None;
+        let mut net_v6: Option<IpNet> = None;
         for net in container_addresses {
             match net {
                 IpNet::V4(v4) => {
@@ -269,11 +269,7 @@ impl<'a> Bridge<'a> {
                         continue;
                     }
                     addr_v4 = Some(IpAddr::V4(v4.addr()));
-                    net_v4 = Some(Subnet {
-                        gateway: None,
-                        subnet: IpNet::new(v4.network().into(), v4.prefix_len()).unwrap(),
-                        lease_range: None,
-                    });
+                    net_v4 = Some(IpNet::new(v4.network().into(), v4.prefix_len())?);
                     has_ipv4 = true;
                 }
                 IpNet::V6(v6) => {
@@ -282,11 +278,7 @@ impl<'a> Bridge<'a> {
                     }
 
                     addr_v6 = Some(IpAddr::V6(v6.addr()));
-                    net_v6 = Some(Subnet {
-                        gateway: None,
-                        subnet: IpNet::new(v6.network().into(), v6.prefix_len()).unwrap(),
-                        lease_range: None,
-                    });
+                    net_v6 = Some(IpNet::new(v6.network().into(), v6.prefix_len())?);
                     has_ipv6 = true;
                 }
             }
