@@ -91,6 +91,7 @@ impl Teardown {
             let driver = get_network_driver(DriverInfo {
                 firewall: firewall_driver.as_ref(),
                 container_id: &network_options.container_id,
+                container_name: &network_options.container_name,
                 netns_container: ns_fd,
                 network,
                 per_network_opts,

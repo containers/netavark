@@ -145,7 +145,7 @@ impl driver::NetworkDriver for Bridge<'_> {
         // Add interface to interfaces (part of StatusBlock)
         interfaces.insert(data.container_interface_name.clone(), interface);
         let _ = response.interfaces.insert(interfaces);
-        if self.info.network.dns_enabled {
+        let aardvark_entry = if self.info.network.dns_enabled {
             let _ = response
                 .dns_server_ips
                 .insert(data.ipam.nameservers.clone());
@@ -154,7 +154,45 @@ impl driver::NetworkDriver for Bridge<'_> {
             let _ = response
                 .dns_search_domains
                 .insert(vec![constants::PODMAN_DEFAULT_SEARCH_DOMAIN.to_string()]);
-        }
+
+            let mut ipv4 = Vec::new();
+            let mut ipv6 = Vec::new();
+            for ipnet in &data.ipam.container_addresses {
+                match ipnet.addr() {
+                    IpAddr::V4(v4) => {
+                        ipv4.push(v4);
+                    }
+                    IpAddr::V6(v6) => {
+                        ipv6.push(v6);
+                    }
+                }
+            }
+            let mut names = vec![self.info.container_name.to_string()];
+            match &self.info.per_network_opts.aliases {
+                Some(n) => {
+                    names.extend(n.clone());
+                }
+                None => {}
+            }
+
+            let gw = data
+                .ipam
+                .gateway_addresses
+                .iter()
+                .map(|ipnet| ipnet.addr())
+                .collect();
+
+            Some(AardvarkEntry {
+                network_name: &self.info.network.name,
+                container_id: self.info.container_id,
+                network_gateways: gw,
+                container_ips_v4: ipv4,
+                container_ips_v6: ipv6,
+                container_names: names,
+            })
+        } else {
+            None
+        };
 
         // if the network is internal block routing and do not setup firewall rules
         if self.info.network.internal {
@@ -175,12 +213,12 @@ impl driver::NetworkDriver for Bridge<'_> {
                 )?;
             }
             // return here to skip setting up firewall rules
-            return Ok((response, None));
+            return Ok((response, aardvark_entry));
         }
 
         self.setup_firewall(data)?;
 
-        Ok((response, None))
+        Ok((response, aardvark_entry))
     }
 
     fn teardown(&self) -> NetavarkResult<()> {
