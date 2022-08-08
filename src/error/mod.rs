@@ -165,3 +165,9 @@ impl From<serde_json::Error> for NetavarkError {
         NetavarkError::Serde(err)
     }
 }
+
+impl From<ipnet::PrefixLenError> for NetavarkError {
+    fn from(e: ipnet::PrefixLenError) -> Self {
+        NetavarkError::Message(format!("{}", e))
+    }
+}

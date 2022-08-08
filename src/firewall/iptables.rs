@@ -135,7 +135,7 @@ impl firewall::FirewallDriver for IptablesDriver {
 
     fn setup_port_forward(&self, setup_portfw: PortForwardConfig) -> NetavarkResult<()> {
         if let Some(v4) = setup_portfw.container_ip_v4 {
-            let subnet_v4 = match setup_portfw.subnet_v4.clone() {
+            let subnet_v4 = match setup_portfw.subnet_v4 {
                 Some(s) => s,
                 None => {
                     return Err(std::io::Error::new(
@@ -150,7 +150,7 @@ impl firewall::FirewallDriver for IptablesDriver {
             create_network_chains(chains)?;
         }
         if let Some(v6) = setup_portfw.container_ip_v6 {
-            let subnet_v6 = match setup_portfw.subnet_v6.clone() {
+            let subnet_v6 = match setup_portfw.subnet_v6 {
                 Some(s) => s,
                 None => {
                     return Err(std::io::Error::new(
@@ -169,7 +169,7 @@ impl firewall::FirewallDriver for IptablesDriver {
 
     fn teardown_port_forward(&self, tear: TeardownPortForward) -> NetavarkResult<()> {
         if let Some(v4) = tear.config.container_ip_v4 {
-            let subnet_v4 = match tear.config.subnet_v4.clone() {
+            let subnet_v4 = match tear.config.subnet_v4 {
                 Some(s) => s,
                 None => {
                     return Err(std::io::Error::new(
@@ -202,12 +202,12 @@ impl firewall::FirewallDriver for IptablesDriver {
         }
 
         if let Some(v6) = tear.config.container_ip_v6 {
-            let subnet_v6 = match tear.config.subnet_v6.clone() {
+            let subnet_v6 = match tear.config.subnet_v6 {
                 Some(s) => s,
                 None => {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        "ipv6 address but provided but no v4 subnet provided",
+                        "ipv6 address but provided but no v6 subnet provided",
                     )
                     .into())
                 }
