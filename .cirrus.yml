@@ -21,7 +21,7 @@ env:
     FEDORA_NETAVARK_IMAGE: "fedora-netavark-${IMAGE_SUFFIX}"
     AARDVARK_DNS_BRANCH: "main"
     AARDVARK_DNS_URL: "https://api.cirrus-ci.com/v1/artifact/github/containers/aardvark-dns/success/binary.zip?branch=${AARDVARK_DNS_BRANCH}"
-    FEDORA_NETAVARK_AARCH64_AMI_ID: "ami-00d7ccde5eaacc50e"
+    FEDORA_NETAVARK_AARCH64_AMI: "fedora-netavark-aws-arm64-${IMAGE_SUFFIX}"
 
 
 gcp_credentials: ENCRYPTED[d6efdb7d6d4c61e3831df2193ca6348bb02f26cd931695f69d41930b1965f7dab72a838ca0902f6ed8cde66c7deddae2]
@@ -75,7 +75,7 @@ build_task:
 build_aarch64_task:
   alias: "build_aarch64"
   ec2_instance: &standard_build_ec2_aarch64
-    image: "${FEDORA_NETAVARK_AARCH64_AMI_ID}"
+    image: "${FEDORA_NETAVARK_AARCH64_AMI}"
     type: t4g.xlarge
     region: us-east-1
     architecture: arm64  # CAUTION: This has to be "arm64", not "aarch64"
