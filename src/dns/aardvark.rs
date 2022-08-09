@@ -1,5 +1,6 @@
 use crate::network::types;
 use log::log_enabled;
+use fs2::FileExt;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
 use std::collections::HashMap;
@@ -13,7 +14,9 @@ use std::net::Ipv4Addr;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-#[derive(Debug, Clone)]
+const AARDVARK_COMMIT_LOCK: &str = "aardvark.lock";
+
+#[derive(Clone, Debug)]
 pub struct AardvarkEntry {
     pub network_name: String,
     pub network_gateway_v4: String,
@@ -145,9 +148,49 @@ impl Aardvark {
         Ok(())
     }
     pub fn commit_entries(&mut self, entries: Vec<AardvarkEntry>) -> Result<()> {
-        for entry in entries {
+        // Acquire fs lock to ensure other instance of aardvark cannot commit
+        // or start aardvark instance till already running instance has not
+        // completed its `commit` phase.
+        let lockfile_path = Path::new(&self.config)
+            .join("..")
+            .join(AARDVARK_COMMIT_LOCK);
+        let lockfile = match OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(lockfile_path.clone())
+        {
+            Ok(file) => file,
+            Err(e) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Failed to open/create lockfile {:?}: {}", lockfile_path, e),
+                ));
+            }
+        };
+        if let Err(er) = lockfile.lock_exclusive() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "Failed to acquire exclusive lock on {:?}: {}",
+                    lockfile_path, er
+                ),
+            ));
+        }
+
+        for entry in &entries {
             match self.commit_entry(entry.clone()) {
                 Err(er) => {
+                    // drop lockfile when commit is completed
+                    if let Err(er) = lockfile.unlock() {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!(
+                                "Failed to unlock exclusive lock on {:?}: {}",
+                                lockfile_path, er
+                            ),
+                        ));
+                    }
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         format!("Failed to commit entry {:?}: {}", entry, er),
@@ -157,6 +200,16 @@ impl Aardvark {
             }
         }
 
+        // drop lockfile when commit is completed
+        if let Err(er) = lockfile.unlock() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "Failed to unlock exclusive lock on {:?}: {}",
+                    lockfile_path, er
+                ),
+            ));
+        }
         Ok(())
     }
 
