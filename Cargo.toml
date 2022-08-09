@@ -40,6 +40,7 @@ tokio = { version = "1.20.1", features = ["full"] }
 zvariant = "3.4.1"
 sha2 = "0.10.1"
 netlink-packet-route = "0.13"
+fs2 = "0.4.3"
 
 [build-dependencies]
 chrono = "0.4.20"
