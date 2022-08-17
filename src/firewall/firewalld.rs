@@ -662,12 +662,12 @@ fn make_port_tuple(port: &PortMapping, addr: &str) -> (String, String, String, S
         // Subtract 1 as these are 1-indexed strings - range of 2 is 1000-1001
         let end_host_range = port.host_port + port.range - 1;
         let end_ctr_range = port.container_port + port.range - 1;
-        return (
+        (
             format!("{}-{}", port.host_port, end_host_range),
             port.protocol.clone(),
             format!("{}-{}", port.container_port, end_ctr_range),
             addr.to_string(),
-        );
+        )
     } else {
         let to_return = (
             format!("{}", port.host_port),
