@@ -34,7 +34,7 @@ const HEXMARK: &str = "0x2000";
 const MULTICAST_NET_V4: &str = "224.0.0.0/4";
 const MULTICAST_NET_V6: &str = "ff00::/8";
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum TeardownPolicy {
     OnComplete,
     Never,

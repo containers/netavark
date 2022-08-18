@@ -116,12 +116,10 @@ impl Core {
         });
         match handle.join() {
             Ok(interface_address) => interface_address,
-            Err(err) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("failed to join: {:?}", err),
-                ))
-            }
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("failed to join: {:?}", err),
+            )),
         }
     }
 
@@ -201,12 +199,10 @@ impl Core {
         });
         match handle.join() {
             Ok(interface_address) => interface_address,
-            Err(err) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("failed to join: {:?}", err),
-                ))
-            }
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("failed to join: {:?}", err),
+            )),
         }
     }
 

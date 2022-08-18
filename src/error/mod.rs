@@ -71,7 +71,7 @@ impl NetavarkError {
 
 impl fmt::Display for NetavarkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &*self {
+        match self {
             NetavarkError::Message(s) => write!(f, "{}", s),
             NetavarkError::ExitCode(s, _) => write!(f, "{}", s),
             NetavarkError::Chain(s, e) => write!(f, "{}: {}", s, e),
@@ -86,7 +86,7 @@ impl fmt::Display for NetavarkError {
 
 impl PartialEq for NetavarkError {
     fn eq(&self, other: &Self) -> bool {
-        match &*self {
+        match self {
             NetavarkError::Message(s) => {
                 if let NetavarkError::Message(o) = other {
                     return s == o;

@@ -370,25 +370,7 @@ impl CoreUtils {
                     }
                 }
 
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
-                        "Unable to resolve physical address for interface {}",
-                        link_name
-                    ),
-                ));
-            }
-            Err(err) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
-                        "Unable to resolve physical address for interface {}: {}",
-                        link_name, err
-                    ),
-                ));
-            }
-            Ok(None) => {
-                return Err(std::io::Error::new(
+                Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!(
                         "Unable to resolve physical address for interface {}",
@@ -396,6 +378,20 @@ impl CoreUtils {
                     ),
                 ))
             }
+            Err(err) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "Unable to resolve physical address for interface {}: {}",
+                    link_name, err
+                ),
+            )),
+            Ok(None) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "Unable to resolve physical address for interface {}",
+                    link_name
+                ),
+            )),
         }
     }
     async fn add_ip_address(
