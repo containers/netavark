@@ -155,7 +155,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                 None => {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        "ipv6 address but provided but no v4 subnet provided",
+                        "ipv6 address but provided but no v6 subnet provided",
                     )
                     .into())
                 }
