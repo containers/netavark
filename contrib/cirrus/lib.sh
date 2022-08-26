@@ -54,6 +54,7 @@ make_cienv(){
 }
 
 complete_setup(){
+    set +x
     msg "************************************************************"
     msg "Completing environment setup, writing vars:"
     msg "************************************************************"
