@@ -17,11 +17,12 @@ env:
     # Save a little typing (path relative to $CIRRUS_WORKING_DIR)
     SCRIPT_BASE: "./contrib/cirrus"
     FEDORA_NAME: "fedora-36"
-    IMAGE_SUFFIX: "c5353795591864320"
+    IMAGE_SUFFIX: "c5823947156488192"
     FEDORA_NETAVARK_IMAGE: "fedora-netavark-${IMAGE_SUFFIX}"
     AARDVARK_DNS_BRANCH: "main"
     AARDVARK_DNS_URL: "https://api.cirrus-ci.com/v1/artifact/github/containers/aardvark-dns/success/binary.zip?branch=${AARDVARK_DNS_BRANCH}"
-    FEDORA_NETAVARK_AARCH64_AMI_ID: "ami-00d7ccde5eaacc50e"
+    FEDORA_NETAVARK_AARCH64_AMI: "fedora-netavark-aws-arm64-${IMAGE_SUFFIX}"
+    EC2_INST_TYPE: "t4g.xlarge"
 
 
 gcp_credentials: ENCRYPTED[d6efdb7d6d4c61e3831df2193ca6348bb02f26cd931695f69d41930b1965f7dab72a838ca0902f6ed8cde66c7deddae2]
@@ -75,8 +76,8 @@ build_task:
 build_aarch64_task:
   alias: "build_aarch64"
   ec2_instance: &standard_build_ec2_aarch64
-    image: "${FEDORA_NETAVARK_AARCH64_AMI_ID}"
-    type: t4g.xlarge
+    image: "${FEDORA_NETAVARK_AARCH64_AMI}"
+    type: $EC2_INST_TYPE
     region: us-east-1
     architecture: arm64  # CAUTION: This has to be "arm64", not "aarch64"
   cargo_cache: &cargo_cache_aarch64
@@ -234,8 +235,10 @@ meta_task:
     env:
         # Space-separated list of images used by this repository state
         IMGNAMES: "${FEDORA_NETAVARK_IMAGE}"
+        EC2IMGNAMES: "${FEDORA_NETAVARK_AARCH64_AMI}"
         BUILDID: "${CIRRUS_BUILD_ID}"
         REPOREF: "${CIRRUS_REPO_NAME}"
+        AWSINI: ENCRYPTED[34663ab52255921d163085d348f5695b19ae49b8fec398282b9cd9aecadcb0144544e203ec553d38734f201b6885fd0a]
         GCPJSON: ENCRYPTED[e7e6e13b98eb34f480a12412a048e3fb78a02239c229659e136b7a27e2ab25a5bbb61ab6016e322cb6f777fa2c9f9520]
         GCPNAME: ENCRYPTED[f3fc6da8fe283ef506d7b18467a81153ea8e18b1d3cd76e79dcd6f566f20fdd3651522432d3d232f4d69eeb1502d1f6b]
         GCPPROJECT: libpod-218412
