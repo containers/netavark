@@ -177,9 +177,8 @@ fw_driver=iptables
     # check aardvark config and running
     run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
     assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1" "aardvark set to listen to all IPs"
-    assert "${lines[1]}" =~ "[0-9a-f]* 10.89.3.2  somename" "aardvark config's container ipv4"
-    assert "${lines[2]}" =~ "[0-9a-f]*  fd10:88:a::2 somename" "aardvark config's container ipv6"
-    assert "${#lines[@]}" = 3 "too many liness in aardvark config"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2 fd10:88:a::2 somename$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
 
     aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
     assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"

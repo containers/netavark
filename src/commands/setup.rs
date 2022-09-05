@@ -91,6 +91,7 @@ impl Setup {
             let mut driver = get_network_driver(DriverInfo {
                 firewall: firewall_driver.as_ref(),
                 container_id: &network_options.container_id,
+                container_name: &network_options.container_name,
                 netns_container: ns_fd,
                 network,
                 per_network_opts,
@@ -104,10 +105,12 @@ impl Setup {
             drivers.push(driver);
         }
 
+        let mut aardvark_entries = Vec::new();
+
         // Only now after we validated all drivers we setup each.
         // If there is an error we have to tear down all previous drivers.
         for (i, driver) in drivers.iter().enumerate() {
-            let (status, _) = match driver.setup() {
+            let (status, aardvark_entry) = match driver.setup() {
                 Ok((s, a)) => (s, a),
                 Err(e) => {
                     // now teardown the already setup drivers
@@ -127,9 +130,12 @@ impl Setup {
             };
 
             let _ = response.insert(driver.network_name(), status);
+            if let Some(a) = aardvark_entry {
+                aardvark_entries.push(a);
+            }
         }
 
-        if Path::new(&aardvark_bin).exists() {
+        if Path::new(&aardvark_bin).exists() && !aardvark_entries.is_empty() {
             let path = Path::new(&config_dir).join("aardvark-dns");
 
             match fs::create_dir(path.as_path()) {
@@ -159,12 +165,7 @@ impl Setup {
             let mut aardvark_interface =
                 Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
 
-            if let Err(er) = aardvark_interface.commit_netavark_entries(
-                network_options.container_name,
-                network_options.container_id.clone(),
-                network_options.networks.clone(),
-                response.clone(),
-            ) {
+            if let Err(er) = aardvark_interface.commit_netavark_entries(aardvark_entries) {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!("Error while applying dns entries: {}", er),
