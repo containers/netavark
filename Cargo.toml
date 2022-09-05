@@ -34,7 +34,7 @@ url = "2.1.0"
 zbus = "2.2.0"
 rtnetlink = "0.11.0"
 futures = "0.3.24"
-nix = "0.24.2"
+nix = "0.25.0"
 rand = "0.8.5"
 tokio = { version = "1.20.1", features = ["full"] }
 zvariant = "3.4.1"
