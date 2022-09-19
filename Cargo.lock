@@ -782,7 +782,6 @@ dependencies = [
  "sysctl",
  "url",
  "zbus",
- "zvariant",
 ]
 
 [[package]]

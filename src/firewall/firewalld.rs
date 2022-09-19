@@ -8,8 +8,7 @@ use futures::executor::block_on;
 use log::{debug, info};
 use std::collections::HashMap;
 use std::vec::Vec;
-use zbus::Connection;
-use zvariant::{Array, Signature, Value};
+use zbus::{Connection, zvariant::{Array, Signature, Value}};
 
 const ZONENAME: &str = "netavark_zone";
 const POLICYNAME: &str = "netavark_policy";
