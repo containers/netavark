@@ -9,11 +9,10 @@ use crate::network::internal_types::{
     PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
 };
 use crate::network::types;
-use futures::executor::block_on;
 use iptables;
 use iptables::IPTables;
 use log::{debug, warn};
-use zbus::Connection;
+use zbus::blocking::Connection;
 
 pub(crate) const MAX_HASH_SIZE: usize = 13;
 
@@ -237,20 +236,20 @@ impl firewall::FirewallDriver for IptablesDriver {
 
 /// Check if firewalld is running
 fn is_firewalld_running(conn: &Connection) -> bool {
-    block_on(conn.call_method(
+    conn.call_method(
         Some("org.freedesktop.DBus"),
         "/org/freedesktop/DBus",
         Some("org.freedesktop.DBus"),
         "GetNameOwner",
         &"org.fedoraproject.FirewallD1",
-    ))
+    )
     .is_ok()
 }
 
 /// If possible, add a firewalld rule to allow traffic.
 /// Ignore all errors, beyond possibly logging them.
 fn add_firewalld_if_possible(net: &types::Subnet) {
-    let conn = match block_on(Connection::system()) {
+    let conn = match Connection::system() {
         Ok(conn) => conn,
         Err(_) => return,
     };
@@ -275,7 +274,7 @@ fn add_firewalld_if_possible(net: &types::Subnet) {
 // If possible, remove a firewalld rule to allow traffic.
 // Ignore all errors, beyond possibly logging them.
 fn rm_firewalld_if_possible(net: &types::Subnet) {
-    let conn = match block_on(Connection::system()) {
+    let conn = match Connection::system() {
         Ok(conn) => conn,
         Err(_) => return,
     };
@@ -286,13 +285,13 @@ fn rm_firewalld_if_possible(net: &types::Subnet) {
         "Removing firewalld rules for IPs {}",
         net.subnet.to_string()
     );
-    match block_on(conn.call_method(
+    match conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1",
         Some("org.fedoraproject.FirewallD1.zone"),
         "removeSource",
         &("trusted", net.subnet.to_string()),
-    )) {
+    ) {
         Ok(_) => {}
         Err(e) => warn!(
             "Error removing subnet {} from firewalld trusted zone: {}",
