@@ -21,6 +21,8 @@ pub enum NetavarkError {
     Sysctl(sysctl::SysctlError),
 
     Serde(serde_json::Error),
+
+    Netlink(netlink_packet_core::error::ErrorMessage),
 }
 
 // Internal struct for JSON output
@@ -80,6 +82,7 @@ impl fmt::Display for NetavarkError {
             NetavarkError::DbusVariant(e) => write!(f, "DBus Variant Error: {}", e),
             NetavarkError::Sysctl(e) => write!(f, "Sysctl error: {}", e),
             NetavarkError::Serde(e) => write!(f, "JSON Decoding error: {}", e),
+            NetavarkError::Netlink(e) => write!(f, "Netlink error: {}", e),
         }
     }
 }
@@ -127,6 +130,11 @@ impl PartialEq for NetavarkError {
                     return e.to_string() == e2.to_string();
                 }
             }
+            NetavarkError::Netlink(e) => {
+                if let NetavarkError::Netlink(e2) = other {
+                    return e == e2;
+                }
+            }
         }
         false
     }
@@ -169,5 +177,11 @@ impl From<serde_json::Error> for NetavarkError {
 impl From<ipnet::PrefixLenError> for NetavarkError {
     fn from(e: ipnet::PrefixLenError) -> Self {
         NetavarkError::Message(format!("{}", e))
+    }
+}
+
+impl From<netlink_packet_core::error::ErrorMessage> for NetavarkError {
+    fn from(err: netlink_packet_core::error::ErrorMessage) -> Self {
+        NetavarkError::Netlink(err)
     }
 }

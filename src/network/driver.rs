@@ -8,6 +8,7 @@ use super::{
     bridge::Bridge,
     constants,
     macvlan::MacVlan,
+    netlink,
     types::{Network, PerNetworkOptions, PortMapping, StatusBlock},
 };
 use std::os::unix::io::RawFd;
@@ -16,7 +17,7 @@ pub struct DriverInfo<'a> {
     pub firewall: &'a dyn FirewallDriver,
     pub container_id: &'a String,
     pub container_name: &'a String,
-    //pub netns_host: RawFd,
+    pub netns_host: RawFd,
     pub netns_container: RawFd,
     pub network: &'a Network,
     pub per_network_opts: &'a PerNetworkOptions,
@@ -28,9 +29,15 @@ pub trait NetworkDriver {
     /// validate the driver options
     fn validate(&mut self) -> NetavarkResult<()>;
     /// setup the network interfaces/firewall rules for this driver
-    fn setup(&self) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry>)>;
+    fn setup(
+        &self,
+        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+    ) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry>)>;
     /// teardown the network interfaces/firewall rules for this driver
-    fn teardown(&self) -> NetavarkResult<()>;
+    fn teardown(
+        &self,
+        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+    ) -> NetavarkResult<()>;
 
     /// return the network name
     fn network_name(&self) -> String;
