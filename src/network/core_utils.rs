@@ -1257,12 +1257,9 @@ impl CoreUtils {
         }
 
         // set static mac here
-        match static_mac {
-            Some(mac) => {
-                CoreUtils::set_link_mac(&handle, ifname, mac).await?;
-            }
-            None => {}
-        };
+        if let Some(mac) = static_mac {
+            CoreUtils::set_link_mac(&handle, ifname, mac).await?;
+        }
 
         // ip netns exec <namespace> ip route add default via <gateway> dev <ifname>
         for gw_ip_add in gw_ip_addrs {
