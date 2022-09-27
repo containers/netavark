@@ -517,9 +517,7 @@ impl CoreUtils {
 
         tokio::spawn(connection);
 
-        if let Err(err) = CoreUtils::remove_link(&handle, ifname).await {
-            return Err(err);
-        }
+        CoreUtils::remove_link(&handle, ifname).await?;
 
         Ok(())
     }
@@ -538,9 +536,7 @@ impl CoreUtils {
 
         tokio::spawn(connection);
 
-        if let Err(err) = CoreUtils::set_link_up(&handle, ifname).await {
-            return Err(err);
-        }
+        CoreUtils::set_link_up(&handle, ifname).await?;
 
         Ok(())
     }
@@ -786,11 +782,7 @@ impl CoreUtils {
         // before moving it to network namespace
         // See: https://github.com/containernetworking/plugins/blob/master/plugins/main/macvlan/macvlan.go#L181
         if mtu != 0 {
-            if let Err(err) =
-                CoreUtils::set_link_mtu(&handle, &macvlan_tmp_name.to_owned(), mtu).await
-            {
-                return Err(err);
-            }
+            CoreUtils::set_link_mtu(&handle, &macvlan_tmp_name.to_owned(), mtu).await?;
         }
 
         // change network namespace of macvlan interface
@@ -849,11 +841,7 @@ impl CoreUtils {
                 ));
             }
 
-            if let Err(err) =
-                CoreUtils::rename_macvlan_internal(&macvlan_tmp_ifname, &macvlan_ifname_clone)
-            {
-                return Err(err);
-            }
+            CoreUtils::rename_macvlan_internal(&macvlan_tmp_ifname, &macvlan_ifname_clone)?;
 
             Ok(())
         });
@@ -958,21 +946,15 @@ impl CoreUtils {
             }
         }
         for ip_net in ips.iter() {
-            if let Err(err) = CoreUtils::add_ip_address(&handle, ifname, ip_net).await {
-                return Err(err);
-            }
+            CoreUtils::add_ip_address(&handle, ifname, ip_net).await?;
         }
 
         if mtu != 0 {
-            if let Err(err) = CoreUtils::set_link_mtu(&handle, ifname, mtu).await {
-                return Err(err);
-            }
+            CoreUtils::set_link_mtu(&handle, ifname, mtu).await?;
         }
 
         // make the bridge interface up
-        if let Err(err) = CoreUtils::set_link_up(&handle, ifname).await {
-            return Err(err);
-        }
+        CoreUtils::set_link_up(&handle, ifname).await?;
 
         Ok(())
     }
@@ -1036,12 +1018,8 @@ impl CoreUtils {
 
         // set mtu for container and host veth
         if mtu != 0 {
-            if let Err(err) = CoreUtils::set_link_mtu(&handle, host_veth, mtu).await {
-                return Err(err);
-            }
-            if let Err(err) = CoreUtils::set_link_mtu(&handle, container_veth, mtu).await {
-                return Err(err);
-            }
+            CoreUtils::set_link_mtu(&handle, host_veth, mtu).await?;
+            CoreUtils::set_link_mtu(&handle, container_veth, mtu).await?;
         }
 
         if ipv6_enabled {
@@ -1161,15 +1139,13 @@ impl CoreUtils {
                 ));
             }
 
-            if let Err(err) = CoreUtils::generate_veth_pair_internal(
+            CoreUtils::generate_veth_pair_internal(
                 netavark_pid,
                 &hst_veth,
                 &ctr_veth,
                 mtu,
                 ipv6_enabled,
-            ) {
-                return Err(err);
-            }
+            )?;
 
             Ok(())
         });
@@ -1249,9 +1225,7 @@ impl CoreUtils {
         }
 
         // ip link set <eth> up
-        if let Err(err) = CoreUtils::set_link_up(&handle, host_veth).await {
-            return Err(err);
-        }
+        CoreUtils::set_link_up(&handle, host_veth).await?;
 
         Ok(())
     }
@@ -1275,35 +1249,24 @@ impl CoreUtils {
         };
         tokio::spawn(_connection);
         // ip netns exec ip link set <ifname> up
-        if let Err(err) = CoreUtils::set_link_up(&handle, ifname).await {
-            return Err(err);
-        }
+        CoreUtils::set_link_up(&handle, ifname).await?;
 
         // ip netns exec <namespace> ip addr add <addr>/<mask> dev <ifname>
         for ip_net in ips.into_iter() {
-            if let Err(err) = CoreUtils::add_ip_address(&handle, ifname, &ip_net).await {
-                return Err(err);
-            }
+            CoreUtils::add_ip_address(&handle, ifname, &ip_net).await?;
         }
 
         // set static mac here
-        match static_mac {
-            Some(mac) => {
-                if let Err(err) = CoreUtils::set_link_mac(&handle, ifname, mac).await {
-                    return Err(err);
-                }
-            }
-            None => {}
-        };
+        if let Some(mac) = static_mac {
+            CoreUtils::set_link_mac(&handle, ifname, mac).await?;
+        }
 
         // ip netns exec <namespace> ip route add default via <gateway> dev <ifname>
         for gw_ip_add in gw_ip_addrs {
             match gw_ip_add.addr() {
                 IpAddr::V4(gateway) => match ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0) {
                     Ok(dest) => {
-                        if let Err(err) = CoreUtils::add_route_v4(&handle, &dest, &gateway).await {
-                            return Err(err);
-                        }
+                        CoreUtils::add_route_v4(&handle, &dest, &gateway).await?;
                     }
                     Err(err) => {
                         return Err(std::io::Error::new(
@@ -1315,11 +1278,7 @@ impl CoreUtils {
                 IpAddr::V6(gateway) => {
                     match ipnet::Ipv6Net::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0) {
                         Ok(dest) => {
-                            if let Err(err) =
-                                CoreUtils::add_route_v6(&handle, &dest, &gateway).await
-                            {
-                                return Err(err);
-                            }
+                            CoreUtils::add_route_v6(&handle, &dest, &gateway).await?;
                         }
                         Err(err) => {
                             return Err(std::io::Error::new(

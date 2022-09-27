@@ -88,14 +88,13 @@ impl Core {
                 ));
             }
 
-            if let Err(err) = core_utils::CoreUtils::configure_netns_interface_async(
+            core_utils::CoreUtils::configure_netns_interface_async(
                 &container_veth_name_clone,
                 netns_ipaddr_clone,
                 &gw_ipaddr_clone,
                 static_mac_clone,
-            ) {
-                return Err(err);
-            }
+            )?;
+
             debug!(
                 "Configured static up address for {}",
                 container_veth_name_clone
@@ -171,14 +170,13 @@ impl Core {
                 ));
             }
 
-            if let Err(err) = core_utils::CoreUtils::configure_netns_interface_async(
+            core_utils::CoreUtils::configure_netns_interface_async(
                 &container_macvlan_clone,
                 netns_ipaddr_clone,
                 &gw_addrs_clone,
                 static_mac,
-            ) {
-                return Err(err);
-            }
+            )?;
+
             debug!(
                 "Configured static up address for {}",
                 container_macvlan_clone
@@ -219,9 +217,7 @@ impl Core {
                 ));
             }
 
-            if let Err(err) = core_utils::CoreUtils::remove_interface(&container_veth) {
-                return Err(err);
-            }
+            core_utils::CoreUtils::remove_interface(&container_veth)?;
 
             Ok(())
         });
