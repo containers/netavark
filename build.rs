@@ -1,4 +1,5 @@
-use chrono::Utc;
+use chrono::{DateTime, NaiveDateTime, Utc};
+use std::env;
 use std::process::Command;
 
 fn main() {
@@ -6,7 +7,14 @@ fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
     // get timestamp
-    let now = Utc::now();
+    let now = match env::var("SOURCE_DATE_EPOCH") {
+        Ok(val) => {
+            let naive = NaiveDateTime::from_timestamp(val.parse::<i64>().unwrap(), 0);
+            let datetime: DateTime<Utc> = DateTime::from_utc(naive, Utc);
+            datetime
+        }
+        Err(_) => Utc::now(),
+    };
     println!("cargo:rustc-env=BUILD_TIMESTAMP={}", now.to_rfc3339());
 
     // get rust target triple from TARGET env
