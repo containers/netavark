@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.2.0
+* Reworked how netavark calls aardvark
+* Implemented locking when commiting
+* Remove bridge only when no containers are attached
+* Updated versions of libraries where possible
+
 ## v1.1.0
 * Netavark is now capable of starting Aardvark on a port other than 53 (controlled by `dns_bind_port` in `containers.conf`). Firewall rules are added to ensure DNS still functions properly despite the port change.
 * Added the ability to isolate networks. Networks with the isolate option set cannot communicate with other networks with the isolate option set.
