@@ -186,9 +186,9 @@ fw_driver=iptables
     assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p $dns_port run" "aardvark not running or bad options"
 
     # test redirection actually works
-    run_in_container_netns dig +short "somename.dns.podman" @10.89.3.1
+    run_in_container_netns dig +short "somename.dns.podman" @10.89.3.1 A "somename.dns.podman" @10.89.3.1 AAAA
     assert "${lines[0]}" =~ "10.89.3.2" "ipv4 dns resolution works 1/2"
-    assert "${lines[1]}" =~ "fd10:88:a::2" "ipv4 dns resolution works 2/2"
+    assert "${lines[1]}" =~ "fd10:88:a::2" "ipv6 dns resolution works 2/2"
 
     run_in_container_netns dig +short "somename.dns.podman" @fd10:88:a::1
     assert "${lines[0]}" =~ "10.89.3.2" "ipv6 dns resolution works"
