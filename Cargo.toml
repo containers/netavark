@@ -20,7 +20,7 @@ deps-serde = ["chrono/serde", "url/serde"]
 [dependencies]
 anyhow = "1.0"
 chrono = "0.4.22"
-clap = { version = "3.0.12", features = ["derive"] }
+clap = { version = "3.2.22", features = ["derive"] }
 env_logger = "0.9.1"
 ipnet = { version = "2", features = ["serde"] }
 iptables = "0.5"
