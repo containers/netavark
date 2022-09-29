@@ -87,7 +87,6 @@ integration: $(CARGO_TARGET_DIR)
 .PHONY: validate
 validate: $(CARGO_TARGET_DIR)
 	cargo fmt --all -- --check
-	cargo clippy -p netavark -- -D warnings
 
 .PHONY: vendor
 vendor: ## vendor everything into vendor/

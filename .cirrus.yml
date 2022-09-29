@@ -5,7 +5,7 @@
 # Main collection of env. vars to set for all tasks and scripts.
 env:
     # Actual|intended branch for this run
-    DEST_BRANCH: "main"
+    DEST_BRANCH: "v1.1.0-rhel"
     # The default is 'sh' if unspecified
     CIRRUS_SHELL: "/bin/bash"
     # Location where source repo. will be cloned
@@ -19,7 +19,7 @@ env:
     FEDORA_NAME: "fedora-36"
     IMAGE_SUFFIX: "c5353795591864320"
     FEDORA_NETAVARK_IMAGE: "fedora-netavark-${IMAGE_SUFFIX}"
-    AARDVARK_DNS_BRANCH: "main"
+    AARDVARK_DNS_BRANCH: "v1.1.0-rhel"
     AARDVARK_DNS_URL: "https://api.cirrus-ci.com/v1/artifact/github/containers/aardvark-dns/success/binary.zip?branch=${AARDVARK_DNS_BRANCH}"
     FEDORA_NETAVARK_AARCH64_AMI_ID: "ami-00d7ccde5eaacc50e"
 
