@@ -23,13 +23,16 @@ show_env_vars
 
 req_env_vars AARDVARK_DNS_URL
 
-set -x  # show what's happening
-curl --fail --location -o /tmp/aardvark-dns.zip "$AARDVARK_DNS_URL"
+showrun curl --fail --location -o /tmp/aardvark-dns.zip "$AARDVARK_DNS_URL"
 mkdir -p /usr/libexec/podman
 cd /usr/libexec/podman
 rm -f aardvark-dns*
-unzip -o /tmp/aardvark-dns.zip
+showrun unzip -o /tmp/aardvark-dns.zip
 if [[ $(uname -m) != "x86_64" ]]; then
-    mv aardvark-dns.$(uname -m)-unknown-linux-gnu aardvark-dns
+    showrun mv aardvark-dns.$(uname -m)-unknown-linux-gnu aardvark-dns
 fi
-chmod a+x /usr/libexec/podman/aardvark-dns
+showrun chmod a+x /usr/libexec/podman/aardvark-dns
+
+# Warning, this isn't the end.  An exit-handler is installed to finalize
+# setup of env. vars.  This is required for runner.sh to operate properly.
+# See complete_setup() in lib.sh for details.

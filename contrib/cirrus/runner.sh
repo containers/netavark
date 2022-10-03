@@ -79,14 +79,6 @@ msg "************************************************************"
 msg "Toolchain details"
 msg "************************************************************"
 
-# FIXME (@lsm5): rustup commands should be moved to c/automation_images repo
-# https://github.com/containers/automation_images/issues/150
-rustup install stable
-rustup default stable
-if [[ $(uname -m) == "aarch64" ]]; then
-    rustup target add aarch64-unknown-linux-gnu
-fi
-
 rustc --version
 cargo --version
 
