@@ -1,5 +1,6 @@
-use crate::error::{NetavarkError, NetavarkResult};
+use crate::error::{ErrorWrap, NetavarkError, NetavarkResult};
 use crate::network::{constants, internal_types, types};
+use crate::wrap;
 use log::debug;
 use nix::sched;
 use sha2::{Digest, Sha512};
@@ -244,7 +245,10 @@ impl CoreUtils {
 pub fn join_netns(fd: RawFd) -> NetavarkResult<()> {
     match sched::setns(fd, sched::CloneFlags::CLONE_NEWNET) {
         Ok(_) => Ok(()),
-        Err(e) => Err(NetavarkError::Io(io::Error::from(e))),
+        Err(e) => Err(NetavarkError::wrap_str(
+            "setns",
+            NetavarkError::Io(io::Error::from(e)),
+        )),
     }
 }
 
@@ -272,12 +276,17 @@ pub struct NamespaceOptions {
 pub fn open_netlink_sockets(
     netns_path: &str,
 ) -> NetavarkResult<(NamespaceOptions, NamespaceOptions)> {
-    let netns = open_netlink_socket(netns_path)?;
-    let hostns = open_netlink_socket("/proc/self/ns/net")?;
+    let netns = open_netlink_socket(netns_path).wrap("open container netns")?;
+    let hostns = open_netlink_socket("/proc/self/ns/net").wrap("open host netns")?;
 
-    let host_socket = netlink::Socket::new()?;
+    let host_socket = netlink::Socket::new().wrap("host netlink socket")?;
 
-    exec_netns!(hostns.1, netns.1, res, netlink::Socket::new());
+    exec_netns!(
+        hostns.1,
+        netns.1,
+        res,
+        netlink::Socket::new().wrap("netns netlink socket")
+    );
 
     let netns_sock = res?;
     Ok((
@@ -295,7 +304,7 @@ pub fn open_netlink_sockets(
 }
 
 fn open_netlink_socket(netns_path: &str) -> NetavarkResult<(File, RawFd)> {
-    let ns = File::open(netns_path)?;
+    let ns = wrap!(File::open(netns_path), &format!("open {}", netns_path))?;
     let ns_fd = ns.as_raw_fd();
     Ok((ns, ns_fd))
 }
@@ -328,7 +337,8 @@ pub fn add_default_routes(sock: &mut netlink::Socket, gws: &[ipnet::IpNet]) -> N
                 }
             }
         };
-        sock.add_route(route)?;
+        sock.add_route(&route)
+            .wrap(&format!("add default route {}", &route))?;
     }
     Ok(())
 }

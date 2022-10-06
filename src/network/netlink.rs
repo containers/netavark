@@ -3,7 +3,10 @@ use std::{
     os::unix::prelude::RawFd,
 };
 
-use crate::error::{NetavarkError, NetavarkResult};
+use crate::{
+    error::{ErrorWrap, NetavarkError, NetavarkResult},
+    wrap,
+};
 use log::trace;
 use netlink_packet_route::{
     nlas::link::{Info, InfoData, InfoKind, Nla},
@@ -41,12 +44,22 @@ pub enum Route {
     Ipv6 { dest: ipnet::Ipv6Net, gw: Ipv6Addr },
 }
 
+impl std::fmt::Display for Route {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (dest, gw) = match self {
+            Route::Ipv4 { dest, gw } => (dest.to_string(), gw.to_string()),
+            Route::Ipv6 { dest, gw } => (dest.to_string(), gw.to_string()),
+        };
+        write!(f, "(dest: {} ,gw: {})", dest, gw)
+    }
+}
+
 impl Socket {
     pub fn new() -> NetavarkResult<Socket> {
-        let mut socket = netlink_sys::Socket::new(NETLINK_ROUTE).unwrap();
+        let mut socket = wrap!(netlink_sys::Socket::new(NETLINK_ROUTE), "open")?;
         let addr = &SocketAddr::new(0, 0);
-        socket.bind(addr)?;
-        socket.connect(addr)?;
+        wrap!(socket.bind(addr), "bind")?;
+        wrap!(socket.connect(addr), "connect")?;
 
         Ok(Socket {
             socket,
@@ -63,7 +76,7 @@ impl Socket {
             LinkID::Name(name) => msg.nlas.push(Nla::IfName(name)),
         }
 
-        let mut result = self.make_netlink_request(RtnlMessage::GetLink(msg), NLM_F_REQUEST)?;
+        let mut result = self.make_netlink_request(RtnlMessage::GetLink(msg), 0)?;
         if result.len() != 1 {
             return Err(NetavarkError::msg_str("unexpected netlink result"));
         }
@@ -81,7 +94,7 @@ impl Socket {
         parse_create_link_options(&mut msg, options);
         let result = self.make_netlink_request(
             RtnlMessage::NewLink(msg),
-            NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
+            NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
         )?;
         if !result.is_empty() {
             return Err(NetavarkError::msg_str("unexpected netlink result"));
@@ -98,10 +111,9 @@ impl Socket {
             LinkID::Name(name) => msg.nlas.push(Nla::IfName(name)),
         }
 
-        let result =
-            self.make_netlink_request(RtnlMessage::DelLink(msg), NLM_F_REQUEST | NLM_F_ACK)?;
+        let result = self.make_netlink_request(RtnlMessage::DelLink(msg), NLM_F_ACK)?;
         if !result.is_empty() {
-            return Err(NetavarkError::msg_str("unexpected netlink result"));
+            return Err(NetavarkError::msg_str("unexpected netlink result 1243"));
         }
         Ok(())
     }
@@ -129,7 +141,7 @@ impl Socket {
             .push(netlink_packet_route::address::Nla::Local(addr_vec));
         let result = self.make_netlink_request(
             RtnlMessage::NewAddress(msg),
-            NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
+            NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
         )?;
         if !result.is_empty() {
             return Err(NetavarkError::msg_str("unexpected netlink result"));
@@ -138,7 +150,7 @@ impl Socket {
         Ok(())
     }
 
-    pub fn add_route(&mut self, route: Route) -> NetavarkResult<()> {
+    pub fn add_route(&mut self, route: &Route) -> NetavarkResult<()> {
         let mut msg = RouteMessage::default();
 
         msg.header.table = RT_TABLE_MAIN;
@@ -171,10 +183,8 @@ impl Socket {
         msg.nlas
             .push(netlink_packet_route::route::Nla::Gateway(gateway_vec));
 
-        let result = self.make_netlink_request(
-            RtnlMessage::NewRoute(msg),
-            NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE,
-        )?;
+        let result =
+            self.make_netlink_request(RtnlMessage::NewRoute(msg), NLM_F_ACK | NLM_F_CREATE)?;
         if !result.is_empty() {
             return Err(NetavarkError::msg_str("unexpected netlink result"));
         }
@@ -191,7 +201,7 @@ impl Socket {
         msg.header.kind = RTN_UNICAST;
 
         let results =
-            self.make_netlink_request(RtnlMessage::GetRoute(msg), NLM_F_REQUEST | NLM_F_DUMP)?;
+            self.make_netlink_request(RtnlMessage::GetRoute(msg), NLM_F_DUMP | NLM_F_ACK)?;
 
         let mut routes = Vec::with_capacity(results.len());
 
@@ -214,7 +224,7 @@ impl Socket {
         msg.nlas.append(nlas);
 
         let results =
-            self.make_netlink_request(RtnlMessage::GetLink(msg), NLM_F_REQUEST | NLM_F_DUMP)?;
+            self.make_netlink_request(RtnlMessage::GetLink(msg), NLM_F_DUMP | NLM_F_ACK)?;
 
         let mut links = Vec::with_capacity(results.len());
 
@@ -245,7 +255,7 @@ impl Socket {
 
         let result = self.make_netlink_request(
             RtnlMessage::SetLink(msg),
-            NLM_F_REQUEST | NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
+            NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
         )?;
         if !result.is_empty() {
             return Err(NetavarkError::msg_str("unexpected netlink result"));
@@ -259,7 +269,7 @@ impl Socket {
         msg: RtnlMessage,
         flags: u16,
     ) -> NetavarkResult<Vec<RtnlMessage>> {
-        self.send(msg, flags)?;
+        self.send(msg, flags).wrap("send to netlink")?;
         self.recv(flags & NLM_F_DUMP == NLM_F_DUMP)
     }
 
@@ -288,7 +298,10 @@ impl Socket {
 
         // if multi is set we expect a multi part message
         loop {
-            let size = self.socket.recv(&mut &mut self.buffer[..], 0).unwrap();
+            let size = wrap!(
+                self.socket.recv(&mut &mut self.buffer[..], 0),
+                "recv from netlink"
+            )?;
 
             loop {
                 let bytes = &self.buffer[offset..];
@@ -310,8 +323,16 @@ impl Socket {
                         }
                         return Ok(result);
                     }
-                    NetlinkPayload::Noop => todo!(),
-                    NetlinkPayload::Overrun(_) => todo!(),
+                    NetlinkPayload::Noop => {
+                        return Err(NetavarkError::msg_str(
+                            "unimplemented netlink message type NOOP",
+                        ))
+                    }
+                    NetlinkPayload::Overrun(_) => {
+                        return Err(NetavarkError::msg_str(
+                            "unimplemented netlink message type OVERRUN",
+                        ))
+                    }
                     NetlinkPayload::InnerMessage(msg) => {
                         result.push(msg);
                         if !multi {

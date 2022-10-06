@@ -3,6 +3,25 @@ use std::fmt;
 
 pub type NetavarkResult<T> = Result<T, NetavarkError>;
 
+/// wrap any result into a NetavarkError and add the given msg
+#[macro_export]
+macro_rules! wrap {
+    ($result:expr, $msg:expr) => {
+        $result.map_err(|err| NetavarkError::wrap_str($msg, err.into()))
+    };
+}
+
+pub trait ErrorWrap<T> {
+    /// wrap NetavarkResult error into a NetavarkError and add the given msg
+    fn wrap(self, msg: &str) -> NetavarkResult<T>;
+}
+
+impl<T> ErrorWrap<T> for NetavarkResult<T> {
+    fn wrap(self, msg: &str) -> NetavarkResult<T> {
+        self.map_err(|err| NetavarkError::wrap_str(msg, err))
+    }
+}
+
 // The main Netavark error type
 #[derive(Debug)]
 pub enum NetavarkError {
@@ -67,6 +86,14 @@ impl NetavarkError {
         match *self {
             NetavarkError::ExitCode(_, i) => i,
             _ => 1,
+        }
+    }
+
+    /// unwrap the chain error recursively until we a non chain type error
+    pub fn unwrap(&self) -> &NetavarkError {
+        match self {
+            NetavarkError::Chain(_, inner) => inner.unwrap(),
+            _ => self,
         }
     }
 }

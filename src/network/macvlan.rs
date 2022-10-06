@@ -5,7 +5,7 @@ use netlink_packet_route::nlas::link::{InfoData, InfoKind, InfoMacVlan, Nla};
 
 use crate::{
     dns::aardvark::AardvarkEntry,
-    error::{NetavarkError, NetavarkResult},
+    error::{ErrorWrap, NetavarkError, NetavarkResult},
 };
 
 use super::{
@@ -165,15 +165,21 @@ fn setup(
     opts.info_data = Some(InfoData::MacVlan(vec![InfoMacVlan::Mode(
         data.macvlan_mode,
     )]));
-    host.create_link(opts)?;
+    host.create_link(opts).wrap("create macvlan interface")?;
 
-    let dev = netns.get_link(netlink::LinkID::Name(if_name.to_string()))?;
+    let dev = netns
+        .get_link(netlink::LinkID::Name(if_name.to_string()))
+        .wrap("get macvlan interface")?;
 
     for addr in &data.ipam.container_addresses {
-        netns.add_addr(dev.header.index, addr)?;
+        netns
+            .add_addr(dev.header.index, addr)
+            .wrap("add ip addr to macvlan")?;
     }
 
-    netns.set_up(netlink::LinkID::ID(dev.header.index))?;
+    netns
+        .set_up(netlink::LinkID::ID(dev.header.index))
+        .wrap("set macvlan up")?;
 
     core_utils::add_default_routes(netns, &data.ipam.gateway_addresses)?;
 
@@ -189,7 +195,7 @@ fn setup(
 }
 
 fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult<String> {
-    let routes = host.dump_routes()?;
+    let routes = host.dump_routes().wrap("dump routes")?;
 
     for route in routes {
         let mut dest = false;
