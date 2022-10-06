@@ -447,7 +447,6 @@ fn create_interfaces(
                     data.bridge_interface_name.to_string(),
                     InfoKind::Bridge,
                 );
-                create_link_opts.mac = data.mac_address.clone().unwrap_or_default();
                 create_link_opts.mtu = data.mtu;
                 host.create_link(create_link_opts).wrap("create bridge")?;
 
@@ -505,7 +504,6 @@ fn create_veth_pair(
     netlink::parse_create_link_options(&mut peer, peer_opts);
 
     let mut host_veth = netlink::CreateLinkOptions::new(String::from(""), InfoKind::Veth);
-    host_veth.mac = data.mac_address.clone().unwrap_or_default();
     host_veth.mtu = data.mtu;
     host_veth.master_index = master_index;
     host_veth.info_data = Some(InfoData::Veth(VethInfo::Peer(peer)));
@@ -527,6 +525,24 @@ fn create_veth_pair(
         ))
         .wrap("get container veth")?;
 
+    let mut mac = String::from("");
+    let mut host_link = 0;
+
+    for nla in veth.nlas.into_iter() {
+        if let Nla::Address(ref addr) = nla {
+            mac = CoreUtils::encode_address_to_hex(addr);
+        }
+        if let Nla::Link(link) = nla {
+            host_link = link;
+        }
+    }
+
+    if mac.is_empty() {
+        return Err(NetavarkError::Message(
+            "failed to get the mac address from the container veth interface".to_string(),
+        ));
+    }
+
     if data.ipam.ipv6_enabled {
         exec_netns!(hostns_fd, netns_fd, res, {
             //  Disable dad inside the container too
@@ -538,7 +554,21 @@ fn create_veth_pair(
         });
         // check the result and return error
         res?;
+
+        let host_veth = host.get_link(netlink::LinkID::ID(host_link))?;
+
+        for nla in host_veth.nlas.into_iter() {
+            if let Nla::IfName(name) = nla {
+                //  Disable dad inside the container too
+                let disable_dad_in_container =
+                    format!("/proc/sys/net/ipv6/conf/{}/accept_dad", name);
+                core_utils::CoreUtils::apply_sysctl_value(&disable_dad_in_container, "0")?;
+            }
+        }
     }
+
+    host.set_up(netlink::LinkID::ID(host_link))
+        .wrap("failed to set host veth up")?;
 
     for addr in &data.ipam.container_addresses {
         netns
@@ -552,24 +582,7 @@ fn create_veth_pair(
 
     core_utils::add_default_routes(netns, &data.ipam.gateway_addresses)?;
 
-    let mut mac = String::from("");
-
-    for nla in veth.nlas.into_iter() {
-        if let Nla::Address(ref addr) = nla {
-            mac = CoreUtils::encode_address_to_hex(addr);
-        }
-        if let Nla::Link(link) = nla {
-            host.set_up(netlink::LinkID::ID(link))
-                .wrap("failed to set host veth up")?;
-        }
-    }
-    if !mac.is_empty() {
-        return Ok(mac);
-    }
-
-    Err(NetavarkError::Message(
-        "failed to get the mac address from the container veth interface".to_string(),
-    ))
+    Ok(mac)
 }
 
 // make sure the LinkMessage has the kind bridge
@@ -618,6 +631,7 @@ fn remove_link(
         .wrap("failed to get connected bridge interfaces")?;
     // no connected interfaces on that bridge we can remove it
     if links.is_empty() {
+        log::info!("removing bridge {}", br_name);
         host.del_link(netlink::LinkID::ID(br.header.index))
             .wrap(&format!("failed to delete bridge {}", container_veth_name))?;
         return Ok(true);

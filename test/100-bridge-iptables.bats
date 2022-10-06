@@ -511,6 +511,8 @@ EOF
    link_info="$output"
    assert_json "$link_info" ".[].address" "=="  "$mac" "MAC matches container mac"
    assert_json "$link_info" '.[].flags[] | select(.=="UP")' "=="  "UP" "Container interface is up"
+
+   run_in_host_netns ping -c 1 10.88.0.2
 }
 
 
