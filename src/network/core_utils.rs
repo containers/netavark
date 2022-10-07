@@ -342,3 +342,28 @@ pub fn add_default_routes(sock: &mut netlink::Socket, gws: &[ipnet::IpNet]) -> N
     }
     Ok(())
 }
+
+pub fn disable_ipv6_autoconf(if_name: &str) -> NetavarkResult<()> {
+    // make sure autoconf is off, we want manaully config only
+    if let Err(err) =
+        CoreUtils::apply_sysctl_value(format!("/proc/sys/net/ipv6/conf/{}/autoconf", if_name), "0")
+    {
+        match err {
+            SysctlError::NotFound(_) => {
+                // if the sysctl is not found we likely run on a system without ipv6
+                // just ignore that case
+            }
+
+            // if we have a read only /proc we ignore it as well
+            SysctlError::IoError(ref e) if e.raw_os_error() == Some(libc::EROFS) => {}
+
+            _ => {
+                return Err(NetavarkError::wrap_str(
+                    "failed to set autoconf sysctl",
+                    NetavarkError::Sysctl(err),
+                ));
+            }
+        }
+    };
+    Ok(())
+}

@@ -12,7 +12,7 @@ use crate::{
     error::{ErrorWrap, NetavarkError, NetavarkResult},
     exec_netns,
     firewall::iptables::MAX_HASH_SIZE,
-    network::{constants, types},
+    network::{constants, core_utils::disable_ipv6_autoconf, types},
 };
 
 use super::{
@@ -543,18 +543,22 @@ fn create_veth_pair(
         ));
     }
 
-    if data.ipam.ipv6_enabled {
-        exec_netns!(hostns_fd, netns_fd, res, {
+    exec_netns!(hostns_fd, netns_fd, res, {
+        disable_ipv6_autoconf(&data.container_interface_name)?;
+        if data.ipam.ipv6_enabled {
             //  Disable dad inside the container too
             let disable_dad_in_container = format!(
                 "/proc/sys/net/ipv6/conf/{}/accept_dad",
                 &data.container_interface_name
             );
-            core_utils::CoreUtils::apply_sysctl_value(&disable_dad_in_container, "0")
-        });
-        // check the result and return error
-        res?;
+            core_utils::CoreUtils::apply_sysctl_value(&disable_dad_in_container, "0")?;
+        }
+        Ok::<(), NetavarkError>(())
+    });
+    // check the result and return error
+    res?;
 
+    if data.ipam.ipv6_enabled {
         let host_veth = host.get_link(netlink::LinkID::ID(host_link))?;
 
         for nla in host_veth.nlas.into_iter() {

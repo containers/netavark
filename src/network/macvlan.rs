@@ -6,6 +6,8 @@ use netlink_packet_route::nlas::link::{InfoData, InfoKind, InfoMacVlan, Nla};
 use crate::{
     dns::aardvark::AardvarkEntry,
     error::{ErrorWrap, NetavarkError, NetavarkResult},
+    exec_netns,
+    network::core_utils::{disable_ipv6_autoconf, join_netns},
 };
 
 use super::{
@@ -110,6 +112,7 @@ impl driver::NetworkDriver for MacVlan<'_> {
             netns_sock,
             &self.info.per_network_opts.interface_name,
             data,
+            self.info.netns_host,
             self.info.netns_container,
         )?;
 
@@ -148,6 +151,7 @@ fn setup(
     netns: &mut netlink::Socket,
     if_name: &str,
     data: &InternalData,
+    hostns_fd: RawFd,
     netns_fd: RawFd,
 ) -> NetavarkResult<String> {
     let master_ifname = match data.host_interface_name.as_ref() {
@@ -166,6 +170,9 @@ fn setup(
         data.macvlan_mode,
     )]));
     host.create_link(opts).wrap("create macvlan interface")?;
+
+    exec_netns!(hostns_fd, netns_fd, res, { disable_ipv6_autoconf(if_name) });
+    res?; // return autoconf sysctl error
 
     let dev = netns
         .get_link(netlink::LinkID::Name(if_name.to_string()))
