@@ -33,6 +33,9 @@ function setup() {
     run_in_container_netns ip r
     assert "$output" "=~" "default via 10.88.0.1" "gateway must be there in default route"
     assert_json "$result" ".podman.interfaces.eth0.subnets[0].gateway" == "10.88.0.1" "Result contains gateway address"
+
+    run_in_container_netns cat /proc/sys/net/ipv6/conf/eth0/autoconf
+    assert "0" "autoconf is disabled"
 }
 
 @test "macvlan setup internal" {
