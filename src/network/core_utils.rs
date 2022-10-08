@@ -898,11 +898,20 @@ impl CoreUtils {
                 }
 
                 if ipv6_enabled {
-                    // Disable duplicate address detection if ipv6 enabled
+                    // Enable optimistic_dad on interface if ipv6 is enabled
                     // Do not accept Router Advertisements if ipv6 is enabled
-                    let br_accept_dad = format!("/proc/sys/net/ipv6/conf/{}/accept_dad", ifname);
+                    let br_optimistic_dad =
+                        format!("/proc/sys/net/ipv6/conf/{}/optimistic_dad", ifname);
+                    let br_use_optimistic =
+                        format!("/proc/sys/net/ipv6/conf/{}/use_optimistic", ifname);
                     let br_accept_ra = format!("net/ipv6/conf/{}/accept_ra", ifname);
-                    if let Err(e) = CoreUtils::apply_sysctl_value(&br_accept_dad, "0") {
+                    if let Err(e) = CoreUtils::apply_sysctl_value(&br_optimistic_dad, "1") {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            format!("{}", e),
+                        ));
+                    }
+                    if let Err(e) = CoreUtils::apply_sysctl_value(&br_use_optimistic, "1") {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::Other,
                             format!("{}", e),
@@ -1023,10 +1032,18 @@ impl CoreUtils {
         }
 
         if ipv6_enabled {
-            //  Disable dad inside the container too
-            let disable_dad_in_container =
-                format!("/proc/sys/net/ipv6/conf/{}/accept_dad", container_veth);
-            if let Err(e) = CoreUtils::apply_sysctl_value(&disable_dad_in_container, "0") {
+            // Enable optimistic_dad on interface if ipv6 is enabled
+            let optimistic_dad_in_container =
+                format!("/proc/sys/net/ipv6/conf/{}/optimistic_dad", container_veth);
+            if let Err(e) = CoreUtils::apply_sysctl_value(&optimistic_dad_in_container, "1") {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("{}", e),
+                ));
+            }
+            let use_optimistic_in_container =
+                format!("/proc/sys/net/ipv6/conf/{}/use_optimistic", container_veth);
+            if let Err(e) = CoreUtils::apply_sysctl_value(&use_optimistic_in_container, "1") {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!("{}", e),
@@ -1172,8 +1189,8 @@ impl CoreUtils {
 
         if ipv6_enabled {
             // Disable duplicate address detection on host veth if ipv6 enabled
-            let k = format!("/proc/sys/net/ipv6/conf/{}/accept_dad", &host_veth);
-            match CoreUtils::apply_sysctl_value(&k, "0") {
+            let k = format!("/proc/sys/net/ipv6/conf/{}/optimistic_dad", &host_veth);
+            match CoreUtils::apply_sysctl_value(&k, "1") {
                 Ok(_) => {}
                 Err(err) => {
                     return Err(std::io::Error::new(
@@ -1181,6 +1198,14 @@ impl CoreUtils {
                         format!("{}", err),
                     ))
                 }
+            }
+            let use_optimistic_in_container =
+                format!("/proc/sys/net/ipv6/conf/{}/use_optimistic", &host_veth);
+            if let Err(e) = CoreUtils::apply_sysctl_value(&use_optimistic_in_container, "1") {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("{}", e),
+                ));
             }
         }
         // ip link set <veth_name> master <bridge>
