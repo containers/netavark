@@ -6,13 +6,14 @@ use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Result;
-use std::io::{prelude::*, ErrorKind};
+use std::io::{prelude::*, BufReader, ErrorKind};
 use std::net::Ipv4Addr;
 use std::net::{IpAddr, Ipv6Addr};
 use std::path::Path;
 use std::process::{Command, Stdio};
 
 const SYSTEMD_CHECK_PATH: &str = "/run/systemd/system";
+const SYSTEMD_INIT_COMM: &str = "systemd";
 const SYSTEMD_RUN: &str = "systemd-run";
 const AARDVARK_COMMIT_LOCK: &str = "aardvark.lock";
 
@@ -46,6 +47,16 @@ impl Aardvark {
             aardvark_bin,
             port: port.to_string(),
         }
+    }
+
+    // On success returns the init command or returns empty string.
+    fn get_init_comm() -> String {
+        if let Ok(file) = File::open("/proc/1/comm") {
+            if let Some(line) = BufReader::new(file).lines().flatten().next() {
+                return line.trim().to_string();
+            }
+        }
+        "".to_string()
     }
 
     // On success retuns aardvark server's pid or returns -1;
@@ -83,7 +94,10 @@ impl Aardvark {
 
         let mut aardvark_args = vec![];
         // only use systemd when it is booted, see sd_booted(3)
-        if Path::new(SYSTEMD_CHECK_PATH).exists() && Aardvark::is_executable_in_path(SYSTEMD_RUN) {
+        if Path::new(SYSTEMD_CHECK_PATH).exists()
+            && Aardvark::is_executable_in_path(SYSTEMD_RUN)
+            && Aardvark::get_init_comm() == SYSTEMD_INIT_COMM
+        {
             // TODO: This could be replaced by systemd-api.
             aardvark_args = vec![SYSTEMD_RUN, "-q", "--scope"];
 
