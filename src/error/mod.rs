@@ -3,6 +3,25 @@ use std::fmt;
 
 pub type NetavarkResult<T> = Result<T, NetavarkError>;
 
+/// wrap any result into a NetavarkError and add the given msg
+#[macro_export]
+macro_rules! wrap {
+    ($result:expr, $msg:expr) => {
+        $result.map_err(|err| NetavarkError::wrap_str($msg, err.into()))
+    };
+}
+
+pub trait ErrorWrap<T> {
+    /// wrap NetavarkResult error into a NetavarkError and add the given msg
+    fn wrap(self, msg: &str) -> NetavarkResult<T>;
+}
+
+impl<T> ErrorWrap<T> for NetavarkResult<T> {
+    fn wrap(self, msg: &str) -> NetavarkResult<T> {
+        self.map_err(|err| NetavarkError::wrap_str(msg, err))
+    }
+}
+
 // The main Netavark error type
 #[derive(Debug)]
 pub enum NetavarkError {
@@ -21,6 +40,8 @@ pub enum NetavarkError {
     Sysctl(sysctl::SysctlError),
 
     Serde(serde_json::Error),
+
+    Netlink(netlink_packet_core::error::ErrorMessage),
 }
 
 // Internal struct for JSON output
@@ -67,6 +88,14 @@ impl NetavarkError {
             _ => 1,
         }
     }
+
+    /// unwrap the chain error recursively until we a non chain type error
+    pub fn unwrap(&self) -> &NetavarkError {
+        match self {
+            NetavarkError::Chain(_, inner) => inner.unwrap(),
+            _ => self,
+        }
+    }
 }
 
 impl fmt::Display for NetavarkError {
@@ -80,6 +109,7 @@ impl fmt::Display for NetavarkError {
             NetavarkError::DbusVariant(e) => write!(f, "DBus Variant Error: {}", e),
             NetavarkError::Sysctl(e) => write!(f, "Sysctl error: {}", e),
             NetavarkError::Serde(e) => write!(f, "JSON Decoding error: {}", e),
+            NetavarkError::Netlink(e) => write!(f, "Netlink error: {}", e),
         }
     }
 }
@@ -127,6 +157,11 @@ impl PartialEq for NetavarkError {
                     return e.to_string() == e2.to_string();
                 }
             }
+            NetavarkError::Netlink(e) => {
+                if let NetavarkError::Netlink(e2) = other {
+                    return e == e2;
+                }
+            }
         }
         false
     }
@@ -169,5 +204,11 @@ impl From<serde_json::Error> for NetavarkError {
 impl From<ipnet::PrefixLenError> for NetavarkError {
     fn from(e: ipnet::PrefixLenError) -> Self {
         NetavarkError::Message(format!("{}", e))
+    }
+}
+
+impl From<netlink_packet_core::error::ErrorMessage> for NetavarkError {
+    fn from(err: netlink_packet_core::error::ErrorMessage) -> Self {
+        NetavarkError::Netlink(err)
     }
 }

@@ -1,13 +1,12 @@
 use crate::dns::aardvark::Aardvark;
 use crate::error::{NetavarkError, NetavarkResult};
+use crate::network::core_utils;
 use crate::network::driver::{get_network_driver, DriverInfo};
 
 use crate::{firewall, network};
 use clap::Parser;
 use log::debug;
 use std::env;
-use std::fs::File;
-use std::os::unix::prelude::AsRawFd;
 use std::path::Path;
 
 #[derive(Parser, Debug)]
@@ -77,8 +76,8 @@ impl Teardown {
             Err(e) => return Err(e),
         };
 
-        let f = File::open(&self.network_namespace_path)?;
-        let ns_fd = f.as_raw_fd();
+        let (mut hostns, mut netns) =
+            core_utils::open_netlink_sockets(&self.network_namespace_path)?;
 
         for (net_name, network) in network_options.network_info.iter() {
             let per_network_opts = network_options.networks.get(net_name).ok_or_else(|| {
@@ -92,14 +91,15 @@ impl Teardown {
                 firewall: firewall_driver.as_ref(),
                 container_id: &network_options.container_id,
                 container_name: &network_options.container_name,
-                netns_container: ns_fd,
+                netns_host: hostns.fd,
+                netns_container: netns.fd,
                 network,
                 per_network_opts,
                 port_mappings: &network_options.port_mappings,
                 dns_port,
             })?; //handle error and continue
 
-            driver.teardown()?; //handle error and continue
+            driver.teardown((&mut hostns.netlink, &mut netns.netlink))?; //handle error and continue
         }
 
         debug!("{:?}", "Teardown complete");

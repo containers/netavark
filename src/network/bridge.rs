@@ -1,24 +1,28 @@
-use std::{collections::HashMap, net::IpAddr, sync::Once};
+use std::{collections::HashMap, net::IpAddr, os::unix::prelude::RawFd, sync::Once};
 
 use ipnet::IpNet;
 use log::{debug, error};
-use rand::Rng;
+use netlink_packet_route::{
+    nlas::link::{Info, InfoData, InfoKind, Nla, VethInfo},
+    LinkMessage,
+};
 
 use crate::{
     dns::aardvark::AardvarkEntry,
-    error::{NetavarkError, NetavarkResult},
+    error::{ErrorWrap, NetavarkError, NetavarkResult},
+    exec_netns,
     firewall::iptables::MAX_HASH_SIZE,
-    network::{constants, types},
+    network::{constants, core_utils::disable_ipv6_autoconf, types},
 };
 
 use super::{
     constants::{NO_CONTAINER_INTERFACE_ERROR, OPTION_ISOLATE, OPTION_MTU},
-    core::Core,
-    core_utils::{get_ipam_addresses, parse_option, CoreUtils},
+    core_utils::{self, get_ipam_addresses, join_netns, parse_option, CoreUtils},
     driver::{self, DriverInfo},
     internal_types::{
         IPAMAddresses, PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
     },
+    netlink,
     types::StatusBlock,
 };
 
@@ -82,7 +86,10 @@ impl driver::NetworkDriver for Bridge<'_> {
         Ok(())
     }
 
-    fn setup(&self) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry>)> {
+    fn setup(
+        &self,
+        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+    ) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry>)> {
         let data = match &self.data {
             Some(d) => d,
             None => {
@@ -107,27 +114,15 @@ impl driver::NetworkDriver for Bridge<'_> {
             setup_ipv6_fw_sysctl()?;
         }
 
-        // get random name for host veth, TODO let kernel assign name
-        let host_veth_name = format!("veth{:x}", rand::thread_rng().gen::<u32>());
-        let container_veth_mac = match Core::add_bridge_and_veth(
-            &data.bridge_interface_name,
-            &data.ipam.container_addresses,
-            &data.ipam.gateway_addresses,
-            data.mac_address.clone(),
-            &data.container_interface_name,
-            &host_veth_name,
+        let (host_sock, netns_sock) = netlink_sockets;
+
+        let container_veth_mac = create_interfaces(
+            host_sock,
+            netns_sock,
+            data,
+            self.info.netns_host,
             self.info.netns_container,
-            data.mtu,
-            data.ipam.ipv6_enabled,
-        ) {
-            Ok(addr) => addr,
-            Err(err) => {
-                return Err(NetavarkError::Message(format!(
-                    "failed to configure bridge and veth interface: {}",
-                    err
-                )))
-            }
-        };
+        )?;
 
         //  StatusBlock response
         let mut response = types::StatusBlock {
@@ -221,40 +216,18 @@ impl driver::NetworkDriver for Bridge<'_> {
         Ok((response, aardvark_entry))
     }
 
-    fn teardown(&self) -> NetavarkResult<()> {
-        Core::remove_container_interface(
+    fn teardown(
+        &self,
+        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+    ) -> NetavarkResult<()> {
+        let (host_sock, netns_sock) = netlink_sockets;
+
+        let complete_teardown = remove_link(
+            host_sock,
+            netns_sock,
+            &get_interface_name(self.info.network.network_interface.clone())?,
             &self.info.per_network_opts.interface_name,
-            self.info.netns_container,
-        )?; // handle error and continue
-
-        let complete_teardown =
-            match get_interface_name(self.info.network.network_interface.clone()) {
-                Ok(bridge_name) => {
-                    let complete_teardown =
-                        match CoreUtils::bridge_count_connected_interfaces(&bridge_name) {
-                            Ok(ints) => ints.is_empty(),
-                            Err(e) => {
-                                error!(
-                                    "failed to count veth interface on bridge {}: {}",
-                                    bridge_name, e
-                                );
-                                false
-                            }
-                        };
-
-                    if complete_teardown {
-                        CoreUtils::remove_interface(&bridge_name)?; // handle error and continue
-                    }
-                    complete_teardown
-                }
-                Err(e) => {
-                    error!(
-                        "failed to get bridge name on network {}: {}",
-                        self.info.network.name, e
-                    );
-                    false
-                }
-            };
+        )?;
 
         if self.info.network.internal {
             return Ok(());
@@ -449,4 +422,223 @@ fn setup_ipv6_fw_sysctl() -> NetavarkResult<()> {
         Err(e) => return Err(e.into()),
     };
     Ok(())
+}
+
+/// returns the container veth mac address
+fn create_interfaces(
+    host: &mut netlink::Socket,
+    netns: &mut netlink::Socket,
+    data: &InternalData,
+    hostns_fd: RawFd,
+    netns_fd: RawFd,
+) -> NetavarkResult<String> {
+    let bridge = match host.get_link(netlink::LinkID::Name(
+        data.bridge_interface_name.to_string(),
+    )) {
+        Ok(bridge) => check_link_is_bridge(bridge, &data.bridge_interface_name)?,
+        Err(err) => match err.unwrap() {
+            NetavarkError::Netlink(e) => {
+                if -e.code != libc::ENODEV {
+                    // if bridge does not exists we will create it below,
+                    // for all other errors we want to return the error
+                    return Err(err).wrap("get bridge interface");
+                }
+                let mut create_link_opts = netlink::CreateLinkOptions::new(
+                    data.bridge_interface_name.to_string(),
+                    InfoKind::Bridge,
+                );
+                create_link_opts.mtu = data.mtu;
+                host.create_link(create_link_opts).wrap("create bridge")?;
+
+                if data.ipam.ipv6_enabled {
+                    // Disable duplicate address detection if ipv6 enabled
+                    // Do not accept Router Advertisements if ipv6 is enabled
+                    let br_accept_dad = format!(
+                        "/proc/sys/net/ipv6/conf/{}/accept_dad",
+                        &data.bridge_interface_name
+                    );
+                    let br_accept_ra =
+                        format!("net/ipv6/conf/{}/accept_ra", &data.bridge_interface_name);
+                    CoreUtils::apply_sysctl_value(&br_accept_dad, "0")?;
+                    CoreUtils::apply_sysctl_value(&br_accept_ra, "0")?;
+                }
+
+                let link = host
+                    .get_link(netlink::LinkID::Name(
+                        data.bridge_interface_name.to_string(),
+                    ))
+                    .wrap("get bridge interface")?;
+
+                for addr in &data.ipam.gateway_addresses {
+                    host.add_addr(link.header.index, addr)
+                        .wrap("add ip addr to bridge")?;
+                }
+
+                host.set_up(netlink::LinkID::ID(link.header.index))
+                    .wrap("set bridge up")?;
+                link
+            }
+            _ => return Err(err),
+        },
+    };
+
+    create_veth_pair(host, netns, data, bridge.header.index, hostns_fd, netns_fd)
+}
+
+/// return the container veth mac address
+fn create_veth_pair(
+    host: &mut netlink::Socket,
+    netns: &mut netlink::Socket,
+    data: &InternalData,
+    master_index: u32,
+    hostns_fd: RawFd,
+    netns_fd: RawFd,
+) -> NetavarkResult<String> {
+    let mut peer_opts =
+        netlink::CreateLinkOptions::new(data.container_interface_name.to_string(), InfoKind::Veth);
+    peer_opts.mac = data.mac_address.clone().unwrap_or_default();
+    peer_opts.mtu = data.mtu;
+    peer_opts.netns = netns_fd;
+
+    let mut peer = LinkMessage::default();
+    netlink::parse_create_link_options(&mut peer, peer_opts);
+
+    let mut host_veth = netlink::CreateLinkOptions::new(String::from(""), InfoKind::Veth);
+    host_veth.mtu = data.mtu;
+    host_veth.master_index = master_index;
+    host_veth.info_data = Some(InfoData::Veth(VethInfo::Peer(peer)));
+
+    host.create_link(host_veth).map_err(|err| match err {
+        NetavarkError::Netlink(ref e) if -e.code == libc::EEXIST => NetavarkError::wrap(
+            format!(
+                "create veth pair: interface {} already exists on container namespace",
+                data.container_interface_name
+            ),
+            err,
+        ),
+        _ => NetavarkError::wrap_str("create veth pair", err),
+    })?;
+
+    let veth = netns
+        .get_link(netlink::LinkID::Name(
+            data.container_interface_name.to_string(),
+        ))
+        .wrap("get container veth")?;
+
+    let mut mac = String::from("");
+    let mut host_link = 0;
+
+    for nla in veth.nlas.into_iter() {
+        if let Nla::Address(ref addr) = nla {
+            mac = CoreUtils::encode_address_to_hex(addr);
+        }
+        if let Nla::Link(link) = nla {
+            host_link = link;
+        }
+    }
+
+    if mac.is_empty() {
+        return Err(NetavarkError::Message(
+            "failed to get the mac address from the container veth interface".to_string(),
+        ));
+    }
+
+    exec_netns!(hostns_fd, netns_fd, res, {
+        disable_ipv6_autoconf(&data.container_interface_name)?;
+        if data.ipam.ipv6_enabled {
+            //  Disable dad inside the container too
+            let disable_dad_in_container = format!(
+                "/proc/sys/net/ipv6/conf/{}/accept_dad",
+                &data.container_interface_name
+            );
+            core_utils::CoreUtils::apply_sysctl_value(&disable_dad_in_container, "0")?;
+        }
+        Ok::<(), NetavarkError>(())
+    });
+    // check the result and return error
+    res?;
+
+    if data.ipam.ipv6_enabled {
+        let host_veth = host.get_link(netlink::LinkID::ID(host_link))?;
+
+        for nla in host_veth.nlas.into_iter() {
+            if let Nla::IfName(name) = nla {
+                //  Disable dad inside the container too
+                let disable_dad_in_container =
+                    format!("/proc/sys/net/ipv6/conf/{}/accept_dad", name);
+                core_utils::CoreUtils::apply_sysctl_value(&disable_dad_in_container, "0")?;
+            }
+        }
+    }
+
+    host.set_up(netlink::LinkID::ID(host_link))
+        .wrap("failed to set host veth up")?;
+
+    for addr in &data.ipam.container_addresses {
+        netns
+            .add_addr(veth.header.index, addr)
+            .wrap("add ip addr to container veth")?;
+    }
+
+    netns
+        .set_up(netlink::LinkID::ID(veth.header.index))
+        .wrap("set container veth up")?;
+
+    core_utils::add_default_routes(netns, &data.ipam.gateway_addresses)?;
+
+    Ok(mac)
+}
+
+// make sure the LinkMessage has the kind bridge
+fn check_link_is_bridge(msg: LinkMessage, br_name: &str) -> NetavarkResult<LinkMessage> {
+    for nla in msg.nlas.iter() {
+        if let Nla::Info(info) = nla {
+            for inf in info.iter() {
+                if let Info::Kind(kind) = inf {
+                    if *kind == InfoKind::Bridge {
+                        return Ok(msg);
+                    } else {
+                        return Err(NetavarkError::Message(format!(
+                            "bridge interface {} already exists but is a {:?} interface",
+                            br_name, kind
+                        )));
+                    }
+                }
+            }
+        }
+    }
+    Err(NetavarkError::Message(format!(
+        "could not determine namespace link kind for bridge {}",
+        br_name
+    )))
+}
+
+fn remove_link(
+    host: &mut netlink::Socket,
+    netns: &mut netlink::Socket,
+    br_name: &str,
+    container_veth_name: &str,
+) -> NetavarkResult<bool> {
+    netns
+        .del_link(netlink::LinkID::Name(container_veth_name.to_string()))
+        .wrap(&format!(
+            "failed to delete container veth {}",
+            container_veth_name
+        ))?;
+
+    let br = host
+        .get_link(netlink::LinkID::Name(br_name.to_string()))
+        .wrap("failed to get bridge interface")?;
+
+    let links = host
+        .dump_links(&mut vec![Nla::Master(br.header.index)])
+        .wrap("failed to get connected bridge interfaces")?;
+    // no connected interfaces on that bridge we can remove it
+    if links.is_empty() {
+        log::info!("removing bridge {}", br_name);
+        host.del_link(netlink::LinkID::ID(br.header.index))
+            .wrap(&format!("failed to delete bridge {}", container_veth_name))?;
+        return Ok(true);
+    }
+    Ok(false)
 }

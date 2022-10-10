@@ -213,7 +213,7 @@ fw_driver=iptables
     run_in_container_netns ip link add eth0 type dummy
 
     expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
-    assert_json ".error" "failed to configure bridge and veth interface: failed while configuring network interface: from network namespace: interface eth0 already exists on container namespace" "interface exists on netns"
+    assert_json ".error" "create veth pair: interface eth0 already exists on container namespace: Netlink error: File exists (os error 17)" "interface exists on netns"
 }
 
 @test "$fw_driver - port forwarding ipv4 - tcp" {
@@ -511,6 +511,8 @@ EOF
    link_info="$output"
    assert_json "$link_info" ".[].address" "=="  "$mac" "MAC matches container mac"
    assert_json "$link_info" '.[].flags[] | select(.=="UP")' "=="  "UP" "Container interface is up"
+
+   run_in_host_netns ping -c 1 10.88.0.2
 }
 
 

@@ -2,15 +2,15 @@
 use crate::dns::aardvark::Aardvark;
 use crate::error::{NetavarkError, NetavarkResult};
 use crate::firewall;
-use crate::network;
 use crate::network::driver::{get_network_driver, DriverInfo};
-use crate::network::types;
+use crate::network::netlink::LinkID;
+use crate::network::{self};
+use crate::network::{core_utils, types};
 use clap::Parser;
 use log::{debug, error, info};
 use std::collections::HashMap;
 use std::env;
-use std::fs::{self, File};
-use std::os::unix::prelude::AsRawFd;
+use std::fs::{self};
 use std::path::Path;
 
 #[derive(Parser, Debug)]
@@ -74,8 +74,11 @@ impl Setup {
             Err(_) => 53,
         };
 
-        let f = File::open(&self.network_namespace_path)?;
-        let ns_fd = f.as_raw_fd();
+        let (mut hostns, mut netns) =
+            core_utils::open_netlink_sockets(&self.network_namespace_path)?;
+
+        // setup loopback, it should be safe to assume that 1 is the loopback index
+        netns.netlink.set_up(LinkID::ID(1))?;
 
         let mut drivers = Vec::with_capacity(network_options.network_info.len());
 
@@ -92,7 +95,8 @@ impl Setup {
                 firewall: firewall_driver.as_ref(),
                 container_id: &network_options.container_id,
                 container_name: &network_options.container_name,
-                netns_container: ns_fd,
+                netns_host: hostns.fd,
+                netns_container: netns.fd,
                 network,
                 per_network_opts,
                 port_mappings: &network_options.port_mappings,
@@ -110,24 +114,25 @@ impl Setup {
         // Only now after we validated all drivers we setup each.
         // If there is an error we have to tear down all previous drivers.
         for (i, driver) in drivers.iter().enumerate() {
-            let (status, aardvark_entry) = match driver.setup() {
-                Ok((s, a)) => (s, a),
-                Err(e) => {
-                    // now teardown the already setup drivers
-                    for dri in drivers.iter().take(i) {
-                        match dri.teardown() {
-                            Ok(_) => {}
-                            Err(e) => {
-                                error!(
+            let (status, aardvark_entry) =
+                match driver.setup((&mut hostns.netlink, &mut netns.netlink)) {
+                    Ok((s, a)) => (s, a),
+                    Err(e) => {
+                        // now teardown the already setup drivers
+                        for dri in drivers.iter().take(i) {
+                            match dri.teardown((&mut hostns.netlink, &mut netns.netlink)) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!(
                                     "failed to cleanup previous networks after setup failed: {}",
                                     e
                                 )
-                            }
-                        };
+                                }
+                            };
+                        }
+                        return Err(e);
                     }
-                    return Err(e);
-                }
-            };
+                };
 
             let _ = response.insert(driver.network_name(), status);
             if let Some(a) = aardvark_entry {

@@ -1,18 +1,21 @@
-use std::{collections::HashMap, net::IpAddr};
+use std::{collections::HashMap, net::IpAddr, os::unix::prelude::RawFd};
 
 use log::debug;
+use netlink_packet_route::nlas::link::{InfoData, InfoKind, InfoMacVlan, Nla};
 
 use crate::{
     dns::aardvark::AardvarkEntry,
-    error::{NetavarkError, NetavarkResult},
-    network::core::Core,
+    error::{ErrorWrap, NetavarkError, NetavarkResult},
+    exec_netns,
+    network::core_utils::{disable_ipv6_autoconf, join_netns},
 };
 
 use super::{
     constants::{NO_CONTAINER_INTERFACE_ERROR, OPTION_MODE, OPTION_MTU},
-    core_utils::{get_ipam_addresses, parse_option, CoreUtils},
+    core_utils::{self, get_ipam_addresses, parse_option, CoreUtils},
     driver::{self, DriverInfo},
     internal_types::IPAMAddresses,
+    netlink::{self, CreateLinkOptions},
     types::{NetInterface, StatusBlock},
 };
 
@@ -51,19 +54,6 @@ impl driver::NetworkDriver for MacVlan<'_> {
             return Err(NetavarkError::msg_str(NO_CONTAINER_INTERFACE_ERROR));
         }
 
-        let master_ifname = match self.info.network.network_interface.as_deref() {
-            None | Some("") => match CoreUtils::get_default_route_interface() {
-                Ok(ifname) => ifname,
-                Err(e) => {
-                    return Err(NetavarkError::wrap_str(
-                        "unable to find any valid master interface for macvlan",
-                        e.into(),
-                    ));
-                }
-            },
-            Some(interface) => interface.to_string(),
-        };
-
         let mode = parse_option(&self.info.network.options, OPTION_MODE, String::default())?;
         let macvlan_mode = CoreUtils::get_macvlan_mode_from_string(&mode)?;
 
@@ -82,7 +72,12 @@ impl driver::NetworkDriver for MacVlan<'_> {
         }
 
         self.data = Some(InternalData {
-            host_interface_name: master_ifname,
+            host_interface_name: self
+                .info
+                .network
+                .network_interface
+                .clone()
+                .unwrap_or_default(),
             mac_address: static_mac,
             ipam,
             macvlan_mode,
@@ -91,7 +86,10 @@ impl driver::NetworkDriver for MacVlan<'_> {
         Ok(())
     }
 
-    fn setup(&self) -> Result<(StatusBlock, Option<AardvarkEntry>), NetavarkError> {
+    fn setup(
+        &self,
+        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+    ) -> Result<(StatusBlock, Option<AardvarkEntry>), NetavarkError> {
         let data = match &self.data {
             Some(d) => d,
             None => {
@@ -107,25 +105,16 @@ impl driver::NetworkDriver for MacVlan<'_> {
             self.info.per_network_opts.interface_name, data.ipam.container_addresses
         );
 
-        // create macvlan
-        let container_macvlan_mac = match Core::add_macvlan(
-            &data.host_interface_name,
+        let (host_sock, netns_sock) = netlink_sockets;
+
+        let container_macvlan_mac = setup(
+            host_sock,
+            netns_sock,
             &self.info.per_network_opts.interface_name,
-            &data.ipam.gateway_addresses,
-            data.macvlan_mode,
-            data.mtu,
-            &data.ipam.container_addresses,
-            data.mac_address.clone(),
+            data,
+            self.info.netns_host,
             self.info.netns_container,
-        ) {
-            Ok(addr) => addr,
-            Err(err) => {
-                return Err(NetavarkError::wrap_str(
-                    "failed configure macvlan",
-                    err.into(),
-                ))
-            }
-        };
+        )?;
 
         //  StatusBlock response
         let mut response = StatusBlock {
@@ -146,11 +135,104 @@ impl driver::NetworkDriver for MacVlan<'_> {
         Ok((response, None))
     }
 
-    fn teardown(&self) -> NetavarkResult<()> {
-        Core::remove_container_interface(
-            &self.info.per_network_opts.interface_name,
-            self.info.netns_container,
-        )?; // handle error and continue
+    fn teardown(
+        &self,
+        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+    ) -> NetavarkResult<()> {
+        netlink_sockets.1.del_link(netlink::LinkID::Name(
+            self.info.per_network_opts.interface_name.to_string(),
+        ))?;
         Ok(())
     }
+}
+
+fn setup(
+    host: &mut netlink::Socket,
+    netns: &mut netlink::Socket,
+    if_name: &str,
+    data: &InternalData,
+    hostns_fd: RawFd,
+    netns_fd: RawFd,
+) -> NetavarkResult<String> {
+    let master_ifname = match data.host_interface_name.as_ref() {
+        "" => get_default_route_interface(host)?,
+        host_name => host_name.to_string(),
+    };
+
+    let link = host.get_link(netlink::LinkID::Name(master_ifname))?;
+
+    let mut opts = CreateLinkOptions::new(if_name.to_string(), InfoKind::MacVlan);
+    opts.mac = data.mac_address.clone().unwrap_or_default();
+    opts.mtu = data.mtu;
+    opts.netns = netns_fd;
+    opts.link = link.header.index;
+    opts.info_data = Some(InfoData::MacVlan(vec![InfoMacVlan::Mode(
+        data.macvlan_mode,
+    )]));
+    host.create_link(opts).wrap("create macvlan interface")?;
+
+    exec_netns!(hostns_fd, netns_fd, res, { disable_ipv6_autoconf(if_name) });
+    res?; // return autoconf sysctl error
+
+    let dev = netns
+        .get_link(netlink::LinkID::Name(if_name.to_string()))
+        .wrap("get macvlan interface")?;
+
+    for addr in &data.ipam.container_addresses {
+        netns
+            .add_addr(dev.header.index, addr)
+            .wrap("add ip addr to macvlan")?;
+    }
+
+    netns
+        .set_up(netlink::LinkID::ID(dev.header.index))
+        .wrap("set macvlan up")?;
+
+    core_utils::add_default_routes(netns, &data.ipam.gateway_addresses)?;
+
+    for nla in dev.nlas.into_iter() {
+        if let Nla::Address(ref addr) = nla {
+            return Ok(CoreUtils::encode_address_to_hex(addr));
+        }
+    }
+
+    Err(NetavarkError::Message(
+        "failed to get the mac address from the container veth interface".to_string(),
+    ))
+}
+
+fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult<String> {
+    let routes = host.dump_routes().wrap("dump routes")?;
+
+    for route in routes {
+        let mut dest = false;
+        let mut out_if = 0;
+        for nla in route.nlas {
+            if let netlink_packet_route::route::Nla::Destination(_) = nla {
+                dest = true;
+            }
+            if let netlink_packet_route::route::Nla::Oif(oif) = nla {
+                out_if = oif;
+            }
+        }
+
+        // if there is no dest we have a default route
+        // return the output interface for this route
+        if !dest && out_if > 0 {
+            let link = host.get_link(netlink::LinkID::ID(out_if))?;
+            let name = link.nlas.iter().find_map(|nla| {
+                if let Nla::IfName(name) = nla {
+                    Some(name)
+                } else {
+                    None
+                }
+            });
+            if let Some(name) = name {
+                return Ok(name.to_owned());
+            }
+        }
+    }
+    Err(NetavarkError::Message(
+        "failed to get default route interface".to_string(),
+    ))
 }
