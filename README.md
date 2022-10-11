@@ -31,9 +31,6 @@ $ make test
 ```
 Also see [./test](./test/README.md) for more information.
 
-## Latest release
-[v1.0.0](https://github.com/containers/netavark/releases/latest)
-
 ## Communications
 
 For general questions and discussion, please use Podman's
