@@ -120,6 +120,7 @@ impl driver::NetworkDriver for Bridge<'_> {
             host_sock,
             netns_sock,
             data,
+            self.info.network.internal,
             self.info.netns_host,
             self.info.netns_container,
         )?;
@@ -429,6 +430,7 @@ fn create_interfaces(
     host: &mut netlink::Socket,
     netns: &mut netlink::Socket,
     data: &InternalData,
+    internal: bool,
     hostns_fd: RawFd,
     netns_fd: RawFd,
 ) -> NetavarkResult<String> {
@@ -482,7 +484,15 @@ fn create_interfaces(
         },
     };
 
-    create_veth_pair(host, netns, data, bridge.header.index, hostns_fd, netns_fd)
+    create_veth_pair(
+        host,
+        netns,
+        data,
+        bridge.header.index,
+        internal,
+        hostns_fd,
+        netns_fd,
+    )
 }
 
 /// return the container veth mac address
@@ -491,6 +501,7 @@ fn create_veth_pair(
     netns: &mut netlink::Socket,
     data: &InternalData,
     master_index: u32,
+    internal: bool,
     hostns_fd: RawFd,
     netns_fd: RawFd,
 ) -> NetavarkResult<String> {
@@ -584,7 +595,9 @@ fn create_veth_pair(
         .set_up(netlink::LinkID::ID(veth.header.index))
         .wrap("set container veth up")?;
 
-    core_utils::add_default_routes(netns, &data.ipam.gateway_addresses)?;
+    if !internal {
+        core_utils::add_default_routes(netns, &data.ipam.gateway_addresses)?;
+    }
 
     Ok(mac)
 }
