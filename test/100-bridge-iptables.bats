@@ -19,11 +19,10 @@ fw_driver=iptables
    run_netavark --file ${TESTSDIR}/testfiles/internal.json setup $(get_container_netns_path)
 
    run_in_host_netns iptables -t nat -nvL
-   after="$output"
-   assert "$before" == "$after" "make sure tables have not changed"
+   assert "$output" == "$before" "make sure tables have not changed"
 
    run_in_container_netns ip route show
-   assert "default" "!~" "$output" "No default route for internal networks"
+   assert "$output" "!~" "default" "No default route for internal networks"
 
    run_in_container_netns ping -c 1 10.88.0.1
 
