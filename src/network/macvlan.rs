@@ -51,7 +51,7 @@ impl driver::NetworkDriver for MacVlan<'_> {
 
     fn validate(&mut self) -> NetavarkResult<()> {
         if self.info.per_network_opts.interface_name.is_empty() {
-            return Err(NetavarkError::msg_str(NO_CONTAINER_INTERFACE_ERROR));
+            return Err(NetavarkError::msg(NO_CONTAINER_INTERFACE_ERROR));
         }
 
         let mode = parse_option(&self.info.network.options, OPTION_MODE, String::default())?;
@@ -92,11 +92,7 @@ impl driver::NetworkDriver for MacVlan<'_> {
     ) -> Result<(StatusBlock, Option<AardvarkEntry>), NetavarkError> {
         let data = match &self.data {
             Some(d) => d,
-            None => {
-                return Err(NetavarkError::msg_str(
-                    "must call validate() before setup()",
-                ))
-            }
+            None => return Err(NetavarkError::msg("must call validate() before setup()")),
         };
 
         debug!("Setup network {}", self.info.network.name);
@@ -196,8 +192,8 @@ fn setup(
         }
     }
 
-    Err(NetavarkError::Message(
-        "failed to get the mac address from the container veth interface".to_string(),
+    Err(NetavarkError::msg(
+        "failed to get the mac address from the container veth interface",
     ))
 }
 
@@ -232,7 +228,5 @@ fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult<Str
             }
         }
     }
-    Err(NetavarkError::Message(
-        "failed to get default route interface".to_string(),
-    ))
+    Err(NetavarkError::msg("failed to get default route interface"))
 }

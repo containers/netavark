@@ -43,7 +43,7 @@ fn get_firewall_impl() -> NetavarkResult<FirewallImpl> {
                 let conn = match block_on(Connection::system()) {
                     Ok(c) => c,
                     Err(e) => {
-                        return Err(NetavarkError::wrap_str(
+                        return Err(NetavarkError::wrap(
                             "Error retrieving dbus connection for requested firewall backend",
                             e.into(),
                         ))
@@ -98,7 +98,7 @@ pub fn get_supported_firewall_driver() -> NetavarkResult<Box<dyn FirewallDriver>
             }
             FirewallImpl::Nftables => {
                 info!("Using nftables firewall driver");
-                Err(NetavarkError::msg_str(
+                Err(NetavarkError::msg(
                     "nftables support presently not available",
                 ))
             }

@@ -63,7 +63,7 @@ impl driver::NetworkDriver for Bridge<'_> {
     fn validate(&mut self) -> NetavarkResult<()> {
         let bridge_name = get_interface_name(self.info.network.network_interface.clone())?;
         if self.info.per_network_opts.interface_name.is_empty() {
-            return Err(NetavarkError::msg_str(NO_CONTAINER_INTERFACE_ERROR));
+            return Err(NetavarkError::msg(NO_CONTAINER_INTERFACE_ERROR));
         }
         let ipam = get_ipam_addresses(self.info.per_network_opts, self.info.network)?;
 
@@ -92,11 +92,7 @@ impl driver::NetworkDriver for Bridge<'_> {
     ) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry>)> {
         let data = match &self.data {
             Some(d) => d,
-            None => {
-                return Err(NetavarkError::msg_str(
-                    "must call validate() before setup()",
-                ))
-            }
+            None => return Err(NetavarkError::msg("must call validate() before setup()")),
         };
 
         debug!("Setup network {}", self.info.network.name);
@@ -242,10 +238,10 @@ impl driver::NetworkDriver for Bridge<'_> {
 
 fn get_interface_name(name: Option<String>) -> NetavarkResult<String> {
     let name = match name {
-        None => return Err(NetavarkError::msg_str(NO_BRIDGE_NAME_ERROR)),
+        None => return Err(NetavarkError::msg(NO_BRIDGE_NAME_ERROR)),
         Some(n) => {
             if n.is_empty() {
-                return Err(NetavarkError::msg_str(NO_BRIDGE_NAME_ERROR));
+                return Err(NetavarkError::msg(NO_BRIDGE_NAME_ERROR));
             }
             n
         }
@@ -527,7 +523,7 @@ fn create_veth_pair(
             ),
             err,
         ),
-        _ => NetavarkError::wrap_str("create veth pair", err),
+        _ => NetavarkError::wrap("create veth pair", err),
     })?;
 
     let veth = netns

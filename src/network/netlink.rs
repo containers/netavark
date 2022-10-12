@@ -78,7 +78,7 @@ impl Socket {
 
         let mut result = self.make_netlink_request(RtnlMessage::GetLink(msg), 0)?;
         if result.len() != 1 {
-            return Err(NetavarkError::msg_str("unexpected netlink result"));
+            return Err(NetavarkError::msg("unexpected netlink result"));
         }
         match result.remove(0) {
             RtnlMessage::NewLink(m) => Ok(m),
@@ -97,7 +97,7 @@ impl Socket {
             NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
         )?;
         if !result.is_empty() {
-            return Err(NetavarkError::msg_str("unexpected netlink result"));
+            return Err(NetavarkError::msg("unexpected netlink result"));
         }
 
         Ok(())
@@ -113,7 +113,7 @@ impl Socket {
 
         let result = self.make_netlink_request(RtnlMessage::DelLink(msg), NLM_F_ACK)?;
         if !result.is_empty() {
-            return Err(NetavarkError::msg_str("unexpected netlink result 1243"));
+            return Err(NetavarkError::msg("unexpected netlink result 1243"));
         }
         Ok(())
     }
@@ -144,7 +144,7 @@ impl Socket {
             NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
         )?;
         if !result.is_empty() {
-            return Err(NetavarkError::msg_str("unexpected netlink result"));
+            return Err(NetavarkError::msg("unexpected netlink result"));
         }
 
         Ok(())
@@ -186,7 +186,7 @@ impl Socket {
         let result =
             self.make_netlink_request(RtnlMessage::NewRoute(msg), NLM_F_ACK | NLM_F_CREATE)?;
         if !result.is_empty() {
-            return Err(NetavarkError::msg_str("unexpected netlink result"));
+            return Err(NetavarkError::msg("unexpected netlink result"));
         }
 
         Ok(())
@@ -258,7 +258,7 @@ impl Socket {
             NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
         )?;
         if !result.is_empty() {
-            return Err(NetavarkError::msg_str("unexpected netlink result"));
+            return Err(NetavarkError::msg("unexpected netlink result"));
         }
 
         Ok(())
@@ -324,12 +324,12 @@ impl Socket {
                         return Ok(result);
                     }
                     NetlinkPayload::Noop => {
-                        return Err(NetavarkError::msg_str(
+                        return Err(NetavarkError::msg(
                             "unimplemented netlink message type NOOP",
                         ))
                     }
                     NetlinkPayload::Overrun(_) => {
-                        return Err(NetavarkError::msg_str(
+                        return Err(NetavarkError::msg(
                             "unimplemented netlink message type OVERRUN",
                         ))
                     }

@@ -141,7 +141,7 @@ impl firewall::FirewallDriver for FirewallD {
             Some(a) => match a {
                 Value::Array(arr) => port_forwarding_rules = arr.clone(),
                 _ => {
-                    return Err(NetavarkError::msg_str(
+                    return Err(NetavarkError::msg(
                         "forward-port in firewalld policy object has a bad type",
                     ))
                 }
@@ -152,7 +152,7 @@ impl firewall::FirewallDriver for FirewallD {
                 let sig = match Signature::try_from("(ssss)") {
                     Ok(s) => s,
                     Err(e) => {
-                        return Err(NetavarkError::wrap_str(
+                        return Err(NetavarkError::wrap(
                             "Error creating signature for new DBus array",
                             e.into(),
                         ))
@@ -199,7 +199,7 @@ impl firewall::FirewallDriver for FirewallD {
                 Some(a) => match a {
                     Value::Array(arr) => rich_rules = arr.clone(),
                     _ => {
-                        return Err(NetavarkError::msg_str(
+                        return Err(NetavarkError::msg(
                             "forward-port in firewalld policy object has a bad type",
                         ))
                     }
@@ -210,7 +210,7 @@ impl firewall::FirewallDriver for FirewallD {
                     let sig = match Signature::try_from("s") {
                         Ok(s) => s,
                         Err(e) => {
-                            return Err(NetavarkError::wrap_str(
+                            return Err(NetavarkError::wrap(
                                 "Error creating signature for new DBus array",
                                 e.into(),
                             ))
@@ -291,7 +291,7 @@ impl firewall::FirewallDriver for FirewallD {
                 Some(a) => match a {
                     Value::Array(arr) => Some(arr.clone()),
                     _ => {
-                        return Err(NetavarkError::msg_str(
+                        return Err(NetavarkError::msg(
                             "forward-port in firewalld policy object has a bad type",
                         ))
                     }
@@ -307,7 +307,7 @@ impl firewall::FirewallDriver for FirewallD {
             let sig = match Signature::try_from("(ssss)") {
                 Ok(s) => s,
                 Err(e) => {
-                    return Err(NetavarkError::wrap_str(
+                    return Err(NetavarkError::wrap(
                         "Error creating signature for new dbus array",
                         e.into(),
                     ))
@@ -332,13 +332,13 @@ impl firewall::FirewallDriver for FirewallD {
                     Value::Structure(s) => {
                         let fields = s.clone().into_fields();
                         if fields.len() != 4 {
-                            return Err(NetavarkError::msg_str(
+                            return Err(NetavarkError::msg(
                                 "Port forwarding rule that was not a 4-tuple encountered",
                             ));
                         }
                         let port_ip = match fields[3].clone() {
                             Value::Str(s) => s.as_str().to_string(),
-                            _ => return Err(NetavarkError::msg_str("Port forwarding tuples must contain only strings, encountered a non-string object")),
+                            _ => return Err(NetavarkError::msg("Port forwarding tuples must contain only strings, encountered a non-string object")),
                         };
                         debug!("IP string from firewalld is {}", port_ip);
                         if port_ip != ipv4 && port_ip != ipv6 {
@@ -346,7 +346,7 @@ impl firewall::FirewallDriver for FirewallD {
                         }
                     }
                     _ => {
-                        return Err(NetavarkError::msg_str(
+                        return Err(NetavarkError::msg(
                             "Port forwarding rule that was not a structure encountered",
                         ))
                     }
@@ -368,7 +368,7 @@ impl firewall::FirewallDriver for FirewallD {
                 match a {
                     Value::Array(arr) => old_rich_rules_option = Some(arr.clone()),
                     _ => {
-                        return Err(NetavarkError::msg_str(
+                        return Err(NetavarkError::msg(
                             "forward-port in firewalld policy object has a bad type",
                         ))
                     }
@@ -386,7 +386,7 @@ impl firewall::FirewallDriver for FirewallD {
             let sig = match Signature::try_from("s") {
                 Ok(s) => s,
                 Err(e) => {
-                    return Err(NetavarkError::wrap_str(
+                    return Err(NetavarkError::wrap(
                         "Error creating signature for new DBus array",
                         e.into(),
                     ))
@@ -401,7 +401,7 @@ impl firewall::FirewallDriver for FirewallD {
                         }
                     }
                     _ => {
-                        return Err(NetavarkError::msg_str(
+                        return Err(NetavarkError::msg(
                             "Rich rule that was not a string encountered",
                         ))
                     }
@@ -464,7 +464,7 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> NetavarkResul
     let zones: Vec<&str> = match zones_msg.body() {
         Ok(b) => b,
         Err(e) => {
-            return Err(NetavarkError::wrap_str(
+            return Err(NetavarkError::wrap(
                 "Error decoding DBus message for active zones",
                 e.into(),
             ))
@@ -488,7 +488,7 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> NetavarkResul
     let zones_perm: Vec<&str> = match perm_zones_msg.body() {
         Ok(b) => b,
         Err(e) => {
-            return Err(NetavarkError::wrap_str(
+            return Err(NetavarkError::wrap(
                 "Error decoding DBus message for permanent zones",
                 e.into(),
             ))
@@ -535,7 +535,7 @@ pub fn add_source_subnets_to_zone(
         let zone_string: String = match subnet_zone.body() {
             Ok(s) => s,
             Err(e) => {
-                return Err(NetavarkError::wrap_str(
+                return Err(NetavarkError::wrap(
                     "Error decoding DBus message for zone of subnet",
                     e.into(),
                 ))
@@ -587,7 +587,7 @@ fn add_policy_if_not_exist(
     let policies: Vec<&str> = match policies_msg.body() {
         Ok(v) => v,
         Err(e) => {
-            return Err(NetavarkError::wrap_str(
+            return Err(NetavarkError::wrap(
                 "Error decoding policy list response",
                 e.into(),
             ))
@@ -611,7 +611,7 @@ fn add_policy_if_not_exist(
     let perm_policies: Vec<&str> = match perm_policies_msg.body() {
         Ok(v) => v,
         Err(e) => {
-            return Err(NetavarkError::wrap_str(
+            return Err(NetavarkError::wrap(
                 "Error decoding permanent policy list response",
                 e.into(),
             ))
