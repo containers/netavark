@@ -66,4 +66,90 @@ mod tests {
 
         assert!(out.contains(net), "addr does not exists");
     }
+
+    #[test]
+    fn test_del_addr() {
+        test_setup!();
+        let mut sock = Socket::new().expect("Socket::new()");
+
+        let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
+        eprintln!("{}", String::from_utf8(out.stderr).unwrap());
+        assert!(out.status.success(), "failed to add link via ip");
+
+        let net = "10.0.0.2/24";
+
+        let out = run_command!("ip", "addr", "add", net, "dev", "test1");
+        eprintln!("{}", String::from_utf8(out.stderr).unwrap());
+        assert!(out.status.success(), "failed to add addr via ip");
+
+        let link = sock
+            .get_link(LinkID::Name("test1".into()))
+            .expect("get_link failed");
+
+        sock.del_addr(link.header.index, &net.parse().unwrap())
+            .expect("del_addr failed");
+
+        let out = run_command!("ip", "addr", "show", "test1");
+        let stdout = String::from_utf8(out.stdout).unwrap();
+        eprintln!("{}", stdout);
+        assert!(out.status.success(), "failed to show addr via ip");
+
+        assert!(!stdout.contains(net), "addr does exist");
+    }
+
+    /// This test fails because we do not have actual functioning routes in the test netns
+    /// For some reason the kernel expects us to set different options to make it work but
+    /// I do not want to expose them just for a test.
+    /// With these option you could get it to work but it will not work in the actual use case
+    ///         msg.header.protocol = RTPROT_UNSPEC;
+    ///         msg.header.scope = RT_SCOPE_NOWHERE;
+    ///         msg.header.kind = RTN_UNSPEC;
+    #[test]
+    #[ignore]
+    fn test_del_route() {
+        test_setup!();
+        let mut sock = Socket::new().expect("Socket::new()");
+
+        let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
+        eprintln!("{}", String::from_utf8(out.stderr).unwrap());
+        assert!(out.status.success(), "failed to add link via ip");
+
+        let net = "10.0.0.2/24";
+
+        let out = run_command!("ip", "addr", "add", net, "dev", "test1");
+        eprintln!("{}", String::from_utf8(out.stderr).unwrap());
+        assert!(out.status.success(), "failed to add addr via ip");
+
+        // route requires that the link is up!
+        let out = run_command!("ip", "link", "set", "dev", "test1", "up");
+        eprintln!("{}", String::from_utf8(out.stderr).unwrap());
+        assert!(out.status.success(), "failed to set test1 up via ip");
+
+        let net = "10.0.1.0/24";
+        let gw = "10.0.0.2";
+
+        let out = run_command!("ip", "route", "add", net, "via", gw);
+        eprintln!("{}", String::from_utf8(out.stderr).unwrap());
+        assert!(out.status.success(), "failed to add route via ip");
+
+        let out = run_command!("ip", "route", "show");
+        let stdout = String::from_utf8(out.stdout).unwrap();
+        eprintln!("{}", stdout);
+        assert!(out.status.success(), "failed to show addr via ip");
+
+        assert!(stdout.contains(net), "route should exist");
+
+        sock.del_route(&Route::Ipv4 {
+            dest: net.parse().unwrap(),
+            gw: gw.parse().unwrap(),
+        })
+        .expect("del_route failed");
+
+        let out = run_command!("ip", "route", "show");
+        let stdout = String::from_utf8(out.stdout).unwrap();
+        eprintln!("{}", stdout);
+        assert!(out.status.success(), "failed to show addr via ip");
+
+        assert!(!stdout.contains(net), "route should not exist");
+    }
 }

@@ -12,7 +12,7 @@ use netlink_packet_route::{
     nlas::link::{Info, InfoData, InfoKind, Nla},
     AddressMessage, LinkMessage, NetlinkHeader, NetlinkMessage, NetlinkPayload, RouteMessage,
     RtnlMessage, AF_INET, AF_INET6, IFF_UP, NLM_F_ACK, NLM_F_CREATE, NLM_F_DUMP, NLM_F_EXCL,
-    NLM_F_REQUEST, RTN_UNICAST, RTPROT_STATIC, RT_SCOPE_UNIVERSE, RT_TABLE_MAIN,
+    NLM_F_REQUEST, RTN_UNICAST, RTPROT_STATIC, RTPROT_UNSPEC, RT_SCOPE_UNIVERSE, RT_TABLE_MAIN,
 };
 use netlink_sys::{protocols::NETLINK_ROUTE, SocketAddr};
 
@@ -118,7 +118,7 @@ impl Socket {
         Ok(())
     }
 
-    pub fn add_addr(&mut self, link_id: u32, addr: &ipnet::IpNet) -> NetavarkResult<()> {
+    fn create_addr_msg(link_id: u32, addr: &ipnet::IpNet) -> AddressMessage {
         let mut msg = AddressMessage::default();
         msg.header.index = link_id;
 
@@ -139,6 +139,11 @@ impl Socket {
         msg.header.prefix_len = addr.prefix_len();
         msg.nlas
             .push(netlink_packet_route::address::Nla::Local(addr_vec));
+        msg
+    }
+
+    pub fn add_addr(&mut self, link_id: u32, addr: &ipnet::IpNet) -> NetavarkResult<()> {
+        let msg = Self::create_addr_msg(link_id, addr);
         let result = self.make_netlink_request(
             RtnlMessage::NewAddress(msg),
             NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
@@ -150,7 +155,17 @@ impl Socket {
         Ok(())
     }
 
-    pub fn add_route(&mut self, route: &Route) -> NetavarkResult<()> {
+    pub fn del_addr(&mut self, link_id: u32, addr: &ipnet::IpNet) -> NetavarkResult<()> {
+        let msg = Self::create_addr_msg(link_id, addr);
+        let result = self.make_netlink_request(RtnlMessage::DelAddress(msg), NLM_F_ACK)?;
+        if !result.is_empty() {
+            return Err(NetavarkError::msg_str("unexpected netlink result"));
+        }
+
+        Ok(())
+    }
+
+    fn create_route_msg(route: &Route) -> RouteMessage {
         let mut msg = RouteMessage::default();
 
         msg.header.table = RT_TABLE_MAIN;
@@ -182,9 +197,25 @@ impl Socket {
             .push(netlink_packet_route::route::Nla::Destination(dest_vec));
         msg.nlas
             .push(netlink_packet_route::route::Nla::Gateway(gateway_vec));
+        msg
+    }
+
+    pub fn add_route(&mut self, route: &Route) -> NetavarkResult<()> {
+        let msg = Self::create_route_msg(route);
 
         let result =
             self.make_netlink_request(RtnlMessage::NewRoute(msg), NLM_F_ACK | NLM_F_CREATE)?;
+        if !result.is_empty() {
+            return Err(NetavarkError::msg_str("unexpected netlink result"));
+        }
+
+        Ok(())
+    }
+
+    pub fn del_route(&mut self, route: &Route) -> NetavarkResult<()> {
+        let msg = Self::create_route_msg(route);
+
+        let result = self.make_netlink_request(RtnlMessage::DelRoute(msg), NLM_F_ACK)?;
         if !result.is_empty() {
             return Err(NetavarkError::msg_str("unexpected netlink result"));
         }
@@ -196,7 +227,7 @@ impl Socket {
         let mut msg = RouteMessage::default();
 
         msg.header.table = RT_TABLE_MAIN;
-        msg.header.protocol = RTPROT_STATIC;
+        msg.header.protocol = RTPROT_UNSPEC;
         msg.header.scope = RT_SCOPE_UNIVERSE;
         msg.header.kind = RTN_UNICAST;
 
@@ -305,7 +336,6 @@ impl Socket {
 
             loop {
                 let bytes = &self.buffer[offset..];
-
                 let rx_packet: NetlinkMessage<RtnlMessage> = NetlinkMessage::deserialize(bytes)
                     .map_err(|e| {
                         NetavarkError::Message(format!(
