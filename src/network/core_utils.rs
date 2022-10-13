@@ -245,7 +245,7 @@ impl CoreUtils {
 pub fn join_netns(fd: RawFd) -> NetavarkResult<()> {
     match sched::setns(fd, sched::CloneFlags::CLONE_NEWNET) {
         Ok(_) => Ok(()),
-        Err(e) => Err(NetavarkError::wrap_str(
+        Err(e) => Err(NetavarkError::wrap(
             "setns",
             NetavarkError::Io(io::Error::from(e)),
         )),
@@ -358,7 +358,7 @@ pub fn disable_ipv6_autoconf(if_name: &str) -> NetavarkResult<()> {
             SysctlError::IoError(ref e) if e.raw_os_error() == Some(libc::EROFS) => {}
 
             _ => {
-                return Err(NetavarkError::wrap_str(
+                return Err(NetavarkError::wrap(
                     "failed to set autoconf sysctl",
                     NetavarkError::Sysctl(err),
                 ));

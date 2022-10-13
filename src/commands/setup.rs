@@ -38,7 +38,7 @@ impl Setup {
         match network::validation::ns_checks(&self.network_namespace_path) {
             Ok(_) => (),
             Err(e) => {
-                return Err(NetavarkError::wrap_str("invalid namespace path", e));
+                return Err(NetavarkError::wrap("invalid namespace path", e));
             }
         }
         debug!("{:?}", "Setting up...");

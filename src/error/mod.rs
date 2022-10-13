@@ -7,18 +7,23 @@ pub type NetavarkResult<T> = Result<T, NetavarkError>;
 #[macro_export]
 macro_rules! wrap {
     ($result:expr, $msg:expr) => {
-        $result.map_err(|err| NetavarkError::wrap_str($msg, err.into()))
+        $result.map_err(|err| NetavarkError::wrap($msg, err.into()))
     };
 }
 
 pub trait ErrorWrap<T> {
     /// wrap NetavarkResult error into a NetavarkError and add the given msg
-    fn wrap(self, msg: &str) -> NetavarkResult<T>;
+    fn wrap<S>(self, msg: S) -> NetavarkResult<T>
+    where
+        S: Into<String>;
 }
 
 impl<T> ErrorWrap<T> for NetavarkResult<T> {
-    fn wrap(self, msg: &str) -> NetavarkResult<T> {
-        self.map_err(|err| NetavarkError::wrap_str(msg, err))
+    fn wrap<S>(self, msg: S) -> NetavarkResult<T>
+    where
+        S: Into<String>,
+    {
+        self.map_err(|err| NetavarkError::wrap(msg, err))
     }
 }
 
@@ -51,19 +56,18 @@ struct JsonError {
 }
 
 impl NetavarkError {
-    // TODO: There has to be a better way of doing this
-    pub fn msg_str(string: &str) -> NetavarkError {
-        NetavarkError::Message(string.to_string())
+    pub fn msg<S>(msg: S) -> NetavarkError
+    where
+        S: Into<String>,
+    {
+        NetavarkError::Message(msg.into())
     }
 
-    // TODO: There has to be a better way of doing this
-    pub fn wrap(string: String, chained: NetavarkError) -> NetavarkError {
-        NetavarkError::Chain(string, Box::new(chained))
-    }
-
-    // TODO: There has to be a better way of doing this
-    pub fn wrap_str(string: &str, chained: NetavarkError) -> NetavarkError {
-        NetavarkError::Chain(string.to_string(), Box::new(chained))
+    pub fn wrap<S>(msg: S, chained: NetavarkError) -> NetavarkError
+    where
+        S: Into<String>,
+    {
+        NetavarkError::Chain(msg.into(), Box::new(chained))
     }
 
     // Print the error in a standardized JSON format recognized by callers of
