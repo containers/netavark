@@ -30,6 +30,22 @@ gcp_credentials: ENCRYPTED[d6efdb7d6d4c61e3831df2193ca6348bb02f26cd931695f69d419
 aws_credentials: ENCRYPTED[36b3e82f72ec2c909235b69d88b835a09e230aa289e2925d949b0dc4c813c1b468655aabb05edf3f7dcfed430c320b87]
 
 
+commit_check_task:
+  alias: commit_check
+  # This check is likely to fail for dependency-bot created PRs,
+  # and is useless to run against branches or tags.
+  only_if: >-
+    $CIRRUS_PR != ''  &&
+    $CIRRUS_BASE_BRANCH =~ '(main)|(v[0-9]+.+)'
+  container:
+    # FIXME: Some tag needs to get copied to quay
+    image: tombruijn/lintje
+  env:
+    CIRRUS_SHELL: "/bin/sh"
+  # Ref: https://lintje.dev/docs/usage/
+  script: /entrypoint.sh --no-color --no-hints ${CIRRUS_BASE_SHA}..HEAD
+
+
 build_task:
   alias: "build"
   # Compiling is very CPU intensive, make it chooch quicker for this task only
@@ -40,6 +56,8 @@ build_task:
      cpu: 8
      memory: "8Gb"
      image_name: "${FEDORA_NETAVARK_IMAGE}"
+  depends_on:
+    - commit_check
   cargo_cache: &cargo_cache
     # Populating this cache depends on execution of setup.sh, and runner.sh
     # to builds of all release, debug, plus unit-tests.
@@ -275,6 +293,7 @@ success_task:
   name: "Total success"
   alias: success
   depends_on:
+    - "commit_check"
     - "build"
     - "build_aarch64"
     - "validate"

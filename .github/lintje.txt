@@ -1,0 +1,2 @@
+# Global lintje options may appear in this file
+# ref: https://lintje.dev/docs/configuration/#options-file

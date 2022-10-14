@@ -1,0 +1,31 @@
+---
+
+name: Commit Lint
+
+on:
+    pull_request:
+
+permissions: read-all
+
+jobs:
+  commit_lint:
+    name: "Commit Lint"
+    runs-on: ubuntu-latest
+    env:
+        LINTJE_OPTIONS_PATH: "${{ github.workspace }}/.github/lintje.txt"
+
+    steps:
+      - name: Event debug
+        run: jq --color-output . "${{ github.event_path }}"
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0  # required for commit checking
+      - uses: joerick/pr-labels-action@v1.0.6
+      - if: 'env.GITHUB_PR_LABEL_DEPENDENCIES != 1'  # dependencies label absent
+        # Ref: https://github.com/marketplace/actions/lintje#configuration
+        uses: lintje/action@v0.11.1
+      # Bots use strange branch names that may not conform.
+      - if: 'env.GITHUB_PR_LABEL_DEPENDENCIES == 1'
+        uses: lintje/action@v0.11.1
+        with:
+            branch_validation: false
