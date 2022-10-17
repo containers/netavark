@@ -24,6 +24,7 @@ pub struct AardvarkEntry<'a> {
     pub container_ips_v4: Vec<Ipv4Addr>,
     pub container_ips_v6: Vec<Ipv6Addr>,
     pub container_names: Vec<String>,
+    pub container_dns_servers: &'a Option<Vec<IpAddr>>,
 }
 
 #[derive(Debug, Clone)]
@@ -249,9 +250,24 @@ impl Aardvark {
             .collect::<Vec<String>>()
             .join(",");
 
+        let dns_server = if let Some(dns_servers) = &entry.container_dns_servers {
+            if !dns_servers.is_empty() {
+                let dns_server_collected = dns_servers
+                    .iter()
+                    .map(|g| g.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",");
+                format!(" {}", dns_server_collected)
+            } else {
+                "".to_string()
+            }
+        } else {
+            "".to_string()
+        };
+
         let data = format!(
-            "{} {} {} {}\n",
-            entry.container_id, ipv4s, ipv6s, container_names
+            "{} {} {} {}{}\n",
+            entry.container_id, ipv4s, ipv6s, container_names, dns_server
         );
 
         file.write_all(data.as_bytes())?; // return error if write fails

@@ -181,8 +181,16 @@ impl driver::NetworkDriver for Bridge<'_> {
                 container_ips_v4: ipv4,
                 container_ips_v6: ipv6,
                 container_names: names,
+                container_dns_servers: self.info.container_dns_servers,
             })
         } else {
+            // If --dns-enable=false and --dns was set then return following DNS servers
+            // in status_block so podman can use these and populate resolv.conf
+            if let Some(container_dns_servers) = self.info.container_dns_servers {
+                let _ = response
+                    .dns_server_ips
+                    .insert(container_dns_servers.clone());
+            }
             None
         };
 

@@ -4,6 +4,8 @@ use crate::{
     firewall::FirewallDriver,
 };
 
+use std::net::IpAddr;
+
 use super::{
     bridge::Bridge,
     constants,
@@ -17,6 +19,7 @@ pub struct DriverInfo<'a> {
     pub firewall: &'a dyn FirewallDriver,
     pub container_id: &'a String,
     pub container_name: &'a String,
+    pub container_dns_servers: &'a Option<Vec<IpAddr>>,
     pub netns_host: RawFd,
     pub netns_container: RawFd,
     pub network: &'a Network,
