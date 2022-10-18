@@ -159,7 +159,7 @@ impl Socket {
         let msg = Self::create_addr_msg(link_id, addr);
         let result = self.make_netlink_request(RtnlMessage::DelAddress(msg), NLM_F_ACK)?;
         if !result.is_empty() {
-            return Err(NetavarkError::msg_str("unexpected netlink result"));
+            return Err(NetavarkError::msg("unexpected netlink result"));
         }
 
         Ok(())
@@ -217,7 +217,7 @@ impl Socket {
 
         let result = self.make_netlink_request(RtnlMessage::DelRoute(msg), NLM_F_ACK)?;
         if !result.is_empty() {
-            return Err(NetavarkError::msg_str("unexpected netlink result"));
+            return Err(NetavarkError::msg("unexpected netlink result"));
         }
 
         Ok(())
