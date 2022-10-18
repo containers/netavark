@@ -1,5 +1,5 @@
 use crate::dns::aardvark::Aardvark;
-use crate::error::{NetavarkError, NetavarkResult};
+use crate::error::{NetavarkError, NetavarkErrorList, NetavarkResult};
 use crate::network::core_utils;
 use crate::network::driver::{get_network_driver, DriverInfo};
 
@@ -42,14 +42,18 @@ impl Teardown {
             }
         };
 
+        let mut error_list = NetavarkErrorList::new();
+
         let dns_port = match env::var("NETAVARK_DNS_PORT") {
             Ok(port_string) => match port_string.parse() {
                 Ok(port) => port,
                 Err(e) => {
-                    return Err(NetavarkError::Message(format!(
+                    error_list.push(NetavarkError::Message(format!(
                         "Invalid NETAVARK_DNS_PORT {}: {}",
                         port_string, e
-                    )))
+                    )));
+                    // default to 53 if there is a error here, we should not prevent cleanup because of it
+                    53
                 }
             },
             Err(_) => 53,
@@ -61,13 +65,15 @@ impl Teardown {
             if let Ok(path_string) = path.into_os_string().into_string() {
                 let mut aardvark_interface =
                     Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
-                if let Err(er) =
+                if let Err(err) =
                     aardvark_interface.delete_from_netavark_entries(network_options.clone())
                 {
-                    debug!("Error while deleting dns entries {}", er);
+                    error_list.push(err.into());
                 }
             } else {
-                debug!("Unable to parse aardvark config directory");
+                error_list.push(NetavarkError::msg(
+                    "Unable to parse aardvark config directory",
+                ));
             }
         }
 
@@ -80,14 +86,18 @@ impl Teardown {
             core_utils::open_netlink_sockets(&self.network_namespace_path)?;
 
         for (net_name, network) in network_options.network_info.iter() {
-            let per_network_opts = network_options.networks.get(net_name).ok_or_else(|| {
-                NetavarkError::Message(format!(
-                    "network options for network {} not found",
-                    net_name
-                ))
-            })?; //handle error and continue
+            let per_network_opts = match network_options.networks.get(net_name) {
+                Some(opts) => opts,
+                None => {
+                    error_list.push(NetavarkError::Message(format!(
+                        "network options for network {} not found",
+                        net_name
+                    )));
+                    continue;
+                }
+            };
 
-            let driver = get_network_driver(DriverInfo {
+            let driver = match get_network_driver(DriverInfo {
                 firewall: firewall_driver.as_ref(),
                 container_id: &network_options.container_id,
                 container_name: &network_options.container_name,
@@ -98,9 +108,25 @@ impl Teardown {
                 per_network_opts,
                 port_mappings: &network_options.port_mappings,
                 dns_port,
-            })?; //handle error and continue
+            }) {
+                Ok(driver) => driver,
+                Err(err) => {
+                    error_list.push(err);
+                    continue;
+                }
+            };
 
-            driver.teardown((&mut hostns.netlink, &mut netns.netlink))?; //handle error and continue
+            match driver.teardown((&mut hostns.netlink, &mut netns.netlink)) {
+                Ok(_) => {}
+                Err(err) => {
+                    error_list.push(err);
+                    continue;
+                }
+            };
+        }
+
+        if !error_list.is_empty() {
+            return Err(NetavarkError::List(error_list));
         }
 
         debug!("{:?}", "Teardown complete");

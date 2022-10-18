@@ -604,3 +604,28 @@ EOF
     run_in_host_netns ip -o link
     assert "${#lines[@]}" == 1 "only loopback adapter"
 }
+
+@test "$fw_driver - two networks" {
+    run_netavark --file ${TESTSDIR}/testfiles/two-networks.json setup $(get_container_netns_path)
+    result="$output"
+    assert_json "$result" 'has("t1")' == "true" "t1 object key exists"
+    assert_json "$result" 'has("t2")' == "true" "t2 object key exists"
+
+    run_in_container_netns ip link del eth0
+    run_in_container_netns ip link del eth1
+
+    run_in_host_netns iptables -S -t nat
+    # extra check so we can be sure that these rules exists before checking later of they are removed
+    assert "$output" =~ "10.89.1.0/24" "eth0 subnet"
+    assert "$output" =~ "10.89.2.0/24" "eth1 subnet"
+
+    expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/two-networks.json teardown $(get_container_netns_path)
+    # order is not deterministic so we match twice with different eth name
+    assert "$output" =~ 'failed to delete container veth eth0\: Netlink error\: No such device \(os error 19\)' "correct eth0 error message"
+    assert "$output" =~ 'failed to delete container veth eth1\: Netlink error\: No such device \(os error 19\)' "correct eth1 error message"
+
+    # now make sure that it actually removed the iptables rule even with the errors
+    run_in_host_netns iptables -S -t nat
+    assert "$output" !~ "10.89.1.0/24" "eth0 subnet should not exist"
+    assert "$output" !~ "10.89.2.0/24" "eth1 subnet should not exist"
+}

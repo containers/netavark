@@ -9,7 +9,7 @@ use netlink_packet_route::{
 
 use crate::{
     dns::aardvark::AardvarkEntry,
-    error::{ErrorWrap, NetavarkError, NetavarkResult},
+    error::{ErrorWrap, NetavarkError, NetavarkErrorList, NetavarkResult},
     exec_netns,
     firewall::iptables::MAX_HASH_SIZE,
     network::{constants, core_utils::disable_ipv6_autoconf, types},
@@ -227,18 +227,38 @@ impl driver::NetworkDriver for Bridge<'_> {
     ) -> NetavarkResult<()> {
         let (host_sock, netns_sock) = netlink_sockets;
 
-        let complete_teardown = remove_link(
+        let mut error_list = NetavarkErrorList::new();
+
+        let complete_teardown = match remove_link(
             host_sock,
             netns_sock,
             &get_interface_name(self.info.network.network_interface.clone())?,
             &self.info.per_network_opts.interface_name,
-        )?;
+        ) {
+            Ok(teardown) => teardown,
+            Err(err) => {
+                error_list.push(err);
+                false
+            }
+        };
 
         if self.info.network.internal {
+            if !error_list.is_empty() {
+                return Err(NetavarkError::List(error_list));
+            }
             return Ok(());
         }
 
-        self.teardown_firewall(complete_teardown)?;
+        match self.teardown_firewall(complete_teardown) {
+            Ok(_) => {}
+            Err(err) => {
+                error_list.push(err);
+            }
+        };
+
+        if !error_list.is_empty() {
+            return Err(NetavarkError::List(error_list));
+        }
 
         Ok(())
     }

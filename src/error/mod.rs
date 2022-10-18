@@ -11,6 +11,36 @@ macro_rules! wrap {
     };
 }
 
+/// Contains a list of errors, this is useful for teardown operations since we
+/// should cleanup as much as possible before return all encountered errors.
+#[derive(Debug)]
+pub struct NetavarkErrorList(Vec<NetavarkError>);
+
+impl NetavarkErrorList {
+    pub fn new() -> Self {
+        Self(vec![])
+    }
+
+    pub fn push(&mut self, err: NetavarkError) {
+        match err {
+            // make sure the flatten the error list, nested lists would just look ugly
+            NetavarkError::List(mut list) => self.0.append(&mut list.0),
+            err => self.0.push(err),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+// clippy wants the default implementation even if it is not needed
+impl Default for NetavarkErrorList {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub trait ErrorWrap<T> {
     /// wrap NetavarkResult error into a NetavarkError and add the given msg
     fn wrap<S>(self, msg: S) -> NetavarkResult<T>
@@ -47,6 +77,8 @@ pub enum NetavarkError {
     Serde(serde_json::Error),
 
     Netlink(netlink_packet_core::error::ErrorMessage),
+
+    List(NetavarkErrorList),
 }
 
 // Internal struct for JSON output
@@ -114,6 +146,17 @@ impl fmt::Display for NetavarkError {
             NetavarkError::Sysctl(e) => write!(f, "Sysctl error: {}", e),
             NetavarkError::Serde(e) => write!(f, "JSON Decoding error: {}", e),
             NetavarkError::Netlink(e) => write!(f, "Netlink error: {}", e),
+            NetavarkError::List(list) => {
+                if list.0.len() == 1 {
+                    write!(f, "{}", list.0[0])
+                } else {
+                    write!(f, "netavark encountered multiple errors:")?;
+                    for e in &list.0 {
+                        write!(f, "\n\t- {}", e)?;
+                    }
+                    Ok(())
+                }
+            }
         }
     }
 }
