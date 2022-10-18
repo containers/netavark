@@ -148,6 +148,39 @@ fw_driver=iptables
     run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge.json teardown $(get_container_netns_path)
 }
 
+@test "$fw_driver - bridge driver must generate config for aardvark with custom dns server" {
+    # TODO !!! Unkip after https://github.com/containers/aardvark-dns/pull/240
+    skip "unskip after https://github.com/containers/aardvark-dns/pull/240"
+    # get a random port directly to avoid low ports e.g. 53 would not create iptables
+    dns_port=$((RANDOM+10000))
+
+    # hack to make aardvark-dns run when really root or when running as user with
+    # podman unshare --rootless-netns; since netavark runs aardvark with systemd-run
+    # it needs to know if it should use systemd user instance or not.
+    # iptables are still setup identically.
+    rootless=false
+    if [[ ! -e "/run/dbus/system_bus_socket" ]]; then
+        rootless=true
+    fi
+
+    mkdir -p "$NETAVARK_TMPDIR/config"
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-custom-dns-server.json \
+        --rootless "$rootless" --config "$NETAVARK_TMPDIR/config" \
+        setup $(get_container_netns_path)
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2 fd10:88:a::2 somename 8.8.8.8$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
+
+    aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
+    run_helper ps "$aardvark_pid"
+    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p $dns_port run" "aardvark not running or bad options"
+}
+
 @test "$fw_driver - dual stack dns with alt port" {
     # get a random port directly to avoid low ports e.g. 53 would not create iptables
     dns_port=$((RANDOM+10000))

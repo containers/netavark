@@ -77,6 +77,10 @@ pub struct NetworkOptions {
     /// The port mappings for this container.
     #[serde(rename = "port_mappings")]
     pub port_mappings: Option<Vec<PortMapping>>,
+
+    /// Custom DNS servers for aardvark-dns.
+    #[serde(rename = "dns_servers")]
+    pub dns_servers: Option<Vec<IpAddr>>,
 }
 
 // PerNetworkOptions are options which should be set on a per network basis
