@@ -54,6 +54,37 @@ impl std::fmt::Display for Route {
     }
 }
 
+macro_rules! expect_netlink_result {
+    ($result:expr, $count:expr) => {
+        if $result.len() != $count {
+            return Err(NetavarkError::msg(format!(
+                "{}: unexpected netlink result (got {} result(s), want {})",
+                function!(),
+                $result.len(),
+                $count
+            )));
+        }
+    };
+}
+
+/// get the function name of the currently executed function
+/// taken from https://stackoverflow.com/a/63904992
+macro_rules! function {
+    () => {{
+        fn f() {}
+        fn type_name_of<T>(_: T) -> &'static str {
+            std::any::type_name::<T>()
+        }
+        let name = type_name_of(f);
+
+        // Find and cut the rest of the path
+        match &name[..name.len() - 3].rfind(':') {
+            Some(pos) => &name[pos + 1..name.len() - 3],
+            None => &name[..name.len() - 3],
+        }
+    }};
+}
+
 impl Socket {
     pub fn new() -> NetavarkResult<Socket> {
         let mut socket = wrap!(netlink_sys::Socket::new(NETLINK_ROUTE), "open")?;
@@ -77,9 +108,7 @@ impl Socket {
         }
 
         let mut result = self.make_netlink_request(RtnlMessage::GetLink(msg), 0)?;
-        if result.len() != 1 {
-            return Err(NetavarkError::msg("unexpected netlink result"));
-        }
+        expect_netlink_result!(result, 1);
         match result.remove(0) {
             RtnlMessage::NewLink(m) => Ok(m),
             m => Err(NetavarkError::Message(format!(
@@ -96,9 +125,7 @@ impl Socket {
             RtnlMessage::NewLink(msg),
             NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
         )?;
-        if !result.is_empty() {
-            return Err(NetavarkError::msg("unexpected netlink result"));
-        }
+        expect_netlink_result!(result, 0);
 
         Ok(())
     }
@@ -112,9 +139,7 @@ impl Socket {
         }
 
         let result = self.make_netlink_request(RtnlMessage::DelLink(msg), NLM_F_ACK)?;
-        if !result.is_empty() {
-            return Err(NetavarkError::msg("unexpected netlink result 1243"));
-        }
+        expect_netlink_result!(result, 0);
         Ok(())
     }
 
@@ -148,9 +173,7 @@ impl Socket {
             RtnlMessage::NewAddress(msg),
             NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
         )?;
-        if !result.is_empty() {
-            return Err(NetavarkError::msg("unexpected netlink result"));
-        }
+        expect_netlink_result!(result, 0);
 
         Ok(())
     }
@@ -158,9 +181,7 @@ impl Socket {
     pub fn del_addr(&mut self, link_id: u32, addr: &ipnet::IpNet) -> NetavarkResult<()> {
         let msg = Self::create_addr_msg(link_id, addr);
         let result = self.make_netlink_request(RtnlMessage::DelAddress(msg), NLM_F_ACK)?;
-        if !result.is_empty() {
-            return Err(NetavarkError::msg("unexpected netlink result"));
-        }
+        expect_netlink_result!(result, 0);
 
         Ok(())
     }
@@ -205,9 +226,7 @@ impl Socket {
 
         let result =
             self.make_netlink_request(RtnlMessage::NewRoute(msg), NLM_F_ACK | NLM_F_CREATE)?;
-        if !result.is_empty() {
-            return Err(NetavarkError::msg("unexpected netlink result"));
-        }
+        expect_netlink_result!(result, 0);
 
         Ok(())
     }
@@ -216,9 +235,7 @@ impl Socket {
         let msg = Self::create_route_msg(route);
 
         let result = self.make_netlink_request(RtnlMessage::DelRoute(msg), NLM_F_ACK)?;
-        if !result.is_empty() {
-            return Err(NetavarkError::msg("unexpected netlink result"));
-        }
+        expect_netlink_result!(result, 0);
 
         Ok(())
     }
@@ -288,9 +305,7 @@ impl Socket {
             RtnlMessage::SetLink(msg),
             NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
         )?;
-        if !result.is_empty() {
-            return Err(NetavarkError::msg("unexpected netlink result"));
-        }
+        expect_netlink_result!(result, 0);
 
         Ok(())
     }
