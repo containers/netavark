@@ -360,6 +360,13 @@ impl Socket {
                     })?;
                 trace!("read netlink packet: {:?}", rx_packet);
 
+                if rx_packet.header.sequence_number != self.sequence_number {
+                    return Err(NetavarkError::msg(format!(
+                        "netlink: sequence_number out of sync (got {}, want {})",
+                        rx_packet.header.sequence_number, self.sequence_number,
+                    )));
+                }
+
                 match rx_packet.payload {
                     NetlinkPayload::Done => return Ok(result),
                     NetlinkPayload::Error(e) | NetlinkPayload::Ack(e) => {
