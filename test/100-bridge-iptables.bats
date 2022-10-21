@@ -149,8 +149,6 @@ fw_driver=iptables
 }
 
 @test "$fw_driver - bridge driver must generate config for aardvark with custom dns server" {
-    # TODO !!! Unkip after https://github.com/containers/aardvark-dns/pull/240
-    skip "unskip after https://github.com/containers/aardvark-dns/pull/240"
     # get a random port directly to avoid low ports e.g. 53 would not create iptables
     dns_port=$((RANDOM+10000))
 
