@@ -36,6 +36,9 @@ function setup() {
 
     run_in_container_netns cat /proc/sys/net/ipv6/conf/eth0/autoconf
     assert "0" "autoconf is disabled"
+
+    run_netavark --file ${TESTSDIR}/testfiles/macvlan.json teardown $(get_container_netns_path)
+    assert "" "no errors"
 }
 
 @test "macvlan setup internal" {
