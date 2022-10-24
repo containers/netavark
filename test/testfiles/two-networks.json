@@ -1,0 +1,58 @@
+{
+    "container_id": "a417588994662895d8b41adf8d74a83ac0cc38eb56d85d8e1268aae1e19e07e1",
+    "container_name": "heuristic_archimedes",
+    "networks": {
+        "t1": {
+            "static_ips": [
+                "10.89.1.2"
+            ],
+            "interface_name": "eth0"
+        },
+        "t2": {
+            "static_ips": [
+                "10.89.2.2"
+            ],
+            "interface_name": "eth1"
+        }
+    },
+    "network_info": {
+        "t1": {
+            "name": "t1",
+            "id": "fae505bba2b3ad2b9bc748f0d322864d44a3c976c642ee347e5276729dfb4d51",
+            "driver": "bridge",
+            "network_interface": "podman2",
+            "created": "2022-10-18T18:34:21.701124201+02:00",
+            "subnets": [
+                {
+                    "subnet": "10.89.1.0/24",
+                    "gateway": "10.89.1.1"
+                }
+            ],
+            "ipv6_enabled": false,
+            "internal": false,
+            "dns_enabled": false,
+            "ipam_options": {
+                "driver": "host-local"
+            }
+        },
+        "t2": {
+            "name": "t2",
+            "id": "d7322dfb9353cb5c1adabfc46555164654f339fa3dd0d2533d103e2a4c5240e2",
+            "driver": "bridge",
+            "network_interface": "podman3",
+            "created": "2022-10-18T18:34:23.266425802+02:00",
+            "subnets": [
+                {
+                    "subnet": "10.89.2.0/24",
+                    "gateway": "10.89.2.1"
+                }
+            ],
+            "ipv6_enabled": false,
+            "internal": false,
+            "dns_enabled": false,
+            "ipam_options": {
+                "driver": "host-local"
+            }
+        }
+    }
+}
