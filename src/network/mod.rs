@@ -1,7 +1,14 @@
 pub mod types;
 pub mod validation;
-use anyhow::Result;
-use std::fs::File;
+use std::{
+    fs::File,
+    io::{self, BufReader},
+};
+
+use crate::{
+    error::{NetavarkError, NetavarkResult},
+    wrap,
+};
 pub mod bridge;
 pub mod constants;
 pub mod core_utils;
@@ -11,12 +18,15 @@ pub mod macvlan;
 pub mod netlink;
 
 impl types::NetworkOptions {
-    pub fn load(path: &str) -> Result<types::NetworkOptions> {
-        let file = std::io::BufReader::new(File::open(path)?);
-        Ok(serde_json::from_reader(file)?)
+    pub fn load(path: Option<String>) -> NetavarkResult<types::NetworkOptions> {
+        wrap!(Self::load_inner(path), "failed to load network options")
     }
-    pub fn save(&self, path: &str) -> Result<()> {
-        let mut file = std::io::BufWriter::new(File::create(path)?);
-        Ok(serde_json::to_writer_pretty(&mut file, self)?)
+
+    fn load_inner(path: Option<String>) -> Result<types::NetworkOptions, io::Error> {
+        let opts = match path {
+            Some(path) => serde_json::from_reader(BufReader::new(File::open(path)?)),
+            None => serde_json::from_reader(io::stdin()),
+        }?;
+        Ok(opts)
     }
 }

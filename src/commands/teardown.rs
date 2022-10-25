@@ -26,21 +26,13 @@ impl Teardown {
 
     pub fn exec(
         &self,
-        input_file: String,
+        input_file: Option<String>,
         config_dir: String,
         aardvark_bin: String,
         rootless: bool,
     ) -> NetavarkResult<()> {
         debug!("{:?}", "Tearing down..");
-        let network_options = match network::types::NetworkOptions::load(&input_file) {
-            Ok(opts) => opts,
-            Err(e) => {
-                return Err(NetavarkError::Message(format!(
-                    "failed to load network options: {}",
-                    e
-                )));
-            }
-        };
+        let network_options = network::types::NetworkOptions::load(input_file)?;
 
         let mut error_list = NetavarkErrorList::new();
 

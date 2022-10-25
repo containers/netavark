@@ -30,7 +30,7 @@ impl Setup {
 
     pub fn exec(
         &self,
-        input_file: String,
+        input_file: Option<String>,
         config_dir: String,
         aardvark_bin: String,
         rootless: bool,
@@ -42,16 +42,7 @@ impl Setup {
             }
         }
         debug!("{:?}", "Setting up...");
-        let network_options = match network::types::NetworkOptions::load(&input_file) {
-            Ok(opts) => opts,
-            Err(e) => {
-                // TODO: Convert this to a proper typed error
-                return Err(NetavarkError::Message(format!(
-                    "failed to load network options: {}",
-                    e
-                )));
-            }
-        };
+        let network_options = network::types::NetworkOptions::load(input_file)?;
 
         let firewall_driver = match firewall::get_supported_firewall_driver() {
             Ok(driver) => driver,

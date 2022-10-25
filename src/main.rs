@@ -38,7 +38,6 @@ fn main() {
     env_logger::builder().format_timestamp(None).init();
     let opts = Opts::parse();
 
-    let file = opts.file.unwrap_or_else(|| String::from("/dev/stdin"));
     // aardvark config directory must be supplied by parent or it defaults to /tmp/aardvark
     let config = opts.config.unwrap_or_else(|| String::from("/tmp"));
     let rootless = opts.rootless.unwrap_or(false);
@@ -46,8 +45,8 @@ fn main() {
         .aardvark_binary
         .unwrap_or_else(|| String::from("/usr/libexec/podman/aardvark-dns"));
     let result = match opts.subcmd {
-        SubCommand::Setup(setup) => setup.exec(file, config, aardvark_bin, rootless),
-        SubCommand::Teardown(teardown) => teardown.exec(file, config, aardvark_bin, rootless),
+        SubCommand::Setup(setup) => setup.exec(opts.file, config, aardvark_bin, rootless),
+        SubCommand::Teardown(teardown) => teardown.exec(opts.file, config, aardvark_bin, rootless),
         SubCommand::Version(version) => version.exec(),
     };
 
