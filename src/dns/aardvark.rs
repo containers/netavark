@@ -1,4 +1,6 @@
+use crate::network::constants::DRIVER_BRIDGE;
 use crate::network::types;
+
 use fs2::FileExt;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
@@ -313,7 +315,7 @@ impl Aardvark {
         let mut modified = false;
         let container_id = network_options.container_id;
         for (key, network) in network_options.network_info {
-            if network.dns_enabled {
+            if network.dns_enabled && network.driver == DRIVER_BRIDGE {
                 modified = true;
                 self.delete_entry(&container_id, key)?;
             }
