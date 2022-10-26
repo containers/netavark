@@ -629,3 +629,11 @@ EOF
     assert "$output" !~ "10.89.1.0/24" "eth0 subnet should not exist"
     assert "$output" !~ "10.89.2.0/24" "eth1 subnet should not exist"
 }
+
+@test "$fw_driver - ipv6 disabled error message" {
+    # disable ipv6 in the netns
+     run_in_host_netns sysctl net.ipv6.conf.all.disable_ipv6=1
+
+    expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge.json setup $(get_container_netns_path)
+    assert '{"error":"add ip addr to bridge: failed to add ipv6 address, is ipv6 enabled in the kernel?: Netlink error: Permission denied (os error 13)"}' "error message"
+}

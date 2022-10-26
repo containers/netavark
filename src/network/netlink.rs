@@ -169,10 +169,25 @@ impl Socket {
 
     pub fn add_addr(&mut self, link_id: u32, addr: &ipnet::IpNet) -> NetavarkResult<()> {
         let msg = Self::create_addr_msg(link_id, addr);
-        let result = self.make_netlink_request(
+        let result = match self.make_netlink_request(
             RtnlMessage::NewAddress(msg),
             NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
-        )?;
+        ) {
+            Ok(result) => result,
+            Err(err) => match err {
+                // kernel returns EACCES when we try to add an ipv6 but ipv6 is disabled in the kernel
+                NetavarkError::Netlink(ref e) if -e.code == libc::EACCES => match addr {
+                    ipnet::IpNet::V6(_) => {
+                        return Err(NetavarkError::wrap(
+                            "failed to add ipv6 address, is ipv6 enabled in the kernel?",
+                            err,
+                        ));
+                    }
+                    _ => return Err(err),
+                },
+                err => return Err(err),
+            },
+        };
         expect_netlink_result!(result, 0);
 
         Ok(())
