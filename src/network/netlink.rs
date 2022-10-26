@@ -23,8 +23,9 @@ pub struct Socket {
     buffer: [u8; 8192],
 }
 
+#[derive(Clone)]
 pub struct CreateLinkOptions {
-    name: String,
+    pub name: String,
     kind: InfoKind,
     pub info_data: Option<InfoData>,
     pub mtu: u32,
@@ -125,6 +126,16 @@ impl Socket {
             RtnlMessage::NewLink(msg),
             NLM_F_ACK | NLM_F_EXCL | NLM_F_CREATE,
         )?;
+        expect_netlink_result!(result, 0);
+
+        Ok(())
+    }
+
+    pub fn set_link_name(&mut self, id: u32, name: String) -> NetavarkResult<()> {
+        let mut msg = LinkMessage::default();
+        msg.header.index = id;
+        msg.nlas.push(Nla::IfName(name));
+        let result = self.make_netlink_request(RtnlMessage::SetLink(msg), NLM_F_ACK)?;
         expect_netlink_result!(result, 0);
 
         Ok(())

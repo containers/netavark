@@ -236,3 +236,50 @@ EOF
    assert_json "$link_info" ".[].address" "=="  "$mac" "MAC matches container mac"
    assert_json "$link_info" '.[].flags[] | select(.=="UP")' "=="  "UP" "Container interface is up"
 }
+
+
+@test "macvlan same interface name on host" {
+
+           read -r -d '\0' config <<EOF
+{
+   "container_id": "someID",
+   "container_name": "someName",
+   "networks": {
+      "podman": {
+         "static_ips": [
+            "10.88.0.2"
+         ],
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+         "driver": "macvlan",
+         "network_interface": "eth0",
+         "subnets": [
+            {
+               "subnet": "10.88.0.0/16",
+               "gateway": "10.88.0.1"
+            }
+         ],
+         "ipv6_enabled": false,
+         "internal": false,
+         "dns_enabled": false,
+         "ipam_options": {
+            "driver": "host-local"
+         }
+      }
+   }
+}\0
+EOF
+
+   run_in_host_netns ip link add eth0 type dummy
+
+   run_netavark setup $(get_container_netns_path) <<<"$config"
+
+   run_in_container_netns ip link show eth0
+
+   run_netavark teardown $(get_container_netns_path) <<<"$config"
+}
