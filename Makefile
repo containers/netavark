@@ -89,24 +89,17 @@ validate: $(CARGO_TARGET_DIR)
 	cargo fmt --all -- --check
 	cargo clippy -p netavark -- -D warnings
 
-.PHONY: vendor
-vendor: ## vendor everything into vendor/
-	cargo vendor
-	$(MAKE) vendor-rm-windows ## remove windows library if possible
-
-.PHONY: vendor-rm-windows
-vendor-rm-windows:
-	if [ -d "vendor/winapi" ]; then \
-		rm -fr vendor/winapi*gnu*/lib/*.a; \
-	fi
-
 .PHONY: vendor-tarball
-vendor-tarball: build vendor
+vendor-tarball: build install.cargo-vendor-filterer
 	VERSION=$(shell bin/netavark --version | cut -f2 -d" ") && \
-	tar cvf netavark-v$$VERSION-vendor.tar.gz vendor/ && \
+	cargo vendor-filterer '--platform=*-unknown-linux-*' --format=tar.gz --prefix vendor/ && \
+	mv vendor.tar.gz netavark-v$$VERSION-vendor.tar.gz && \
 	gzip -c bin/netavark > netavark.gz && \
 	sha256sum netavark.gz netavark-v$$VERSION-vendor.tar.gz > sha256sum
-	rm -rf vendor/
+
+.PHONY: install.cargo-vendor-filterer
+install.cargo-vendor-filterer:
+	cargo install cargo-vendor-filterer
 
 .PHONY: mock-rpm
 mock-rpm:
