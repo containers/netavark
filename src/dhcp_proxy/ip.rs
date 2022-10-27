@@ -9,7 +9,7 @@ pub use crate::dhcp_proxy::lib::g_rpc::{Lease as NetavarkLease, Lease};
 pub use crate::dhcp_proxy::types::{CustomErr, ProxyError};
 use crate::network::core_utils;
 use crate::network::netlink;
-use crate::network::netlink::Socket;
+use crate::network::netlink::LinkSocket;
 use ipnet::IpNet;
 use log::debug;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -61,8 +61,8 @@ trait Address<T> {
     fn new(l: &Lease, interface: &str) -> Result<Self, ProxyError>
     where
         Self: Sized;
-    fn add_ip(&self, nls: &mut Socket) -> Result<(), ProxyError>;
-    fn add_gws(&self, nls: &mut Socket) -> Result<(), ProxyError>;
+    fn add_ip(&self, nls: &mut LinkSocket) -> Result<(), ProxyError>;
+    fn add_gws(&self, nls: &mut LinkSocket) -> Result<(), ProxyError>;
     fn remove(self) -> Result<(), ProxyError>;
 }
 
@@ -140,7 +140,7 @@ impl Address<Ipv4Addr> for MacVLAN {
     }
 
     //  add the ip address to the container namespace
-    fn add_ip(&self, nls: &mut Socket) -> Result<(), ProxyError> {
+    fn add_ip(&self, nls: &mut LinkSocket) -> Result<(), ProxyError> {
         debug!("adding network information for {}", self.interface);
         let ip = IpNet::new(self.address, self.prefix_length)?;
         let dev = nls.get_link(netlink::LinkID::Name(self.interface.clone()))?;
@@ -151,7 +151,7 @@ impl Address<Ipv4Addr> for MacVLAN {
     }
 
     // add one or more routes to the container namespace
-    fn add_gws(&self, nls: &mut Socket) -> Result<(), ProxyError> {
+    fn add_gws(&self, nls: &mut LinkSocket) -> Result<(), ProxyError> {
         debug!("adding gateways to {}", self.interface);
         match core_utils::add_default_routes(nls, &self.gateways, None) {
             Ok(_) => Ok(()),

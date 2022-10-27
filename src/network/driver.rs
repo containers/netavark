@@ -11,6 +11,7 @@ use super::{
     constants, netlink,
     types::{Network, PerNetworkOptions, PortMapping, StatusBlock},
     vlan::Vlan,
+    wireguard::WireGuard,
 };
 use std::os::unix::io::RawFd;
 
@@ -34,12 +35,12 @@ pub trait NetworkDriver {
     /// setup the network interfaces/firewall rules for this driver
     fn setup(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (&mut netlink::LinkSocket, &mut netlink::LinkSocket),
     ) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry>)>;
     /// teardown the network interfaces/firewall rules for this driver
     fn teardown(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (&mut netlink::LinkSocket, &mut netlink::LinkSocket),
     ) -> NetavarkResult<()>;
 
     /// return the network name
@@ -50,6 +51,7 @@ pub fn get_network_driver(info: DriverInfo) -> NetavarkResult<Box<dyn NetworkDri
     match info.network.driver.as_str() {
         constants::DRIVER_BRIDGE => Ok(Box::new(Bridge::new(info))),
         constants::DRIVER_IPVLAN | constants::DRIVER_MACVLAN => Ok(Box::new(Vlan::new(info))),
+        constants::DRIVER_WIREGUARD => Ok(Box::new(WireGuard::new(info))),
 
         _ => Err(NetavarkError::Message(format!(
             "unknown network driver {}",

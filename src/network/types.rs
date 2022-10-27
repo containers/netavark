@@ -108,6 +108,10 @@ pub struct PerNetworkOptions {
     /// MAC address for the container interface.
     #[serde(rename = "static_mac")]
     pub static_mac: Option<String>,
+
+    /// Additional options for a network
+    #[serde(rename = "options")]
+    pub options: Option<HashMap<String, String>>,
 }
 
 /// PortMapping is one or more ports that will be mapped into the container.

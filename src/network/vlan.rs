@@ -130,7 +130,7 @@ impl driver::NetworkDriver for Vlan<'_> {
 
     fn setup(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (&mut netlink::LinkSocket, &mut netlink::LinkSocket),
     ) -> Result<(StatusBlock, Option<AardvarkEntry>), NetavarkError> {
         let data = match &self.data {
             Some(d) => d,
@@ -193,7 +193,7 @@ impl driver::NetworkDriver for Vlan<'_> {
 
     fn teardown(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (&mut netlink::LinkSocket, &mut netlink::LinkSocket),
     ) -> NetavarkResult<()> {
         let ipam = get_ipam_addresses(self.info.per_network_opts, self.info.network)?;
         let if_name = self.info.per_network_opts.interface_name.clone();
@@ -231,8 +231,8 @@ impl driver::NetworkDriver for Vlan<'_> {
 }
 
 fn setup(
-    host: &mut netlink::Socket,
-    netns: &mut netlink::Socket,
+    host: &mut netlink::LinkSocket,
+    netns: &mut netlink::LinkSocket,
     if_name: &str,
     data: &InternalData,
     hostns_fd: RawFd,
@@ -354,7 +354,7 @@ fn get_mac_address(v: Vec<Nla>) -> NetavarkResult<String> {
     ))
 }
 
-fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult<String> {
+fn get_default_route_interface(host: &mut netlink::LinkSocket) -> NetavarkResult<String> {
     let routes = host.dump_routes().wrap("dump routes")?;
 
     for route in routes {

@@ -17,6 +17,7 @@ pub mod internal_types;
 mod macvlan_dhcp;
 pub mod netlink;
 pub mod vlan;
+pub mod wireguard;
 
 impl types::NetworkOptions {
     pub fn load(path: Option<String>) -> NetavarkResult<types::NetworkOptions> {

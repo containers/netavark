@@ -10,23 +10,166 @@ use crate::{
 };
 use log::{info, trace};
 use netlink_packet_core::{
-    NetlinkHeader, NetlinkMessage, NetlinkPayload, NLM_F_ACK, NLM_F_CREATE, NLM_F_DUMP, NLM_F_EXCL,
-    NLM_F_REQUEST,
+    NetlinkDeserializable, NetlinkMessage, NetlinkPayload, NetlinkSerializable, NLM_F_ACK,
+    NLM_F_CREATE, NLM_F_DUMP, NLM_F_EXCL, NLM_F_REQUEST,
+};
+use netlink_packet_generic::{
+    ctrl::{nlas::GenlCtrlAttrs, GenlCtrl, GenlCtrlCmd},
+    GenlMessage,
 };
 use netlink_packet_route::{
     nlas::link::{Info, InfoData, InfoKind, Nla},
     AddressMessage, LinkMessage, RouteMessage, RtnlMessage, AF_INET, AF_INET6, IFF_UP, RTN_UNICAST,
     RTPROT_STATIC, RTPROT_UNSPEC, RT_SCOPE_UNIVERSE, RT_TABLE_MAIN,
 };
-use netlink_sys::{protocols::NETLINK_ROUTE, SocketAddr};
+use netlink_packet_wireguard::{nlas::WgDeviceAttrs, Wireguard, WireguardCmd};
+use netlink_sys::{
+    protocols::{NETLINK_GENERIC, NETLINK_ROUTE},
+    SocketAddr,
+};
 
-pub struct Socket {
-    socket: netlink_sys::Socket,
-    sequence_number: u32,
-    ///  buffer size for reading netlink messages, see NLMSG_GOODSIZE in the kernel
-    buffer: [u8; 8192],
+// helper macros
+macro_rules! expect_netlink_result {
+    ($result:expr, $count:expr) => {
+        if $result.len() != $count {
+            return Err(NetavarkError::msg(format!(
+                "{}: unexpected netlink result (got {} result(s), want {})",
+                function!(),
+                $result.len(),
+                $count
+            )));
+        }
+    };
 }
 
+/// get the function name of the currently executed function
+/// taken from https://stackoverflow.com/a/63904992
+macro_rules! function {
+    () => {{
+        fn f() {}
+        fn type_name_of<T>(_: T) -> &'static str {
+            std::any::type_name::<T>()
+        }
+        let name = type_name_of(f);
+
+        // Find and cut the rest of the path
+        match &name[..name.len() - 3].rfind(':') {
+            Some(pos) => &name[pos + 1..name.len() - 3],
+            None => &name[..name.len() - 3],
+        }
+    }};
+}
+
+// Generic Trait over all sockets
+pub enum NetlinkType {
+    NetlinkRoute = NETLINK_ROUTE,
+    NetlinkGeneric = NETLINK_GENERIC,
+}
+
+pub trait NetlinkSocket {
+    fn send<T>(&mut self, msg: T, flags: u16, family: Option<u16>) -> NetavarkResult<()>
+    where
+        T: NetlinkSerializable + std::fmt::Debug + Into<NetlinkPayload<T>>,
+    {
+        let mut nlmsg = NetlinkMessage::from(msg);
+        nlmsg.header.flags = NLM_F_REQUEST | flags;
+        nlmsg.header.sequence_number = self.increase_sequence_number();
+        nlmsg.finalize();
+
+        if let Some(family) = family {
+            nlmsg.header.message_type = family;
+        }
+
+        //  buffer size for netlink messages, see NLMSG_GOODSIZE in the kernel
+        let mut buffer = [0; 8192];
+        let socket = self.get_socket();
+
+        nlmsg.serialize(&mut buffer[..]);
+
+        trace!("sending GenlCtrl netlink msg: {:?}", nlmsg);
+        socket.send(&buffer[..nlmsg.buffer_len()], 0)?;
+        Ok(())
+    }
+
+    fn get_socket(&self) -> &netlink_sys::Socket;
+    fn get_sequence_number(&self) -> u32;
+    fn increase_sequence_number(&mut self) -> u32;
+
+    fn recv<T>(&mut self, multi: bool) -> NetavarkResult<Vec<T>>
+    where
+        T: std::fmt::Debug + NetlinkDeserializable,
+    {
+        let mut offset = 0;
+        let mut result = Vec::new();
+
+        // if multi is set we expect a multi part message
+        let socket = self.get_socket();
+        let sequence_number = self.get_sequence_number();
+        //  buffer size for netlink messages, see NLMSG_GOODSIZE in the kernel
+        let mut buffer = [0; 8192];
+        loop {
+            let size = wrap!(socket.recv(&mut &mut buffer[..], 0), "recv from netlink")?;
+
+            loop {
+                let bytes = &buffer[offset..];
+                let rx_packet: NetlinkMessage<T> =
+                    NetlinkMessage::deserialize(bytes).map_err(|e| {
+                        NetavarkError::Message(format!(
+                            "failed to deserialize netlink message: {}",
+                            e,
+                        ))
+                    })?;
+                trace!("read netlink packet: {:?}", rx_packet);
+
+                if rx_packet.header.sequence_number != sequence_number {
+                    return Err(NetavarkError::msg(format!(
+                        "netlink: sequence_number out of sync (got {}, want {})",
+                        rx_packet.header.sequence_number, sequence_number,
+                    )));
+                }
+
+                match rx_packet.payload {
+                    NetlinkPayload::Done => return Ok(result),
+                    NetlinkPayload::Error(e) | NetlinkPayload::Ack(e) => {
+                        if e.code != 0 {
+                            return Err(e.into());
+                        }
+                        return Ok(result);
+                    }
+                    NetlinkPayload::Noop => {
+                        return Err(NetavarkError::msg(
+                            "unimplemented netlink message type NOOP",
+                        ))
+                    }
+                    NetlinkPayload::Overrun(_) => {
+                        return Err(NetavarkError::msg(
+                            "unimplemented netlink message type OVERRUN",
+                        ))
+                    }
+                    NetlinkPayload::InnerMessage(msg) => {
+                        result.push(msg);
+                        if !multi {
+                            return Ok(result);
+                        }
+                    }
+                    _ => {
+                        // The NetlinkPayload could have new members that are not yet covered by
+                        // netavark. This is because of https://github.com/rust-netlink/netlink-packet-core/commit/53a4c4ecfec60e1f26ad8b6aaa62abc7b112df50
+                        return Err(NetavarkError::msg("unimplemented netlink message type"));
+                    }
+                };
+
+                offset += rx_packet.header.length as usize;
+                if offset == size || rx_packet.header.length == 0 {
+                    offset = 0;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+// Netlink API for Links
 #[derive(Clone)]
 pub struct CreateLinkOptions {
     pub name: String,
@@ -75,48 +218,36 @@ impl std::fmt::Display for Route {
     }
 }
 
-macro_rules! expect_netlink_result {
-    ($result:expr, $count:expr) => {
-        if $result.len() != $count {
-            return Err(NetavarkError::msg(format!(
-                "{}: unexpected netlink result (got {} result(s), want {})",
-                function!(),
-                $result.len(),
-                $count
-            )));
-        }
-    };
+pub struct LinkSocket {
+    socket: netlink_sys::Socket,
+    sequence_number: u32,
 }
 
-/// get the function name of the currently executed function
-/// taken from https://stackoverflow.com/a/63904992
-macro_rules! function {
-    () => {{
-        fn f() {}
-        fn type_name_of<T>(_: T) -> &'static str {
-            std::any::type_name::<T>()
-        }
-        let name = type_name_of(f);
+impl NetlinkSocket for LinkSocket {
+    fn get_socket(&self) -> &netlink_sys::Socket {
+        &self.socket
+    }
 
-        // Find and cut the rest of the path
-        match &name[..name.len() - 3].rfind(':') {
-            Some(pos) => &name[pos + 1..name.len() - 3],
-            None => &name[..name.len() - 3],
-        }
-    }};
+    fn get_sequence_number(&self) -> u32 {
+        self.sequence_number
+    }
+
+    fn increase_sequence_number(&mut self) -> u32 {
+        self.sequence_number += 1;
+        self.sequence_number
+    }
 }
 
-impl Socket {
-    pub fn new() -> NetavarkResult<Socket> {
+impl LinkSocket {
+    pub fn new() -> NetavarkResult<LinkSocket> {
         let mut socket = wrap!(netlink_sys::Socket::new(NETLINK_ROUTE), "open")?;
         let addr = &SocketAddr::new(0, 0);
         wrap!(socket.bind(addr), "bind")?;
         wrap!(socket.connect(addr), "connect")?;
 
-        Ok(Socket {
+        Ok(LinkSocket {
             socket,
             sequence_number: 0,
-            buffer: [0; 8192],
         })
     }
 
@@ -170,6 +301,16 @@ impl Socket {
         }
 
         let result = self.make_netlink_request(RtnlMessage::DelLink(msg), NLM_F_ACK)?;
+        expect_netlink_result!(result, 0);
+        Ok(())
+    }
+
+    pub fn set_link_ns(&mut self, link_id: u32, netns_fd: i32) -> NetavarkResult<()> {
+        let mut msg = LinkMessage::default();
+        msg.header.index = link_id;
+        msg.nlas.push(Nla::NetNsFd(netns_fd));
+
+        let result = self.make_netlink_request(RtnlMessage::SetLink(msg), NLM_F_ACK)?;
         expect_netlink_result!(result, 0);
         Ok(())
     }
@@ -367,89 +508,8 @@ impl Socket {
         msg: RtnlMessage,
         flags: u16,
     ) -> NetavarkResult<Vec<RtnlMessage>> {
-        self.send(msg, flags).wrap("send to netlink")?;
+        self.send(msg, flags, None).wrap("send to netlink")?;
         self.recv(flags & NLM_F_DUMP == NLM_F_DUMP)
-    }
-
-    fn send(&mut self, msg: RtnlMessage, flags: u16) -> NetavarkResult<()> {
-        let mut packet = NetlinkMessage::new(NetlinkHeader::default(), NetlinkPayload::from(msg));
-        packet.header.flags = NLM_F_REQUEST | flags;
-        packet.header.sequence_number = {
-            self.sequence_number += 1;
-            self.sequence_number
-        };
-        packet.finalize();
-
-        packet.serialize(&mut self.buffer[..]);
-        trace!("send netlink packet: {:?}", packet);
-
-        self.socket.send(&self.buffer[..packet.buffer_len()], 0)?;
-        Ok(())
-    }
-
-    fn recv(&mut self, multi: bool) -> NetavarkResult<Vec<RtnlMessage>> {
-        let mut offset = 0;
-        let mut result = Vec::new();
-
-        // if multi is set we expect a multi part message
-        loop {
-            let size = wrap!(
-                self.socket.recv(&mut &mut self.buffer[..], 0),
-                "recv from netlink"
-            )?;
-
-            loop {
-                let bytes = &self.buffer[offset..];
-                let rx_packet: NetlinkMessage<RtnlMessage> = NetlinkMessage::deserialize(bytes)
-                    .map_err(|e| {
-                        NetavarkError::Message(format!(
-                            "failed to deserialize netlink message: {}",
-                            e,
-                        ))
-                    })?;
-                trace!("read netlink packet: {:?}", rx_packet);
-
-                if rx_packet.header.sequence_number != self.sequence_number {
-                    return Err(NetavarkError::msg(format!(
-                        "netlink: sequence_number out of sync (got {}, want {})",
-                        rx_packet.header.sequence_number, self.sequence_number,
-                    )));
-                }
-
-                match rx_packet.payload {
-                    NetlinkPayload::Done => return Ok(result),
-                    NetlinkPayload::Error(e) | NetlinkPayload::Ack(e) => {
-                        if e.code != 0 {
-                            return Err(e.into());
-                        }
-                        return Ok(result);
-                    }
-                    NetlinkPayload::Noop => {
-                        return Err(NetavarkError::msg(
-                            "unimplemented netlink message type NOOP",
-                        ))
-                    }
-                    NetlinkPayload::Overrun(_) => {
-                        return Err(NetavarkError::msg(
-                            "unimplemented netlink message type OVERRUN",
-                        ))
-                    }
-                    NetlinkPayload::InnerMessage(msg) => {
-                        result.push(msg);
-                        if !multi {
-                            return Ok(result);
-                        }
-                    }
-                    _ => {}
-                };
-
-                offset += rx_packet.header.length as usize;
-                if offset == size || rx_packet.header.length == 0 {
-                    offset = 0;
-                    break;
-                }
-            }
-        }
     }
 }
 
@@ -505,5 +565,102 @@ pub fn parse_create_link_options(msg: &mut LinkMessage, options: CreateLinkOptio
     // add netnsfd
     if options.netns > -1 {
         msg.nlas.push(Nla::NetNsFd(options.netns));
+    }
+}
+
+// Netlink API for Generic Sockets
+
+pub struct GenericSocket {
+    socket: netlink_sys::Socket,
+    sequence_number: u32,
+    wireguard_family: Option<u16>,
+}
+
+impl NetlinkSocket for GenericSocket {
+    fn get_socket(&self) -> &netlink_sys::Socket {
+        &self.socket
+    }
+
+    fn get_sequence_number(&self) -> u32 {
+        self.sequence_number
+    }
+
+    fn increase_sequence_number(&mut self) -> u32 {
+        self.sequence_number += 1;
+        self.sequence_number
+    }
+}
+
+impl GenericSocket {
+    pub fn new() -> NetavarkResult<GenericSocket> {
+        let mut socket = wrap!(netlink_sys::Socket::new(NETLINK_GENERIC), "open")?;
+        let kernel_addr = &SocketAddr::new(0, 0);
+        wrap!(socket.bind_auto(), "bind")?;
+        wrap!(socket.connect(kernel_addr), "connect")?;
+
+        Ok(GenericSocket {
+            socket,
+            sequence_number: 0,
+            wireguard_family: None,
+        })
+    }
+
+    pub fn set_wireguard_device(&mut self, nlas: Vec<WgDeviceAttrs>) -> NetavarkResult<()> {
+        let msg: GenlMessage<Wireguard> = GenlMessage::from_payload(Wireguard {
+            cmd: WireguardCmd::SetDevice,
+            nlas,
+        });
+        let result = self.make_wireguard_request(msg, NLM_F_ACK)?;
+        expect_netlink_result!(result, 0);
+        Ok(())
+    }
+
+    fn query_family_id(&mut self, family_name: &'static str) -> NetavarkResult<u16> {
+        let genlmsg: GenlMessage<GenlCtrl> = GenlMessage::from_payload(GenlCtrl {
+            cmd: GenlCtrlCmd::GetFamily,
+            nlas: vec![GenlCtrlAttrs::FamilyName(family_name.to_owned())],
+        });
+        let mut result = self.make_ctrl_request(genlmsg, true, NLM_F_ACK)?;
+        expect_netlink_result!(result, 1);
+        let result: GenlMessage<GenlCtrl> = result.remove(0);
+        let mut family: Option<u16> = None;
+        for nla in result.payload.nlas {
+            if let GenlCtrlAttrs::FamilyId(m) = nla {
+                family = Some(m)
+            }
+        }
+        match family {
+            Some(fam) => Ok(fam),
+            None => Err(NetavarkError::msg(
+                "Unable to resolve netlink family id for WireGuard API packets",
+            )),
+        }
+    }
+
+    fn make_ctrl_request(
+        &mut self,
+        msg: GenlMessage<GenlCtrl>,
+        multi: bool,
+        flags: u16,
+    ) -> NetavarkResult<Vec<GenlMessage<GenlCtrl>>> {
+        self.send(msg, flags, None).wrap("send to netlink")?;
+        self.recv(multi)
+    }
+
+    fn make_wireguard_request(
+        &mut self,
+        msg: GenlMessage<Wireguard>,
+        flags: u16,
+    ) -> NetavarkResult<Vec<GenlMessage<Wireguard>>> {
+        if self.wireguard_family.is_none() {
+            let family = self
+                .query_family_id("wireguard")
+                .expect("Could not resolve family_id for WireGuard netlink API");
+            trace!("WireGuard family ID is: {:?}", family);
+            self.wireguard_family = Some(family);
+        }
+        self.send(msg, flags, self.wireguard_family)
+            .wrap("send to netlink")?;
+        self.recv(flags & NLM_F_DUMP == NLM_F_DUMP)
     }
 }

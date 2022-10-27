@@ -11,6 +11,7 @@ pub const IPAM_NONE: &str = "none";
 pub const DRIVER_BRIDGE: &str = "bridge";
 pub const DRIVER_IPVLAN: &str = "ipvlan";
 pub const DRIVER_MACVLAN: &str = "macvlan";
+pub const DRIVER_WIREGUARD: &str = "wireguard";
 
 pub const OPTION_ISOLATE: &str = "isolate";
 pub const OPTION_MTU: &str = "mtu";

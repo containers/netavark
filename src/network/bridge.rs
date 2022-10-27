@@ -92,7 +92,7 @@ impl driver::NetworkDriver for Bridge<'_> {
 
     fn setup(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (&mut netlink::LinkSocket, &mut netlink::LinkSocket),
     ) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry>)> {
         let data = match &self.data {
             Some(d) => d,
@@ -228,7 +228,7 @@ impl driver::NetworkDriver for Bridge<'_> {
 
     fn teardown(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (&mut netlink::LinkSocket, &mut netlink::LinkSocket),
     ) -> NetavarkResult<()> {
         let (host_sock, netns_sock) = netlink_sockets;
 
@@ -458,8 +458,8 @@ fn setup_ipv6_fw_sysctl() -> NetavarkResult<()> {
 
 /// returns the container veth mac address
 fn create_interfaces(
-    host: &mut netlink::Socket,
-    netns: &mut netlink::Socket,
+    host: &mut netlink::LinkSocket,
+    netns: &mut netlink::LinkSocket,
     data: &InternalData,
     internal: bool,
     hostns_fd: RawFd,
@@ -528,8 +528,8 @@ fn create_interfaces(
 
 /// return the container veth mac address
 fn create_veth_pair(
-    host: &mut netlink::Socket,
-    netns: &mut netlink::Socket,
+    host: &mut netlink::LinkSocket,
+    netns: &mut netlink::LinkSocket,
     data: &InternalData,
     primary_index: u32,
     internal: bool,
@@ -658,8 +658,8 @@ fn check_link_is_bridge(msg: LinkMessage, br_name: &str) -> NetavarkResult<LinkM
 }
 
 fn remove_link(
-    host: &mut netlink::Socket,
-    netns: &mut netlink::Socket,
+    host: &mut netlink::LinkSocket,
+    netns: &mut netlink::LinkSocket,
     br_name: &str,
     container_veth_name: &str,
 ) -> NetavarkResult<bool> {

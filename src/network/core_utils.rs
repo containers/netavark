@@ -307,7 +307,7 @@ pub struct NamespaceOptions {
     /// as long as the File object is valid
     pub file: File,
     pub fd: RawFd,
-    pub netlink: netlink::Socket,
+    pub netlink: netlink::LinkSocket,
 }
 
 pub fn open_netlink_sockets(
@@ -316,13 +316,13 @@ pub fn open_netlink_sockets(
     let netns = open_netlink_socket(netns_path).wrap("open container netns")?;
     let hostns = open_netlink_socket("/proc/self/ns/net").wrap("open host netns")?;
 
-    let host_socket = netlink::Socket::new().wrap("host netlink socket")?;
+    let host_socket = netlink::LinkSocket::new().wrap("host netlink socket")?;
 
     exec_netns!(
         hostns.1,
         netns.1,
         res,
-        netlink::Socket::new().wrap("netns netlink socket")
+        netlink::LinkSocket::new().wrap("netns netlink socket")
     );
 
     let netns_sock = res?;
@@ -340,6 +340,23 @@ pub fn open_netlink_sockets(
     ))
 }
 
+pub fn open_generic_netlink_sockets_from_fd(
+    host_fd: i32,
+    netns_fd: i32,
+) -> NetavarkResult<(netlink::GenericSocket, netlink::GenericSocket)> {
+    let host_socket = netlink::GenericSocket::new().wrap("host netlink socket")?;
+
+    exec_netns!(
+        host_fd,
+        netns_fd,
+        res,
+        netlink::GenericSocket::new().wrap("netns netlink socket")
+    );
+
+    let netns_sock = res?;
+    Ok((host_socket, netns_sock))
+}
+
 fn open_netlink_socket(netns_path: &str) -> NetavarkResult<(File, RawFd)> {
     let ns = wrap!(File::open(netns_path), format!("open {}", netns_path))?;
     let ns_fd = ns.as_raw_fd();
@@ -347,7 +364,7 @@ fn open_netlink_socket(netns_path: &str) -> NetavarkResult<(File, RawFd)> {
 }
 
 pub fn add_default_routes(
-    sock: &mut netlink::Socket,
+    sock: &mut netlink::LinkSocket,
     gws: &[ipnet::IpNet],
     metric: Option<u32>,
 ) -> NetavarkResult<()> {
