@@ -2,6 +2,7 @@ use std::{collections::HashMap, net::IpAddr, os::unix::prelude::RawFd};
 
 use log::debug;
 use netlink_packet_route::nlas::link::{InfoData, InfoKind, InfoMacVlan, Nla};
+use rand::distributions::{Alphanumeric, DistString};
 
 use crate::{
     dns::aardvark::AardvarkEntry,
@@ -165,7 +166,48 @@ fn setup(
     opts.info_data = Some(InfoData::MacVlan(vec![InfoMacVlan::Mode(
         data.macvlan_mode,
     )]));
-    host.create_link(opts).wrap("create macvlan interface")?;
+    let mut result = host.create_link(opts.clone());
+    // Sigh, the kernel creates the interface first in the hostns before moving it into the netns.
+    // Therefore it can fail with EEXIST if the name is already used on the host. Create the link
+    // with tmp name, then rename it in the netns.
+    // If you change the iterations here make sure to match the number in early return case below as well.
+    for i in 0..3 {
+        match result {
+            // no error we can break
+            Ok(_) => break,
+
+            Err(err) => match err {
+                NetavarkError::Netlink(ref e) if -e.code == libc::EEXIST => {
+                    let random = Alphanumeric.sample_string(&mut rand::thread_rng(), 10);
+                    let tmp_name = "mv-".to_string() + &random;
+                    let mut opts = opts.clone();
+                    opts.name = tmp_name.clone();
+                    result = host.create_link(opts);
+                    if let Err(ref e) = result {
+                        // if last element return directly
+                        if i == 2 {
+                            return Err(NetavarkError::msg(format!(
+                                "create macvlan interface: {}",
+                                e
+                            )));
+                        }
+                        // retry, error could EEXIST again because we pick a random name
+                        continue;
+                    }
+                    let link = netns
+                        .get_link(netlink::LinkID::Name(tmp_name))
+                        .wrap("get tmp macvlan interface")?;
+                    netns
+                        .set_link_name(link.header.index, if_name.to_string())
+                        .wrap("rename tmp macvlan interface")?;
+
+                    // successful run, break out of loop
+                    break;
+                }
+                err => return Err(err).wrap("create macvlan interface")?,
+            },
+        }
+    }
 
     exec_netns!(hostns_fd, netns_fd, res, { disable_ipv6_autoconf(if_name) });
     res?; // return autoconf sysctl error
