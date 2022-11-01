@@ -309,7 +309,11 @@ fn open_netlink_socket(netns_path: &str) -> NetavarkResult<(File, RawFd)> {
     Ok((ns, ns_fd))
 }
 
-pub fn add_default_routes(sock: &mut netlink::Socket, gws: &[ipnet::IpNet]) -> NetavarkResult<()> {
+pub fn add_default_routes(
+    sock: &mut netlink::Socket,
+    gws: &[ipnet::IpNet],
+    metric: Option<u32>,
+) -> NetavarkResult<()> {
     let mut ipv4 = false;
     let mut ipv6 = false;
     for addr in gws {
@@ -323,6 +327,7 @@ pub fn add_default_routes(sock: &mut netlink::Socket, gws: &[ipnet::IpNet]) -> N
                 netlink::Route::Ipv4 {
                     dest: ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0)?,
                     gw: v4.addr(),
+                    metric,
                 }
             }
             ipnet::IpNet::V6(v6) => {
@@ -334,6 +339,7 @@ pub fn add_default_routes(sock: &mut netlink::Socket, gws: &[ipnet::IpNet]) -> N
                 netlink::Route::Ipv6 {
                     dest: ipnet::Ipv6Net::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0)?,
                     gw: v6.addr(),
+                    metric,
                 }
             }
         };

@@ -1,0 +1,37 @@
+{
+    "container_id": "bc14fe7cd3633e7be338522002bb0c3ccb18150da7a6c733735ffdf8ff7e85d1",
+    "container_name": "metrictest",
+    "networks": {
+        "metric": {
+            "interface_name": "eth1",
+            "static_ips": [
+                "10.89.0.2",
+                "fde0::2"
+            ]
+        }
+    },
+    "network_info": {
+        "metric": {
+            "dns_enabled": false,
+            "driver": "bridge",
+            "id": "7ba44a9a709f8093621eae1a1db2ccafc2471bae19cdf9dd2ea7cf3773b9211c",
+            "internal": false,
+            "ipv6_enabled": true,
+            "name": "metric",
+            "network_interface": "metric",
+            "subnets": [
+                {
+                    "gateway": "10.89.0.1",
+                    "subnet": "10.89.0.0/24"
+                },
+                {
+                    "subnet": "fde0::/64",
+                    "gateway": "fde0::1"
+               }
+            ],
+            "options": {
+                "metric": "200"
+             }
+        }
+    }
+}

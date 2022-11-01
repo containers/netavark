@@ -5,9 +5,10 @@ use std::{
 
 use crate::{
     error::{ErrorWrap, NetavarkError, NetavarkResult},
+    network::constants,
     wrap,
 };
-use log::trace;
+use log::{info, trace};
 use netlink_packet_route::{
     nlas::link::{Info, InfoData, InfoKind, Nla},
     AddressMessage, LinkMessage, NetlinkHeader, NetlinkMessage, NetlinkPayload, RouteMessage,
@@ -41,17 +42,33 @@ pub enum LinkID {
 }
 
 pub enum Route {
-    Ipv4 { dest: ipnet::Ipv4Net, gw: Ipv4Addr },
-    Ipv6 { dest: ipnet::Ipv6Net, gw: Ipv6Addr },
+    Ipv4 {
+        dest: ipnet::Ipv4Net,
+        gw: Ipv4Addr,
+        metric: Option<u32>,
+    },
+    Ipv6 {
+        dest: ipnet::Ipv6Net,
+        gw: Ipv6Addr,
+        metric: Option<u32>,
+    },
 }
 
 impl std::fmt::Display for Route {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (dest, gw) = match self {
-            Route::Ipv4 { dest, gw } => (dest.to_string(), gw.to_string()),
-            Route::Ipv6 { dest, gw } => (dest.to_string(), gw.to_string()),
+        let (dest, gw, metric) = match self {
+            Route::Ipv4 { dest, gw, metric } => (
+                dest.to_string(),
+                gw.to_string(),
+                metric.unwrap_or(constants::DEFAULT_METRIC),
+            ),
+            Route::Ipv6 { dest, gw, metric } => (
+                dest.to_string(),
+                gw.to_string(),
+                metric.unwrap_or(constants::DEFAULT_METRIC),
+            ),
         };
-        write!(f, "(dest: {} ,gw: {})", dest, gw)
+        write!(f, "(dest: {} ,gw: {}, metric {})", dest, gw, metric)
     }
 }
 
@@ -220,21 +237,25 @@ impl Socket {
         msg.header.scope = RT_SCOPE_UNIVERSE;
         msg.header.kind = RTN_UNICAST;
 
-        let (dest_vec, dest_prefix, gateway_vec) = match route {
-            Route::Ipv4 { dest, gw } => {
+        info!("Adding route {}", route);
+
+        let (dest_vec, dest_prefix, gateway_vec, final_metric) = match route {
+            Route::Ipv4 { dest, gw, metric } => {
                 msg.header.address_family = AF_INET as u8;
                 (
                     dest.addr().octets().to_vec(),
                     dest.prefix_len(),
                     gw.octets().to_vec(),
+                    metric.unwrap_or(constants::DEFAULT_METRIC),
                 )
             }
-            Route::Ipv6 { dest, gw } => {
+            Route::Ipv6 { dest, gw, metric } => {
                 msg.header.address_family = AF_INET6 as u8;
                 (
                     dest.addr().octets().to_vec(),
                     dest.prefix_len(),
                     gw.octets().to_vec(),
+                    metric.unwrap_or(constants::DEFAULT_METRIC),
                 )
             }
         };
@@ -244,6 +265,8 @@ impl Socket {
             .push(netlink_packet_route::route::Nla::Destination(dest_vec));
         msg.nlas
             .push(netlink_packet_route::route::Nla::Gateway(gateway_vec));
+        msg.nlas
+            .push(netlink_packet_route::route::Nla::Priority(final_metric));
         msg
     }
 

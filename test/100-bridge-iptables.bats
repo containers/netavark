@@ -666,3 +666,31 @@ EOF
     expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge.json setup $(get_container_netns_path)
     assert '{"error":"add ip addr to bridge: failed to add ipv6 address, is ipv6 enabled in the kernel?: Netlink error: Permission denied (os error 13)"}' "error message"
 }
+
+@test "$fw_driver - route metric from config" {
+    run_netavark --file ${TESTSDIR}/testfiles/metric.json setup $(get_container_netns_path)
+
+    run_in_container_netns ip -j route list match 0.0.0.0
+    default_route="$output"
+    assert_json "$default_route" '.[0].dst' == "default" "Default route was selected"
+    assert_json "$default_route" '.[0].metric' == "200" "Route metric set from config"
+
+    run_in_container_netns ip -j -6 route list match ::0
+    default_route_v6="$output"
+    assert_json "$default_route_v6" '.[0].dst' == "default" "Default route was selected"
+    assert_json "$default_route_v6" '.[0].metric' == "200" "v6 route metric matches v4"
+}
+
+@test "$fw_drive - default route metric" {
+    run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json setup $(get_container_netns_path)
+
+    run_in_container_netns ip -j route list match 0.0.0.0
+    default_route="$output"
+    assert_json "$default_route" '.[0].dst' == "default" "Default route was selected"
+    assert_json "$default_route" '.[0].metric' == "100" "Default metric was chosen"
+
+    run_in_container_netns ip -j -6 route list match ::0
+    default_route_v6="$output"
+    assert_json "$default_route_v6" '.[0].dst' == "default" "Default route was selected"
+    assert_json "$default_route_v6" '.[0].metric' == "100" "v6 route metric matches v4"
+}

@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{
-    constants::{NO_CONTAINER_INTERFACE_ERROR, OPTION_MODE, OPTION_MTU},
+    constants::{NO_CONTAINER_INTERFACE_ERROR, OPTION_METRIC, OPTION_MODE, OPTION_MTU},
     core_utils::{self, get_ipam_addresses, parse_option, CoreUtils},
     driver::{self, DriverInfo},
     internal_types::IPAMAddresses,
@@ -31,6 +31,8 @@ struct InternalData {
     mtu: u32,
     /// macvlan mode
     macvlan_mode: u32,
+    /// Route metric for default routes added to the network
+    metric: Option<u32>,
     // TODO: add vlan
 }
 
@@ -61,6 +63,7 @@ impl driver::NetworkDriver for MacVlan<'_> {
         let mut ipam = get_ipam_addresses(self.info.per_network_opts, self.info.network)?;
 
         let mtu = parse_option(&self.info.network.options, OPTION_MTU, 0)?;
+        let metric = parse_option(&self.info.network.options, OPTION_METRIC, 100)?;
 
         let static_mac = match &self.info.per_network_opts.static_mac {
             Some(mac) => Some(CoreUtils::decode_address_from_hex(mac)?),
@@ -83,6 +86,7 @@ impl driver::NetworkDriver for MacVlan<'_> {
             ipam,
             macvlan_mode,
             mtu,
+            metric: Some(metric),
         });
         Ok(())
     }
@@ -226,7 +230,7 @@ fn setup(
         .set_up(netlink::LinkID::ID(dev.header.index))
         .wrap("set macvlan up")?;
 
-    core_utils::add_default_routes(netns, &data.ipam.gateway_addresses)?;
+    core_utils::add_default_routes(netns, &data.ipam.gateway_addresses, data.metric)?;
 
     for nla in dev.nlas.into_iter() {
         if let Nla::Address(ref addr) = nla {
