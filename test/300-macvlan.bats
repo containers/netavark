@@ -283,3 +283,52 @@ EOF
 
    run_netavark teardown $(get_container_netns_path) <<<"$config"
 }
+
+@test "macvlan same interface name on container" {
+
+   read -r -d '\0' config <<EOF
+{
+   "container_id": "someID",
+   "container_name": "someName",
+   "networks": {
+      "podman": {
+         "static_ips": [
+            "10.88.0.2"
+         ],
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+         "driver": "macvlan",
+         "network_interface": "dummy0",
+         "subnets": [
+            {
+               "subnet": "10.88.0.0/16",
+               "gateway": "10.88.0.1"
+            }
+         ],
+         "ipv6_enabled": false,
+         "internal": false,
+         "dns_enabled": false,
+         "ipam_options": {
+            "driver": "host-local"
+         }
+      }
+   }
+}\0
+EOF
+
+   run_in_container_netns ip link add eth0 type dummy
+
+   expected_rc=1 run_netavark setup $(get_container_netns_path) <<<"$config"
+
+   # make sure the tmp interface is not leaked on the host or netns
+   run_in_host_netns ip -o link show
+   assert "${#lines[@]}" == 2 "only two interfaces (lo, dummy0) on the host, the tmp macvlan interface should be gone"
+
+   run_in_container_netns ip -o link show
+   assert "${#lines[@]}" == 2 "only two interfaces (lo, eth0) in the netns, the tmp macvlan interface should be gone"
+}

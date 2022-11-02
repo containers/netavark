@@ -1,6 +1,6 @@
 use std::{collections::HashMap, net::IpAddr, os::unix::prelude::RawFd};
 
-use log::debug;
+use log::{debug, error};
 use netlink_packet_route::nlas::link::{InfoData, InfoKind, InfoMacVlan, Nla};
 use rand::distributions::{Alphanumeric, DistString};
 
@@ -198,12 +198,22 @@ fn setup(
                         // retry, error could EEXIST again because we pick a random name
                         continue;
                     }
+
                     let link = netns
-                        .get_link(netlink::LinkID::Name(tmp_name))
+                        .get_link(netlink::LinkID::Name(tmp_name.clone()))
                         .wrap("get tmp macvlan interface")?;
                     netns
                         .set_link_name(link.header.index, if_name.to_string())
-                        .wrap("rename tmp macvlan interface")?;
+                        .wrap("rename tmp macvlan interface")
+                        .map_err(|err| {
+                            // If there is an error here most likely the name in the netns is already used,
+                            // make sure to delete the tmp interface.
+                            if let Err(err) = netns.del_link(netlink::LinkID::ID(link.header.index))
+                            {
+                                error!("failed to delete tmp macvlan link {}: {}", tmp_name, err);
+                            };
+                            err
+                        })?;
 
                     // successful run, break out of loop
                     break;
