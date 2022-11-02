@@ -19,7 +19,6 @@ deps-serde = ["chrono/serde", "url/serde"]
 
 [dependencies]
 anyhow = "1.0"
-chrono = "0.4.22"
 clap = { version = "3.2.23", features = ["derive"] }
 env_logger = "0.9.1"
 ipnet = { version = "2", features = ["serde"] }
@@ -43,4 +42,4 @@ fs2 = "0.4.3"
 netlink-sys = "0.8.3"
 
 [build-dependencies]
-chrono = "0.4.22"
+chrono = { version = "0.4.22", default-features = false, features = ["clock"] }
