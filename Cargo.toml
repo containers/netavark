@@ -38,6 +38,8 @@ netlink-packet-route = "0.13"
 netlink-packet-core = "0.4.2"
 fs2 = "0.4.3"
 netlink-sys = "0.8.3"
+netavark_proxy = { git = "https://github.com/containers/netavark-dhcp-proxy"} 
+tokio = { version = "1.0", features = ["rt"] }
 
 [build-dependencies]
 chrono = { version = "0.4.22", default-features = false, features = ["clock"] }

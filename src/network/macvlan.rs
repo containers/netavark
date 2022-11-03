@@ -1,9 +1,10 @@
+use log::{debug, error};
 use std::{collections::HashMap, net::IpAddr, os::unix::prelude::RawFd};
 
-use log::{debug, error};
 use netlink_packet_route::nlas::link::{InfoData, InfoKind, InfoMacVlan, Nla};
 use rand::distributions::{Alphanumeric, DistString};
 
+use crate::network::macvlan_dhcp::{get_dhcp_lease, release_dhcp_lease};
 use crate::{
     dns::aardvark::AardvarkEntry,
     error::{ErrorWrap, NetavarkError, NetavarkResult},
@@ -21,7 +22,9 @@ use super::{
 };
 
 struct InternalData {
-    /// interface name of on the host
+    /// interface name inside the container
+    container_interface_name: String,
+    /// interface name on the host
     host_interface_name: String,
     /// static mac address
     mac_address: Option<Vec<u8>>,
@@ -43,7 +46,10 @@ pub struct MacVlan<'a> {
 
 impl<'a> MacVlan<'a> {
     pub fn new(info: DriverInfo<'a>) -> Self {
-        MacVlan { info, data: None }
+        MacVlan {
+            info,
+            data: None::<InternalData>,
+        }
     }
 }
 
@@ -76,6 +82,7 @@ impl driver::NetworkDriver for MacVlan<'_> {
         }
 
         self.data = Some(InternalData {
+            container_interface_name: self.info.per_network_opts.interface_name.clone(),
             host_interface_name: self
                 .info
                 .network
@@ -117,7 +124,8 @@ impl driver::NetworkDriver for MacVlan<'_> {
             self.info.netns_container,
         )?;
 
-        //  StatusBlock response
+        //  StatusBlock response is what we return at the end
+        // of all of this
         let mut response = StatusBlock {
             dns_server_ips: Some(Vec::<IpAddr>::new()),
             dns_search_domains: Some(Vec::<String>::new()),
@@ -126,10 +134,26 @@ impl driver::NetworkDriver for MacVlan<'_> {
 
         // interfaces map, but we only ever expect one, for response
         let mut interfaces: HashMap<String, NetInterface> = HashMap::new();
+
+        // if dhcp is enabled, we need to call the dhcp proxy to perform
+        // a dhcp lease.  it will also perform the IP address assignment
+        // to the macvlan interface.
+        let subnets = if data.ipam.dhcp_enabled {
+            get_dhcp_lease(
+                &data.host_interface_name,
+                &data.container_interface_name,
+                self.info.netns_path,
+                &container_macvlan_mac,
+            )?
+        } else {
+            data.ipam.net_addresses.clone()
+        };
+
         let interface = NetInterface {
             mac_address: container_macvlan_mac,
-            subnets: Option::from(data.ipam.net_addresses.clone()),
+            subnets: Option::from(subnets),
         };
+
         // Add interface to interfaces (part of StatusBlock)
         interfaces.insert(self.info.per_network_opts.interface_name.clone(), interface);
         let _ = response.interfaces.insert(interfaces);
@@ -140,6 +164,34 @@ impl driver::NetworkDriver for MacVlan<'_> {
         &self,
         netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
     ) -> NetavarkResult<()> {
+        let ipam = get_ipam_addresses(self.info.per_network_opts, self.info.network)?;
+        let if_name = self.info.per_network_opts.interface_name.clone();
+
+        // If we are using DHCP macvlan, we need to at least call to the proxy so that
+        // the proxy's cache can get updated and the current lease can be released.
+        if ipam.dhcp_enabled {
+            let dev = netlink_sockets
+                .1
+                .get_link(netlink::LinkID::Name(if_name))
+                .wrap(format!(
+                    "get macvlan interface {}",
+                    &self.info.per_network_opts.interface_name
+                ))?;
+
+            let container_mac_address = get_mac_address(dev.nlas)?;
+            release_dhcp_lease(
+                &self
+                    .info
+                    .network
+                    .network_interface
+                    .clone()
+                    .unwrap_or_default(),
+                &self.info.per_network_opts.interface_name,
+                self.info.netns_path,
+                &container_mac_address,
+            )?
+        }
+
         netlink_sockets.1.del_link(netlink::LinkID::Name(
             self.info.per_network_opts.interface_name.to_string(),
         ))?;
@@ -242,14 +294,17 @@ fn setup(
 
     core_utils::add_default_routes(netns, &data.ipam.gateway_addresses, data.metric)?;
 
-    for nla in dev.nlas.into_iter() {
+    get_mac_address(dev.nlas)
+}
+
+fn get_mac_address(v: Vec<Nla>) -> NetavarkResult<String> {
+    for nla in v.into_iter() {
         if let Nla::Address(ref addr) = nla {
             return Ok(CoreUtils::encode_address_to_hex(addr));
         }
     }
-
     Err(NetavarkError::msg(
-        "failed to get the mac address from the container veth interface",
+        "failed to get the the container mac address",
     ))
 }
 
