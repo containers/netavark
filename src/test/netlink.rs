@@ -142,6 +142,7 @@ mod tests {
         sock.del_route(&Route::Ipv4 {
             dest: net.parse().unwrap(),
             gw: gw.parse().unwrap(),
+            metric: None,
         })
         .expect("del_route failed");
 
