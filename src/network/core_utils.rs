@@ -2,6 +2,10 @@ use crate::error::{ErrorWrap, NetavarkError, NetavarkResult};
 use crate::network::{constants, internal_types, types};
 use crate::wrap;
 use log::debug;
+use netlink_packet_route::{
+    MACVLAN_MODE_BRIDGE, MACVLAN_MODE_PASSTHRU, MACVLAN_MODE_PRIVATE, MACVLAN_MODE_SOURCE,
+    MACVLAN_MODE_VEPA,
+};
 use nix::sched;
 use sha2::{Digest, Sha512};
 use std::collections::HashMap;
@@ -195,20 +199,19 @@ impl CoreUtils {
         Ok(result)
     }
 
-    pub fn get_macvlan_mode_from_string(mode: &str) -> Result<u32, std::io::Error> {
-        // Replace to constant from library once this gets merged.
-        // TODO: use actual constants after https://github.com/little-dude/netlink/pull/200
+    pub fn get_macvlan_mode_from_string(mode: &str) -> NetavarkResult<u32> {
         match mode {
-            "" | "bridge" => Ok(constants::MACVLAN_MODE_BRIDGE),
-            "private" => Ok(constants::MACVLAN_MODE_PRIVATE),
-            "vepa" => Ok(constants::MACVLAN_MODE_VEPA),
-            "passthru" => Ok(constants::MACVLAN_MODE_PASSTHRU),
-            "source" => Ok(constants::MACVLAN_MODE_SOURCE),
+            // default to bridge when unset
+            "" | "bridge" => Ok(MACVLAN_MODE_BRIDGE),
+            "private" => Ok(MACVLAN_MODE_PRIVATE),
+            "vepa" => Ok(MACVLAN_MODE_VEPA),
+            "passthru" => Ok(MACVLAN_MODE_PASSTHRU),
+            "source" => Ok(MACVLAN_MODE_SOURCE),
             // default to bridge
-            _ => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "invalid macvlan mode",
-            )),
+            name => Err(NetavarkError::msg(format!(
+                "invalid macvlan mode \"{}\"",
+                name
+            ))),
         }
     }
 
