@@ -1,5 +1,17 @@
 # Release Notes
 
+## v1.3.0
+* Housekeep and code cleanup
+* macvlan: remove tmp interface when name already used in netns
+* Add support for route metrics
+* netlink: return better error if ipv6 is disabled
+* macvlan: fix name collision on hostns
+* Ignore dns-enabled for macvlan (BZ2137320)
+* better errors on teardown
+* allow customer dns servers for containers
+* do not set route for internal-only networks
+* do not use ipv6 autoconf
+
 ## v1.2.0
 * Reworked how netavark calls aardvark
 * Implemented locking when commiting
