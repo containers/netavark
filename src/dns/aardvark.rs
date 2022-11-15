@@ -109,7 +109,7 @@ impl Aardvark {
         // After https://github.com/containers/aardvark-dns/pull/148 this command
         // will block till aardvark-dns's parent process returns back and let
         // aardvark inherit all the fds.
-        Command::new(&aardvark_args[0])
+        Command::new(aardvark_args[0])
             .args(&aardvark_args[1..])
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
@@ -179,7 +179,7 @@ impl Aardvark {
         }
 
         for entry in &entries {
-            let path = Path::new(&self.config).join(&entry.network_name);
+            let path = Path::new(&self.config).join(entry.network_name);
 
             let file = match OpenOptions::new().write(true).create_new(true).open(&path) {
                 Ok(mut f) => {
