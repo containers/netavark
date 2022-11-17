@@ -237,7 +237,7 @@ impl firewall::FirewallDriver for IptablesDriver {
     }
 }
 
-// Check if firewalld is running
+/// Check if firewalld is running
 fn is_firewalld_running(conn: &Connection) -> bool {
     block_on(conn.call_method(
         Some("org.freedesktop.DBus"),
@@ -249,8 +249,8 @@ fn is_firewalld_running(conn: &Connection) -> bool {
     .is_ok()
 }
 
-// If possible, add a firewalld rule to allow traffic.
-// Ignore all errors, beyond possibly logging them.
+/// If possible, add a firewalld rule to allow traffic.
+/// Ignore all errors, beyond possibly logging them.
 fn add_firewalld_if_possible(net: &types::Subnet) {
     let conn = match block_on(Connection::system()) {
         Ok(conn) => conn,

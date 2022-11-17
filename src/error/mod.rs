@@ -57,7 +57,7 @@ impl<T> ErrorWrap<T> for NetavarkResult<T> {
     }
 }
 
-// The main Netavark error type
+/// The main Netavark error type
 #[derive(Debug)]
 pub enum NetavarkError {
     // A string message
@@ -81,7 +81,7 @@ pub enum NetavarkError {
     List(NetavarkErrorList),
 }
 
-// Internal struct for JSON output
+/// Internal struct for JSON output
 #[derive(Debug, Serialize, Deserialize)]
 struct JsonError {
     pub error: String,
@@ -102,8 +102,8 @@ impl NetavarkError {
         NetavarkError::Chain(msg.into(), Box::new(chained))
     }
 
-    // Print the error in a standardized JSON format recognized by callers of
-    // Netavark.
+    /// Print the error in a standardized JSON format recognized by callers of
+    /// Netavark.
     pub fn print_json(&self) {
         let to_json = JsonError {
             error: self.to_string(),
@@ -117,7 +117,7 @@ impl NetavarkError {
         );
     }
 
-    // Get the exit code that Netavark should exit with
+    /// Get the exit code that Netavark should exit with
     pub fn get_exit_code(&self) -> i32 {
         match *self {
             NetavarkError::ExitCode(_, i) => i,

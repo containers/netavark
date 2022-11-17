@@ -16,7 +16,7 @@ pub const OPTION_MTU: &str = "mtu";
 pub const OPTION_MODE: &str = "mode";
 pub const OPTION_METRIC: &str = "metric";
 
-// 100 is the default metric for most Linux networking tools.
+/// 100 is the default metric for most Linux networking tools.
 pub const DEFAULT_METRIC: u32 = 100;
 
 pub const NO_CONTAINER_INTERFACE_ERROR: &str = "no container interface name given";
