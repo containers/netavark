@@ -404,8 +404,10 @@ impl<'a> Bridge<'a> {
             complete_teardown,
         };
 
-        // FIXME store error and continue
-        self.info.firewall.teardown_network(tn)?;
+        if complete_teardown {
+            // FIXME store error and continue
+            self.info.firewall.teardown_network(tn)?;
+        }
 
         let tpf = TeardownPortForward {
             config: spf,

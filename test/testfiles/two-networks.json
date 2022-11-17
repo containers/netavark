@@ -1,6 +1,15 @@
 {
     "container_id": "a417588994662895d8b41adf8d74a83ac0cc38eb56d85d8e1268aae1e19e07e1",
     "container_name": "heuristic_archimedes",
+    "port_mappings": [
+        {
+          "host_ip": "127.0.0.1",
+          "container_port": 8080,
+          "host_port": 8080,
+          "range": 1,
+          "protocol": "tcp"
+        }
+      ],
     "networks": {
         "t1": {
             "static_ips": [
