@@ -110,9 +110,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                 );
 
                 for c in &chains {
-                    // Because we only call teardown_network on complete teardown, we
-                    // just send true here
-                    c.remove_rules(true)?;
+                    c.remove_rules(tear.complete_teardown)?;
                 }
                 for c in chains {
                     match &c.td_policy {

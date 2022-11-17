@@ -626,6 +626,11 @@ EOF
     # bridge should still exist
     run_in_host_netns ip link show podman1
 
+    run_in_host_netns iptables -S NETAVARK_FORWARD
+    assert "${lines[1]}" == "-A NETAVARK_FORWARD -d 10.88.0.0/16 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT" "NETAVARK_FORWARD rule 1"
+    assert "${lines[2]}" == "-A NETAVARK_FORWARD -s 10.88.0.0/16 -j ACCEPT" "NETAVARK_FORWARD rule 2"
+    assert "${#lines[@]}" = 3 "too many NETAVARK_FORWARD rules"
+
     run_netavark teardown $(get_container_netns_path 1) <<<"${configs[1]}"
     # bridge should be removed
     expected_rc=1 run_in_host_netns ip link show podman1
@@ -645,8 +650,8 @@ EOF
 
     run_in_host_netns iptables -S -t nat
     # extra check so we can be sure that these rules exists before checking later of they are removed
-    assert "$output" =~ "10.89.1.0/24" "eth0 subnet"
-    assert "$output" =~ "10.89.2.0/24" "eth1 subnet"
+    assert "$output" =~ "--to-destination 10.89.1.2:8080" "eth0 port fw rule exists"
+    assert "$output" =~ "--to-destination 10.89.2.2:8080" "eth1 port fw rule exists"
 
     expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/two-networks.json teardown $(get_container_netns_path)
     # order is not deterministic so we match twice with different eth name
@@ -655,8 +660,8 @@ EOF
 
     # now make sure that it actually removed the iptables rule even with the errors
     run_in_host_netns iptables -S -t nat
-    assert "$output" !~ "10.89.1.0/24" "eth0 subnet should not exist"
-    assert "$output" !~ "10.89.2.0/24" "eth1 subnet should not exist"
+    assert "$output" !~ "--to-destination 10.89.1.2:8080" "eth0 port fw rule should not exist"
+    assert "$output" !~ "--to-destination 10.89.2.2:8080" "eth1 port fw rule should not exist"
 }
 
 @test "$fw_driver - ipv6 disabled error message" {
