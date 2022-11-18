@@ -134,14 +134,14 @@ impl<'a> VarkChain<'a> {
 
     //  remove a vector of rules
     pub fn remove_rules(&self, complete_teardown: bool) -> NetavarkResult<()> {
-        for rule in &self.rules.clone() {
+        for rule in &self.rules {
             // If the rule policy is Never or this is not a
             // complete teardown of the network, then we skip removal
             // of the rule
-            match rule.clone().td_policy {
+            match &rule.td_policy {
                 None => {}
                 Some(policy) => {
-                    if policy == TeardownPolicy::Never || !complete_teardown {
+                    if *policy == TeardownPolicy::Never || !complete_teardown {
                         continue;
                     }
                 }
@@ -188,14 +188,14 @@ pub fn create_network_chains(chains: Vec<VarkChain<'_>>) -> NetavarkResult<()> {
     Ok(())
 }
 
-pub fn get_network_chains(
-    conn: &'_ IPTables,
+pub fn get_network_chains<'a>(
+    conn: &'a IPTables,
     network: IpNet,
-    network_hash_name: String,
+    network_hash_name: &'a str,
     is_ipv6: bool,
     interface_name: String,
     isolation: bool,
-) -> Vec<VarkChain<'_>> {
+) -> Vec<VarkChain<'a>> {
     let mut chains = Vec::new();
     let prefixed_network_hash_name = format!("{}-{}", "NETAVARK", network_hash_name);
 

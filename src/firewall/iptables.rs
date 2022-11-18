@@ -64,7 +64,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                 let chains = get_network_chains(
                     conn,
                     network.subnet,
-                    network_setup.network_hash_name.clone(),
+                    &network_setup.network_hash_name,
                     is_ipv6,
                     interface.to_string(),
                     network_setup.isolation,
@@ -103,7 +103,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                 let chains = get_network_chains(
                     conn,
                     network.subnet,
-                    tear.config.network_hash_name.clone(),
+                    &tear.config.network_hash_name,
                     is_ipv6,
                     interface.to_string(),
                     tear.config.isolation,

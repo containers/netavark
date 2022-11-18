@@ -158,8 +158,7 @@ impl Setup {
                 }
             };
 
-            let mut aardvark_interface =
-                Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
+            let aardvark_interface = Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
 
             if let Err(er) = aardvark_interface.commit_netavark_entries(aardvark_entries) {
                 return Err(std::io::Error::new(

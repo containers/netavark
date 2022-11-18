@@ -55,10 +55,9 @@ impl Teardown {
             // stop dns server first before netavark clears the interface
             let path = Path::new(&config_dir).join("aardvark-dns");
             if let Ok(path_string) = path.into_os_string().into_string() {
-                let mut aardvark_interface =
+                let aardvark_interface =
                     Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
-                if let Err(err) =
-                    aardvark_interface.delete_from_netavark_entries(network_options.clone())
+                if let Err(err) = aardvark_interface.delete_from_netavark_entries(&network_options)
                 {
                     error_list.push(err.into());
                 }
