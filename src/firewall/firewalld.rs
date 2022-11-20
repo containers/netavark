@@ -449,7 +449,7 @@ impl firewall::FirewallDriver for FirewallD {
     }
 }
 
-// Create a firewalld zone to hold all our interfaces.
+/// Create a firewalld zone to hold all our interfaces.
 fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> NetavarkResult<bool> {
     debug!("Creating firewall zone {}", zone_name);
 
@@ -517,7 +517,7 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> NetavarkResul
     Ok(true)
 }
 
-// Add source subnets to the zone.
+/// Add source subnets to the zone.
 pub fn add_source_subnets_to_zone(
     conn: &Connection,
     zone_name: &str,
@@ -563,7 +563,7 @@ pub fn add_source_subnets_to_zone(
     Ok(())
 }
 
-// Add a policy object for the zone to handle masqeuradeing.
+/// Add a policy object for the zone to handle masquerading.
 fn add_policy_if_not_exist(
     conn: &Connection,
     policy_name: &str,
@@ -652,11 +652,11 @@ fn add_policy_if_not_exist(
     Ok(true)
 }
 
-// Make a port-forward tuple for firewalld
-// Port forward rules are a 4-tuple of:
-// (port, protocol, to-port, to-addr)
-// Port, to-port can be ranges (separated via hyphen)
-// Also accepts IP address to forward to.
+/// Make a port-forward tuple for firewalld
+/// Port forward rules are a 4-tuple of:
+/// (port, protocol, to-port, to-addr)
+/// Port, to-port can be ranges (separated via hyphen)
+/// Also accepts IP address to forward to.
 fn make_port_tuple(port: &PortMapping, addr: &str) -> (String, String, String, String) {
     if port.range > 1 {
         // Subtract 1 as these are 1-indexed strings - range of 2 is 1000-1001

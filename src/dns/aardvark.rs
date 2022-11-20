@@ -31,13 +31,13 @@ pub struct AardvarkEntry<'a> {
 
 #[derive(Debug, Clone)]
 pub struct Aardvark {
-    // aardvark's config directory
+    /// aardvark's config directory
     pub config: String,
-    // tells if container is rootfull or rootless
+    /// tells if container is rootfull or rootless
     pub rootless: bool,
-    // path to the aardvark-dns binary
+    /// path to the aardvark-dns binary
     pub aardvark_bin: String,
-    // port to bind to
+    /// port to bind to
     pub port: String,
 }
 
@@ -51,7 +51,7 @@ impl Aardvark {
         }
     }
 
-    // On success retuns aardvark server's pid or returns -1;
+    /// On success retuns aardvark server's pid or returns -1;
     fn get_aardvark_pid(&mut self) -> i32 {
         let path = Path::new(&self.config).join("aardvark.pid");
         let pid: i32 = match fs::read_to_string(&path) {

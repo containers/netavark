@@ -632,7 +632,7 @@ fn create_veth_pair(
     Ok(mac)
 }
 
-// make sure the LinkMessage has the kind bridge
+/// make sure the LinkMessage has the kind bridge
 fn check_link_is_bridge(msg: LinkMessage, br_name: &str) -> NetavarkResult<LinkMessage> {
     for nla in msg.nlas.iter() {
         if let Nla::Info(info) = nla {
