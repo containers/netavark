@@ -70,7 +70,7 @@ pub enum NetavarkError {
     Io(std::io::Error),
 
     Dbus(zbus::Error),
-    DbusVariant(zvariant::Error),
+    DbusVariant(zbus::zvariant::Error),
 
     Sysctl(sysctl::SysctlError),
 
@@ -175,8 +175,8 @@ impl From<zbus::Error> for NetavarkError {
     }
 }
 
-impl From<zvariant::Error> for NetavarkError {
-    fn from(err: zvariant::Error) -> NetavarkError {
+impl From<zbus::zvariant::Error> for NetavarkError {
+    fn from(err: zbus::zvariant::Error) -> NetavarkError {
         NetavarkError::DbusVariant(err)
     }
 }

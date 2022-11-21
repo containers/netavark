@@ -4,12 +4,13 @@ use crate::network::internal_types::{PortForwardConfig, TearDownNetwork, Teardow
 use crate::network::types::PortMapping;
 use crate::network::{internal_types, types};
 use core::convert::TryFrom;
-use futures::executor::block_on;
 use log::{debug, info};
 use std::collections::HashMap;
 use std::vec::Vec;
-use zbus::Connection;
-use zvariant::{Array, Signature, Value};
+use zbus::{
+    blocking::Connection,
+    zvariant::{Array, Signature, Value},
+};
 
 const ZONENAME: &str = "netavark_zone";
 const POLICYNAME: &str = "netavark_policy";
@@ -60,13 +61,13 @@ impl firewall::FirewallDriver for FirewallD {
 
         if need_reload {
             debug!("Reloading firewalld config to bring up zone and policy");
-            let _ = block_on(self.conn.call_method(
+            let _ = self.conn.call_method(
                 Some("org.fedoraproject.FirewallD1"),
                 "/org/fedoraproject/FirewallD1",
                 Some("org.fedoraproject.FirewallD1"),
                 "reload",
                 &(),
-            ))?;
+            )?;
         }
 
         // MUST come after the reload; otherwise the zone we made might not be
@@ -94,13 +95,13 @@ impl firewall::FirewallDriver for FirewallD {
         if let Some(subnets) = tear.config.net.subnets {
             for subnet in subnets {
                 debug!("Removing subnet {} from zone {}", subnet.subnet, ZONENAME);
-                let _ = block_on(self.conn.call_method(
+                let _ = self.conn.call_method(
                     Some("org.fedoraproject.FirewallD1"),
                     "/org/fedoraproject/FirewallD1",
                     Some("org.fedoraproject.FirewallD1.zone"),
                     "removeSource",
                     &(ZONENAME, subnet.subnet.to_string()),
-                ))?;
+                )?;
             }
         }
 
@@ -116,13 +117,13 @@ impl firewall::FirewallDriver for FirewallD {
         // I don't think there's a safer way, unfortunately.
 
         // Get the current configuration for the policy
-        let policy_config_msg = block_on(self.conn.call_method(
+        let policy_config_msg = self.conn.call_method(
             Some("org.fedoraproject.FirewallD1"),
             "/org/fedoraproject/FirewallD1",
             Some("org.fedoraproject.FirewallD1.policy"),
             "getPolicySettings",
             &(PORTPOLICYNAME),
-        ))?;
+        )?;
         let policy_config: HashMap<&str, Value> = match policy_config_msg.body() {
             Ok(m) => m,
             Err(e) => {
@@ -239,13 +240,13 @@ impl firewall::FirewallDriver for FirewallD {
         }
 
         // Send the updated configuration back to firewalld.
-        match block_on(self.conn.call_method(
+        match self.conn.call_method(
             Some("org.fedoraproject.FirewallD1"),
             "/org/fedoraproject/FirewallD1",
             Some("org.fedoraproject.FirewallD1.policy"),
             "setPolicySettings",
             &(PORTPOLICYNAME, new_policy_config),
-        )) {
+        ) {
             Ok(_) => info!(
                 "Successfully added port-forwarding rules for container {}",
                 setup_portfw.container_id
@@ -266,13 +267,13 @@ impl firewall::FirewallDriver for FirewallD {
 
     fn teardown_port_forward(&self, teardown_pf: TeardownPortForward) -> NetavarkResult<()> {
         // Get the current configuration for the policy
-        let policy_config_msg = block_on(self.conn.call_method(
+        let policy_config_msg = self.conn.call_method(
             Some("org.fedoraproject.FirewallD1"),
             "/org/fedoraproject/FirewallD1",
             Some("org.fedoraproject.FirewallD1.policy"),
             "getPolicySettings",
             &(PORTPOLICYNAME),
-        ))?;
+        )?;
         let policy_config: HashMap<&str, Value> = match policy_config_msg.body() {
             Ok(m) => m,
             Err(e) => {
@@ -423,13 +424,13 @@ impl firewall::FirewallDriver for FirewallD {
         }
 
         // Send the updated configuration back to firewalld.
-        match block_on(self.conn.call_method(
+        match self.conn.call_method(
             Some("org.fedoraproject.FirewallD1"),
             "/org/fedoraproject/FirewallD1",
             Some("org.fedoraproject.FirewallD1.policy"),
             "setPolicySettings",
             &(PORTPOLICYNAME, new_policy_config),
-        )) {
+        ) {
             Ok(_) => info!(
                 "Successfully added port-forwarding rules for container {}",
                 teardown_pf.config.container_id
@@ -454,13 +455,13 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> NetavarkResul
     debug!("Creating firewall zone {}", zone_name);
 
     // First, double-check if the zone exists in the running config.
-    let zones_msg = block_on(conn.call_method(
+    let zones_msg = conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1",
         Some("org.fedoraproject.FirewallD1.zone"),
         "getZones",
         &(),
-    ))?;
+    )?;
     let zones: Vec<&str> = match zones_msg.body() {
         Ok(b) => b,
         Err(e) => {
@@ -478,13 +479,13 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> NetavarkResul
     }
 
     // Zone is not in running config - check permanent config.
-    let perm_zones_msg = block_on(conn.call_method(
+    let perm_zones_msg = conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1/config",
         Some("org.fedoraproject.FirewallD1.config"),
         "getZoneNames",
         &(),
-    ))?;
+    )?;
     let zones_perm: Vec<&str> = match perm_zones_msg.body() {
         Ok(b) => b,
         Err(e) => {
@@ -506,13 +507,13 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> NetavarkResul
     // errors - but I really don't want to deal with matching error strings and
     // the complexities that could entail.
     // TODO: We can add a description to the zone, should do that.
-    let _ = block_on(conn.call_method(
+    let _ = conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1/config",
         Some("org.fedoraproject.FirewallD1.config"),
         "addZone2",
         &(zone_name, HashMap::<&str, &Value>::new()),
-    ))?;
+    )?;
 
     Ok(true)
 }
@@ -525,13 +526,13 @@ pub fn add_source_subnets_to_zone(
 ) -> NetavarkResult<()> {
     for net in subnets {
         // Check if subnet already exists in zone
-        let subnet_zone = block_on(conn.call_method(
+        let subnet_zone = conn.call_method(
             Some("org.fedoraproject.FirewallD1"),
             "/org/fedoraproject/FirewallD1",
             Some("org.fedoraproject.FirewallD1.zone"),
             "getZoneOfSource",
             &(net.subnet.to_string()),
-        ))?;
+        )?;
         let zone_string: String = match subnet_zone.body() {
             Ok(s) => s,
             Err(e) => {
@@ -551,13 +552,13 @@ pub fn add_source_subnets_to_zone(
             net.subnet, zone_name
         );
 
-        let _ = block_on(conn.call_method(
+        let _ = conn.call_method(
             Some("org.fedoraproject.FirewallD1"),
             "/org/fedoraproject/FirewallD1",
             Some("org.fedoraproject.FirewallD1.zone"),
             "changeZoneOfSource",
             &(zone_name, net.subnet.to_string()),
-        ))?;
+        )?;
     }
 
     Ok(())
@@ -577,13 +578,13 @@ fn add_policy_if_not_exist(
     );
 
     // Does policy exist in running policies?
-    let policies_msg = block_on(conn.call_method(
+    let policies_msg = conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1",
         Some("org.fedoraproject.FirewallD1.policy"),
         "getPolicies",
         &(),
-    ))?;
+    )?;
     let policies: Vec<&str> = match policies_msg.body() {
         Ok(v) => v,
         Err(e) => {
@@ -601,13 +602,13 @@ fn add_policy_if_not_exist(
     }
 
     // Does the policy exist in permanent policies?
-    let perm_policies_msg = block_on(conn.call_method(
+    let perm_policies_msg = conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1/config",
         Some("org.fedoraproject.FirewallD1.config"),
         "getPolicyNames",
         &(),
-    ))?;
+    )?;
     let perm_policies: Vec<&str> = match perm_policies_msg.body() {
         Ok(v) => v,
         Err(e) => {
@@ -641,13 +642,13 @@ fn add_policy_if_not_exist(
 
     // Policy does not exist, create it.
     // Returns object path, which we don't need.
-    let _ = block_on(conn.call_method(
+    let _ = conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1/config",
         Some("org.fedoraproject.FirewallD1.config"),
         "addPolicy",
         &(policy_name, &policy_opts),
-    ))?;
+    )?;
 
     Ok(true)
 }

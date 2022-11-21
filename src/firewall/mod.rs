@@ -2,10 +2,9 @@ use crate::error::{NetavarkError, NetavarkResult};
 use crate::network::internal_types::{
     PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
 };
-use futures::executor::block_on;
 use log::{debug, info};
 use std::env;
-use zbus::Connection;
+use zbus::blocking::Connection;
 
 pub mod firewalld;
 pub mod iptables;
@@ -40,7 +39,7 @@ fn get_firewall_impl() -> NetavarkResult<FirewallImpl> {
         debug!("Forcibly using firewall driver {}", var);
         match var.to_lowercase().as_str() {
             "firewalld" => {
-                let conn = match block_on(Connection::system()) {
+                let conn = match Connection::system() {
                     Ok(c) => c,
                     Err(e) => {
                         return Err(NetavarkError::wrap(
@@ -67,17 +66,17 @@ fn get_firewall_impl() -> NetavarkResult<FirewallImpl> {
     Ok(FirewallImpl::Iptables)
 
     // Is firewalld running?
-    // let conn = match block_on(Connection::system()) {
+    // let conn = match Connection::system() {
     //     Ok(conn) => conn,
     //     Err(_) => return FirewallImpl::Iptables,
     // };
-    // match block_on(conn.call_method(
+    // match conn.call_method(
     //     Some("org.freedesktop.DBus"),
     //     "/org/freedesktop/DBus",
     //     Some("org.freedesktop.DBus"),
     //     "GetNameOwner",
     //     &"org.fedoraproject.FirewallD1",
-    // )) {
+    // ) {
     //     Ok(_) => FirewallImpl::Firewalld(conn),
     //     Err(_) => FirewallImpl::Iptables,
     // }
