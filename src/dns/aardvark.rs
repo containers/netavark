@@ -22,6 +22,7 @@ const AARDVARK_COMMIT_LOCK: &str = "aardvark.lock";
 pub struct AardvarkEntry<'a> {
     pub network_name: &'a str,
     pub network_gateways: Vec<IpAddr>,
+    pub network_dns_servers: &'a Option<Vec<IpAddr>>,
     pub container_id: &'a str,
     pub container_ips_v4: Vec<Ipv4Addr>,
     pub container_ips_v6: Vec<Ipv6Addr>,
@@ -183,15 +184,33 @@ impl Aardvark {
 
             let file = match OpenOptions::new().write(true).create_new(true).open(&path) {
                 Ok(mut f) => {
+                    // collect gateway
                     let gws = entry
                         .network_gateways
                         .iter()
                         .map(|g| g.to_string())
                         .collect::<Vec<String>>()
                         .join(",");
-                    f.write_all(gws.as_bytes())?;
-                    f.write_all("\n".as_bytes())?;
 
+                    // collect network dns servers if specified
+                    let network_dns_servers =
+                        if let Some(network_dns_servers) = &entry.network_dns_servers {
+                            if !network_dns_servers.is_empty() {
+                                let dns_server_collected = network_dns_servers
+                                    .iter()
+                                    .map(|g| g.to_string())
+                                    .collect::<Vec<String>>()
+                                    .join(",");
+                                format!(" {}", dns_server_collected)
+                            } else {
+                                "".to_string()
+                            }
+                        } else {
+                            "".to_string()
+                        };
+
+                    let data = format!("{}{}\n", gws, network_dns_servers);
+                    f.write_all(data.as_bytes())?; // return error if write fails
                     f
                 }
                 Err(ref e) if e.kind() == ErrorKind::AlreadyExists => {

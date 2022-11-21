@@ -182,6 +182,7 @@ impl driver::NetworkDriver for Bridge<'_> {
                 network_name: &self.info.network.name,
                 container_id: self.info.container_id,
                 network_gateways: gw,
+                network_dns_servers: &self.info.network.network_dns_servers,
                 container_ips_v4: ipv4,
                 container_ips_v6: ipv6,
                 container_names: names,
