@@ -52,7 +52,7 @@ impl Aardvark {
     }
 
     /// On success retuns aardvark server's pid or returns -1;
-    fn get_aardvark_pid(&mut self) -> i32 {
+    fn get_aardvark_pid(&self) -> i32 {
         let path = Path::new(&self.config).join("aardvark.pid");
         let pid: i32 = match fs::read_to_string(&path) {
             Ok(content) => match content.parse::<i32>() {
@@ -121,7 +121,7 @@ impl Aardvark {
         Ok(())
     }
 
-    pub fn notify(&mut self, start: bool) -> Result<()> {
+    pub fn notify(&self, start: bool) -> Result<()> {
         let aardvark_pid = self.get_aardvark_pid();
         if aardvark_pid != -1 {
             match signal::kill(Pid::from_raw(aardvark_pid), Signal::SIGHUP) {
@@ -158,13 +158,13 @@ impl Aardvark {
             .read(true)
             .write(true)
             .create(true)
-            .open(lockfile_path.clone())
+            .open(&lockfile_path)
         {
             Ok(file) => file,
             Err(e) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("Failed to open/create lockfile {:?}: {}", lockfile_path, e),
+                    format!("Failed to open/create lockfile {:?}: {}", &lockfile_path, e),
                 ));
             }
         };
@@ -277,7 +277,7 @@ impl Aardvark {
         Ok(())
     }
 
-    pub fn commit_netavark_entries(&mut self, entries: Vec<AardvarkEntry>) -> Result<()> {
+    pub fn commit_netavark_entries(&self, entries: Vec<AardvarkEntry>) -> Result<()> {
         if !entries.is_empty() {
             self.commit_entries(entries)?;
             self.notify(true)?;
@@ -285,7 +285,7 @@ impl Aardvark {
         Ok(())
     }
 
-    pub fn delete_entry(&mut self, container_id: &str, network_name: String) -> Result<()> {
+    pub fn delete_entry(&self, container_id: &str, network_name: &str) -> Result<()> {
         let path = Path::new(&self.config).join(network_name);
         let file_content = fs::read_to_string(&path)?;
         let lines: Vec<&str> = file_content.split_terminator('\n').collect();
@@ -309,15 +309,14 @@ impl Aardvark {
     }
 
     pub fn delete_from_netavark_entries(
-        &mut self,
-        network_options: types::NetworkOptions,
+        &self,
+        network_options: &types::NetworkOptions,
     ) -> Result<()> {
         let mut modified = false;
-        let container_id = network_options.container_id;
-        for (key, network) in network_options.network_info {
+        for (key, network) in &network_options.network_info {
             if network.dns_enabled && network.driver == DRIVER_BRIDGE {
                 modified = true;
-                self.delete_entry(&container_id, key)?;
+                self.delete_entry(&network_options.container_id, key)?;
             }
         }
         if modified {
