@@ -352,6 +352,28 @@ impl Socket {
         Ok(links)
     }
 
+    pub fn dump_addresses(&mut self) -> NetavarkResult<Vec<AddressMessage>> {
+        let msg = AddressMessage::default();
+
+        let results =
+            self.make_netlink_request(RtnlMessage::GetAddress(msg), NLM_F_DUMP | NLM_F_ACK)?;
+
+        let mut addresses = Vec::with_capacity(results.len());
+
+        for res in results {
+            match res {
+                RtnlMessage::NewAddress(m) => addresses.push(m),
+                m => {
+                    return Err(NetavarkError::Message(format!(
+                        "unexpected netlink message type: {}",
+                        m.message_type()
+                    )))
+                }
+            };
+        }
+        Ok(addresses)
+    }
+
     pub fn set_up(&mut self, id: LinkID) -> NetavarkResult<()> {
         let mut msg = LinkMessage::default();
 
