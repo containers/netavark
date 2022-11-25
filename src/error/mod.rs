@@ -83,7 +83,7 @@ pub enum NetavarkError {
 
 /// Internal struct for JSON output
 #[derive(Debug, Serialize, Deserialize)]
-struct JsonError {
+pub struct JsonError {
     pub error: String,
 }
 
