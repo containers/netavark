@@ -57,6 +57,10 @@ build_netavark: bin $(CARGO_TARGET_DIR)
 	$(CARGO) build $(release)
 	cp $(CARGO_TARGET_DIR)/$(profile)/netavark bin/netavark$(if $(debug),.debug,)
 
+.PHONY: examples
+examples: bin $(CARGO_TARGET_DIR)
+	cargo build --examples $(release)
+
 .PHONY: crate-publish
 crate-publish:
 	@if [ "$(CRATE_VERSION)" != "$(GIT_TAG)" ]; then\
