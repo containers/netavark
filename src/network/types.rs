@@ -49,6 +49,10 @@ pub struct Network {
     /// Subnets to use for this network.
     #[serde(rename = "subnets")]
     pub subnets: Option<Vec<Subnet>>,
+
+    /// Network DNS servers for aardvark-dns.
+    #[serde(rename = "network_dns_servers")]
+    pub network_dns_servers: Option<Vec<IpAddr>>,
 }
 
 /// NetworkOptions for a given container.
