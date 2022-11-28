@@ -9,6 +9,7 @@ use netlink_packet_route::{
 use nix::sched;
 use sha2::{Digest, Sha512};
 use std::collections::HashMap;
+use std::env;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{self, Error};
@@ -23,6 +24,19 @@ use super::netlink;
 
 pub struct CoreUtils {
     pub networkns: String,
+}
+
+pub fn get_netavark_dns_port() -> Result<u16, NetavarkError> {
+    match env::var("NETAVARK_DNS_PORT") {
+        Ok(port_string) => match port_string.parse() {
+            Ok(port) => Ok(port),
+            Err(e) => Err(NetavarkError::Message(format!(
+                "Invalid NETAVARK_DNS_PORT {}: {}",
+                port_string, e
+            ))),
+        },
+        Err(_) => Ok(53),
+    }
 }
 
 pub fn parse_option<T>(

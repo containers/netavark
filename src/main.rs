@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 
 use netavark::commands::setup;
 use netavark::commands::teardown;
+use netavark::commands::update;
 use netavark::commands::version;
 
 #[derive(Parser, Debug)]
@@ -28,6 +29,8 @@ struct Opts {
 enum SubCommand {
     /// Configures the given network namespace with the given configuration.
     Setup(setup::Setup),
+    /// Updates network dns servers for an already configured network.
+    Update(update::Update),
     /// Undo any configuration applied via setup command.
     Teardown(teardown::Teardown),
     /// Display info about netavark.
@@ -47,6 +50,7 @@ fn main() {
     let result = match opts.subcmd {
         SubCommand::Setup(setup) => setup.exec(opts.file, config, aardvark_bin, rootless),
         SubCommand::Teardown(teardown) => teardown.exec(opts.file, config, aardvark_bin, rootless),
+        SubCommand::Update(update) => update.exec(config, aardvark_bin, rootless),
         SubCommand::Version(version) => version.exec(),
     };
 
