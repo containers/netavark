@@ -95,6 +95,7 @@ impl Teardown {
                 container_dns_servers: &network_options.dns_servers,
                 netns_host: hostns.fd,
                 netns_container: netns.fd,
+                netns_path: &self.network_namespace_path,
                 network,
                 per_network_opts,
                 port_mappings: &network_options.port_mappings,

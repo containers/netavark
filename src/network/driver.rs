@@ -22,6 +22,7 @@ pub struct DriverInfo<'a> {
     pub container_dns_servers: &'a Option<Vec<IpAddr>>,
     pub netns_host: RawFd,
     pub netns_container: RawFd,
+    pub netns_path: &'a str,
     pub network: &'a Network,
     pub per_network_opts: &'a PerNetworkOptions,
     pub port_mappings: &'a Option<Vec<PortMapping>>,
