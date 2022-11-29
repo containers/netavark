@@ -120,7 +120,7 @@ unit: $(CARGO_TARGET_DIR)
 	$(CARGO) test
 
 .PHONY: integration
-integration: $(CARGO_TARGET_DIR)
+integration: $(CARGO_TARGET_DIR) examples
 	# needs to be run as root or with podman unshare --rootless-netns
 	bats test/
 	bats test-dhcp/
