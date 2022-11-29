@@ -40,4 +40,4 @@ fs2 = "0.4.3"
 netlink-sys = "0.8.3"
 
 [build-dependencies]
-chrono = { version = "0.4.22", default-features = false, features = ["clock"] }
+chrono = { version = "0.4.23", default-features = false, features = ["clock"] }
