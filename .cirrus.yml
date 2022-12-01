@@ -149,31 +149,6 @@ validate_aarch64_task:
   setup_script: *setup
   main_script: *main
 
-
-verify_vendor_task:
-  alias: "verify_vendor"
-  depends_on:
-    - "build"
-  gce_instance: *standard_gce_x86_64
-  cargo_cache: *ro_cargo_cache
-  targets_cache: *ro_targets_cache
-  bin_cache: *ro_bin_cache
-  setup_script: *setup
-  main_script: *main
-
-
-verify_vendor_aarch64_task:
-  alias: "verify_vendor_aarch64"
-  depends_on:
-    - "build_aarch64"
-  ec2_instance: *standard_build_ec2_aarch64
-  cargo_cache: *ro_cargo_cache_aarch64
-  targets_cache: *ro_targets_cache_aarch64
-  bin_cache: *ro_bin_cache_aarch64
-  setup_script: *setup
-  main_script: *main
-
-
 unit_task:
   alias: "unit"
   depends_on:
@@ -279,8 +254,6 @@ success_task:
     - "build_aarch64"
     - "validate"
     - "validate_aarch64"
-    - "verify_vendor"
-    - "verify_vendor_aarch64"
     - "unit"
     - "unit_aarch64"
     - "integration"

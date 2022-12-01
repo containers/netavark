@@ -46,17 +46,6 @@ _run_validate_aarch64() {
     _run_validate
 }
 
-_run_verify_vendor() {
-    # N/B: current repo. dir. contents produced by _run_build() above.
-    if ! git diff --no-ext-diff --quiet --exit-code; then
-        die "Found uncommited and necessary changes to vendoring, please fix, commit, and re-submit."
-    fi
-}
-
-_run_verify_vendor_aarch64() {
-    _run_verify_vendor
-}
-
 _run_unit() {
     make unit
 }
