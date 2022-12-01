@@ -62,3 +62,14 @@ function run_netavark_plugins() {
     # interface should be back in the host ns
     run_in_host_netns ip link show dummy0
 }
+
+@test "plugin - stderr" {
+    config=$(get_conf stderr-plugin)
+
+    run_netavark_plugins setup $(get_container_netns_path) <<<"$config"
+    assert "${lines[0]}" == "stderr setup" "stderr log on first line"
+    assert "${lines[1]}" =~ '"interfaces"' "status block"
+
+    run_netavark_plugins teardown $(get_container_netns_path) <<<"$config"
+    assert 'stderr teardown' "stderr log"
+}
