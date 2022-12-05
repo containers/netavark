@@ -6,7 +6,6 @@ use crate::network::driver::{get_network_driver, DriverInfo};
 use crate::{firewall, network};
 use clap::Parser;
 use log::debug;
-use std::env;
 use std::path::Path;
 
 #[derive(Parser, Debug)]
@@ -36,20 +35,7 @@ impl Teardown {
 
         let mut error_list = NetavarkErrorList::new();
 
-        let dns_port = match env::var("NETAVARK_DNS_PORT") {
-            Ok(port_string) => match port_string.parse() {
-                Ok(port) => port,
-                Err(e) => {
-                    error_list.push(NetavarkError::Message(format!(
-                        "Invalid NETAVARK_DNS_PORT {}: {}",
-                        port_string, e
-                    )));
-                    // default to 53 if there is a error here, we should not prevent cleanup because of it
-                    53
-                }
-            },
-            Err(_) => 53,
-        };
+        let dns_port = core_utils::get_netavark_dns_port()?;
 
         if Path::new(&aardvark_bin).exists() {
             // stop dns server first before netavark clears the interface

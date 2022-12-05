@@ -9,7 +9,6 @@ use crate::network::{core_utils, types};
 use clap::Parser;
 use log::{debug, error, info};
 use std::collections::HashMap;
-use std::env;
 use std::fs::{self};
 use std::path::Path;
 
@@ -51,18 +50,7 @@ impl Setup {
 
         let mut response: HashMap<String, types::StatusBlock> = HashMap::new();
 
-        let dns_port = match env::var("NETAVARK_DNS_PORT") {
-            Ok(port_string) => match port_string.parse() {
-                Ok(port) => port,
-                Err(e) => {
-                    return Err(NetavarkError::Message(format!(
-                        "Invalid NETAVARK_DNS_PORT {}: {}",
-                        port_string, e
-                    )))
-                }
-            },
-            Err(_) => 53,
-        };
+        let dns_port = core_utils::get_netavark_dns_port()?;
 
         let (mut hostns, mut netns) =
             core_utils::open_netlink_sockets(&self.network_namespace_path)?;

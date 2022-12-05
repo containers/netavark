@@ -327,6 +327,62 @@ impl Aardvark {
         Ok(())
     }
 
+    // Modifies network dns_servers for a specific network and notifies aardvark-dns server
+    // with the change.
+    pub fn modify_network_dns_servers(
+        &self,
+        network_name: &str,
+        network_dns_servers: &Vec<String>,
+    ) -> Result<()> {
+        let mut dns_servers_modified = false;
+        let path = Path::new(&self.config).join(network_name);
+        let file_content = fs::read_to_string(&path)?;
+
+        let mut file = File::create(&path)?;
+
+        //for line in lines {
+        for (idx, line) in file_content.split_terminator('\n').enumerate() {
+            if idx == 0 {
+                // If this is first line, we have to modify this
+                // first line has a format of `<BINDIP>... <NETWORK_DNSSERVERS>..`
+                // We will read the first line and get the first coloumn and
+                // override the second coloumn with new network dns servers.
+                let network_parts = line.split(' ').collect::<Vec<&str>>();
+                if network_parts.is_empty() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("invalid network configuration file: {}", path.display()),
+                    ));
+                }
+                let network_dns_servers_collected = if !network_dns_servers.is_empty() {
+                    dns_servers_modified = true;
+                    let dns_server_collected = network_dns_servers
+                        .iter()
+                        .map(|g| g.to_string())
+                        .collect::<Vec<String>>()
+                        .join(",");
+                    format!(" {}", dns_server_collected)
+                } else {
+                    "".to_string()
+                };
+                // Modify line to support new format
+                let content = format!("{}{}", network_parts[0], network_dns_servers_collected);
+                file.write_all(content.as_bytes())?;
+            } else {
+                file.write_all(line.as_bytes())?;
+            }
+            file.write_all(b"\n")?;
+        }
+
+        // If dns servers were updated notify the aardvark-dns server
+        // if refresh is needed.
+        if dns_servers_modified {
+            self.notify(false)?;
+        }
+
+        Ok(())
+    }
+
     pub fn delete_from_netavark_entries(
         &self,
         network_options: &types::NetworkOptions,
