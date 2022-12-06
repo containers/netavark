@@ -10,6 +10,9 @@ LIBEXECDIR ?= ${PREFIX}/libexec
 LIBEXECPODMAN ?= ${LIBEXECDIR}/podman
 
 SELINUXOPT ?= $(shell test -x /usr/sbin/selinuxenabled && selinuxenabled && echo -Z)
+# Get crate version by parsing the line that starts with version.
+CRATE_VERSION ?= $(shell grep ^version Cargo.toml | awk '{print $$3}')
+GIT_TAG ?= $(shell git describe --tags)
 
 # Set this to any non-empty string to enable unoptimized
 # build w/ debugging features.
@@ -46,6 +49,16 @@ $(CARGO_TARGET_DIR):
 build: bin $(CARGO_TARGET_DIR)
 	cargo build $(release)
 	cp $(CARGO_TARGET_DIR)/$(profile)/netavark bin/netavark$(if $(debug),.debug,)
+
+.PHONY: crate-publish
+crate-publish:
+	@if [ "$(CRATE_VERSION)" != "$(GIT_TAG)" ]; then\
+		echo "Git tag is not equivalent to the version set in Cargo.toml. Please checkout the correct tag";\
+		exit 1;\
+	fi
+	@echo "It is expected that you have already done 'cargo login' before running this command. If not command may fail later"
+	cargo publish --dry-run
+	cargo publish
 
 .PHONY: clean
 clean:
