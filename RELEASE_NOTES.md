@@ -1,5 +1,10 @@
 # Release Notes
 
+## v1.4.0
+* Added network update command
+* Corrected issue #491 to only teardown network forwarding when on complete teardown only
+* Fixed some rust documentation
+
 ## v1.3.0
 * Housekeep and code cleanup
 * macvlan: remove tmp interface when name already used in netns
