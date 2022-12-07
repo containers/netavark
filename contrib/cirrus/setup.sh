@@ -21,17 +21,9 @@ msg "************************************************************"
 
 show_env_vars
 
-req_env_vars AARDVARK_DNS_URL
-
-showrun curl --fail --location -o /tmp/aardvark-dns.zip "$AARDVARK_DNS_URL"
 mkdir -p /usr/libexec/podman
-cd /usr/libexec/podman
-rm -f aardvark-dns*
-showrun unzip -o /tmp/aardvark-dns.zip
-if [[ $(uname -m) != "x86_64" ]]; then
-    showrun mv aardvark-dns.$(uname -m)-unknown-linux-gnu aardvark-dns
-fi
-showrun chmod a+x /usr/libexec/podman/aardvark-dns
+cargo install --root /usr/libexec/podman --git https://github.com/containers/aardvark-dns
+mv /usr/libexec/podman/bin/aardvark-dns /usr/libexec/podman
 
 # Warning, this isn't the end.  An exit-handler is installed to finalize
 # setup of env. vars.  This is required for runner.sh to operate properly.
