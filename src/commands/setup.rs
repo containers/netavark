@@ -30,7 +30,7 @@ impl Setup {
     pub fn exec(
         &self,
         input_file: Option<String>,
-        config_dir: String,
+        config_dir: &str,
         aardvark_bin: String,
         rootless: bool,
     ) -> NetavarkResult<()> {
