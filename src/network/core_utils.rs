@@ -22,6 +22,10 @@ use sysctl::{Sysctl, SysctlError};
 
 use super::netlink;
 
+pub const IPVLAN_MODE_L2: u16 = 0;
+pub const IPVLAN_MODE_L3: u16 = 1;
+pub const IPVLAN_MODE_L3S: u16 = 2;
+
 pub struct CoreUtils {
     pub networkns: String,
 }
@@ -228,6 +232,19 @@ impl CoreUtils {
             // default to bridge
             name => Err(NetavarkError::msg(format!(
                 "invalid macvlan mode \"{}\"",
+                name
+            ))),
+        }
+    }
+
+    pub fn get_ipvlan_mode_from_string(mode: &str) -> NetavarkResult<u16> {
+        match mode {
+            // default to l2 when unset
+            "" | "l2" => Ok(IPVLAN_MODE_L2),
+            "l3" => Ok(IPVLAN_MODE_L3),
+            "l3s" => Ok(IPVLAN_MODE_L3S),
+            name => Err(NetavarkError::msg(format!(
+                "invalid ipvlan mode \"{}\"",
                 name
             ))),
         }

@@ -1,7 +1,7 @@
 use log::{debug, error};
 use std::{collections::HashMap, net::IpAddr, os::unix::prelude::RawFd};
 
-use netlink_packet_route::nlas::link::{InfoData, InfoKind, InfoMacVlan, Nla};
+use netlink_packet_route::nlas::link::{InfoData, InfoIpVlan, InfoKind, InfoMacVlan, Nla};
 use rand::distributions::{Alphanumeric, DistString};
 
 use crate::network::macvlan_dhcp::{get_dhcp_lease, release_dhcp_lease};
@@ -21,39 +21,59 @@ use super::{
     types::{NetInterface, StatusBlock},
 };
 
+enum KindData {
+    MacVlan {
+        /// static mac address
+        mac_address: Option<Vec<u8>>,
+        /// macvlan mode
+        mode: u32,
+    },
+    IpVlan {
+        /// ipvlan mode
+        mode: u16,
+    },
+}
+
+impl core::fmt::Display for KindData {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
+        f.write_str(match self {
+            Self::MacVlan { .. } => "macvlan",
+            Self::IpVlan { .. } => "ipvlan",
+        })
+    }
+}
+
 struct InternalData {
     /// interface name inside the container
     container_interface_name: String,
     /// interface name on the host
     host_interface_name: String,
-    /// static mac address
-    mac_address: Option<Vec<u8>>,
     /// ip addresses
     ipam: IPAMAddresses,
     /// mtu for the network interfaces (0 if default)
     mtu: u32,
-    /// macvlan mode
-    macvlan_mode: u32,
     /// Route metric for default routes added to the network
     metric: Option<u32>,
+    /// kind-specific data
+    kind: KindData,
     // TODO: add vlan
 }
 
-pub struct MacVlan<'a> {
+pub struct Vlan<'a> {
     info: DriverInfo<'a>,
     data: Option<InternalData>,
 }
 
-impl<'a> MacVlan<'a> {
+impl<'a> Vlan<'a> {
     pub fn new(info: DriverInfo<'a>) -> Self {
-        MacVlan {
+        Self {
             info,
             data: None::<InternalData>,
         }
     }
 }
 
-impl driver::NetworkDriver for MacVlan<'_> {
+impl driver::NetworkDriver for Vlan<'_> {
     fn network_name(&self) -> String {
         self.info.network.name.clone()
     }
@@ -64,17 +84,11 @@ impl driver::NetworkDriver for MacVlan<'_> {
         }
 
         let mode = parse_option(&self.info.network.options, OPTION_MODE, String::default())?;
-        let macvlan_mode = CoreUtils::get_macvlan_mode_from_string(&mode)?;
 
         let mut ipam = get_ipam_addresses(self.info.per_network_opts, self.info.network)?;
 
         let mtu = parse_option(&self.info.network.options, OPTION_MTU, 0)?;
         let metric = parse_option(&self.info.network.options, OPTION_METRIC, 100)?;
-
-        let static_mac = match &self.info.per_network_opts.static_mac {
-            Some(mac) => Some(CoreUtils::decode_address_from_hex(mac)?),
-            None => None,
-        };
 
         // Remove gateways when marked as internal network
         if self.info.network.internal {
@@ -89,11 +103,27 @@ impl driver::NetworkDriver for MacVlan<'_> {
                 .network_interface
                 .clone()
                 .unwrap_or_default(),
-            mac_address: static_mac,
             ipam,
-            macvlan_mode,
             mtu,
             metric: Some(metric),
+            kind: match self.info.network.driver.as_str() {
+                super::constants::DRIVER_IPVLAN => KindData::IpVlan {
+                    mode: CoreUtils::get_ipvlan_mode_from_string(&mode)?,
+                },
+                super::constants::DRIVER_MACVLAN => KindData::MacVlan {
+                    mode: CoreUtils::get_macvlan_mode_from_string(&mode)?,
+                    mac_address: match &self.info.per_network_opts.static_mac {
+                        Some(mac) => Some(CoreUtils::decode_address_from_hex(mac)?),
+                        None => None,
+                    },
+                },
+                other => {
+                    return Err(NetavarkError::msg(format!(
+                        "unsupported VLAN type {}",
+                        other
+                    )))
+                }
+            },
         });
         Ok(())
     }
@@ -115,13 +145,14 @@ impl driver::NetworkDriver for MacVlan<'_> {
 
         let (host_sock, netns_sock) = netlink_sockets;
 
-        let container_macvlan_mac = setup(
+        let container_vlan_mac = setup(
             host_sock,
             netns_sock,
             &self.info.per_network_opts.interface_name,
             data,
             self.info.netns_host,
             self.info.netns_container,
+            &data.kind,
         )?;
 
         //  StatusBlock response is what we return at the end
@@ -143,14 +174,14 @@ impl driver::NetworkDriver for MacVlan<'_> {
                 &data.host_interface_name,
                 &data.container_interface_name,
                 self.info.netns_path,
-                &container_macvlan_mac,
+                &container_vlan_mac,
             )?
         } else {
             data.ipam.net_addresses.clone()
         };
 
         let interface = NetInterface {
-            mac_address: container_macvlan_mac,
+            mac_address: container_vlan_mac,
             subnets: Option::from(subnets),
         };
 
@@ -206,6 +237,7 @@ fn setup(
     data: &InternalData,
     hostns_fd: RawFd,
     netns_fd: RawFd,
+    kind_data: &KindData,
 ) -> NetavarkResult<String> {
     let master_ifname = match data.host_interface_name.as_ref() {
         "" => get_default_route_interface(host)?,
@@ -214,14 +246,25 @@ fn setup(
 
     let link = host.get_link(netlink::LinkID::Name(master_ifname))?;
 
-    let mut opts = CreateLinkOptions::new(if_name.to_string(), InfoKind::MacVlan);
-    opts.mac = data.mac_address.clone().unwrap_or_default();
-    opts.mtu = data.mtu;
-    opts.netns = netns_fd;
-    opts.link = link.header.index;
-    opts.info_data = Some(InfoData::MacVlan(vec![InfoMacVlan::Mode(
-        data.macvlan_mode,
-    )]));
+    let opts = match kind_data {
+        KindData::IpVlan { mode } => {
+            let mut opts = CreateLinkOptions::new(if_name.to_string(), InfoKind::IpVlan);
+            opts.mtu = data.mtu;
+            opts.netns = netns_fd;
+            opts.link = link.header.index;
+            opts.info_data = Some(InfoData::IpVlan(vec![InfoIpVlan::Mode(*mode)]));
+            opts
+        }
+        KindData::MacVlan { mode, mac_address } => {
+            let mut opts = CreateLinkOptions::new(if_name.to_string(), InfoKind::MacVlan);
+            opts.mac = mac_address.clone().unwrap_or_default();
+            opts.mtu = data.mtu;
+            opts.netns = netns_fd;
+            opts.link = link.header.index;
+            opts.info_data = Some(InfoData::MacVlan(vec![InfoMacVlan::Mode(*mode)]));
+            opts
+        }
+    };
     let mut result = host.create_link(opts.clone());
     // Sigh, the kernel creates the interface first in the hostns before moving it into the netns.
     // Therefore it can fail with EEXIST if the name is already used on the host. Create the link
@@ -243,8 +286,8 @@ fn setup(
                         // if last element return directly
                         if i == 2 {
                             return Err(NetavarkError::msg(format!(
-                                "create macvlan interface: {}",
-                                e
+                                "create {} interface: {}",
+                                kind_data, e
                             )));
                         }
                         // retry, error could EEXIST again because we pick a random name
@@ -253,16 +296,19 @@ fn setup(
 
                     let link = netns
                         .get_link(netlink::LinkID::Name(tmp_name.clone()))
-                        .wrap("get tmp macvlan interface")?;
+                        .wrap(format!("get tmp {} interface", kind_data))?;
                     netns
                         .set_link_name(link.header.index, if_name.to_string())
-                        .wrap("rename tmp macvlan interface")
+                        .wrap(format!("rename tmp {} interface", kind_data))
                         .map_err(|err| {
                             // If there is an error here most likely the name in the netns is already used,
                             // make sure to delete the tmp interface.
                             if let Err(err) = netns.del_link(netlink::LinkID::ID(link.header.index))
                             {
-                                error!("failed to delete tmp macvlan link {}: {}", tmp_name, err);
+                                error!(
+                                    "failed to delete tmp {} link {}: {}",
+                                    kind_data, tmp_name, err
+                                );
                             };
                             err
                         })?;
@@ -270,7 +316,7 @@ fn setup(
                     // successful run, break out of loop
                     break;
                 }
-                err => return Err(err).wrap("create macvlan interface")?,
+                err => return Err(err).wrap(format!("create {} interface", kind_data))?,
             },
         }
     }
@@ -280,17 +326,17 @@ fn setup(
 
     let dev = netns
         .get_link(netlink::LinkID::Name(if_name.to_string()))
-        .wrap("get macvlan interface")?;
+        .wrap(format!("get {} interface", kind_data))?;
 
     for addr in &data.ipam.container_addresses {
         netns
             .add_addr(dev.header.index, addr)
-            .wrap("add ip addr to macvlan")?;
+            .wrap(format!("add ip addr to {}", kind_data))?;
     }
 
     netns
         .set_up(netlink::LinkID::ID(dev.header.index))
-        .wrap("set macvlan up")?;
+        .wrap(format!("set {} up", kind_data))?;
 
     core_utils::add_default_routes(netns, &data.ipam.gateway_addresses, data.metric)?;
 

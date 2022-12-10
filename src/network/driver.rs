@@ -8,10 +8,9 @@ use std::net::IpAddr;
 
 use super::{
     bridge::Bridge,
-    constants,
-    macvlan::MacVlan,
-    netlink,
+    constants, netlink,
     types::{Network, PerNetworkOptions, PortMapping, StatusBlock},
+    vlan::Vlan,
 };
 use std::os::unix::io::RawFd;
 
@@ -50,7 +49,7 @@ pub trait NetworkDriver {
 pub fn get_network_driver(info: DriverInfo) -> NetavarkResult<Box<dyn NetworkDriver + '_>> {
     match info.network.driver.as_str() {
         constants::DRIVER_BRIDGE => Ok(Box::new(Bridge::new(info))),
-        constants::DRIVER_MACVLAN => Ok(Box::new(MacVlan::new(info))),
+        constants::DRIVER_IPVLAN | constants::DRIVER_MACVLAN => Ok(Box::new(Vlan::new(info))),
 
         _ => Err(NetavarkError::Message(format!(
             "unknown network driver {}",

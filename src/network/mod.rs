@@ -14,9 +14,9 @@ pub mod constants;
 pub mod core_utils;
 pub mod driver;
 pub mod internal_types;
-pub mod macvlan;
 mod macvlan_dhcp;
 pub mod netlink;
+pub mod vlan;
 
 impl types::NetworkOptions {
     pub fn load(path: Option<String>) -> NetavarkResult<types::NetworkOptions> {
