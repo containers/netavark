@@ -27,7 +27,7 @@ impl Update {
 
     pub fn exec(
         &self,
-        config_dir: String,
+        config_dir: &str,
         aardvark_bin: String,
         rootless: bool,
     ) -> NetavarkResult<()> {

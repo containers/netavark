@@ -42,7 +42,7 @@ fn main() {
     let opts = Opts::parse();
 
     // aardvark config directory must be supplied by parent or it defaults to /tmp/aardvark
-    let config = opts.config.unwrap_or_else(|| String::from("/tmp"));
+    let config = opts.config.as_deref().unwrap_or("/tmp");
     let rootless = opts.rootless.unwrap_or(false);
     let aardvark_bin = opts
         .aardvark_binary
