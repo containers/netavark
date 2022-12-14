@@ -39,6 +39,7 @@ _run_build_aarch64() {
 }
 
 _run_validate() {
+    make -C docs .install.mandown
     make validate
 }
 

@@ -1,12 +1,16 @@
 PREFIX ?= /usr/local
 DATADIR ?= ${PREFIX}/share
 MANDIR ?= $(DATADIR)/man
-MANDOWN ?= $(shell export PATH; command -v mandown)
+MANDOWN ?= mandown
 
-docs: $(patsubst %.md,%,$(wildcard *.md))
+docs: $(patsubst %.md,%,$(wildcard *.1.md))
 
 %.1: %.1.md
 	$(MANDOWN) $< > $@
+
+.PHONY: .install.mandown
+.install.mandown:
+	cargo install mandown
 
 .PHONY: install
 install:

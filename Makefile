@@ -101,6 +101,7 @@ integration: $(CARGO_TARGET_DIR)
 validate: $(CARGO_TARGET_DIR)
 	cargo fmt --all -- --check
 	cargo clippy -p netavark -- -D warnings
+	$(MAKE) docs
 
 .PHONY: vendor-tarball
 vendor-tarball: build install.cargo-vendor-filterer
