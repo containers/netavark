@@ -3,7 +3,7 @@ DATADIR ?= ${PREFIX}/share
 MANDIR ?= $(DATADIR)/man
 MANDOWN ?= $(shell export PATH; command -v mandown)
 
-docs: $(patsubst %.md,%,$(wildcard *.md))
+docs: $(patsubst %.md,%,$(wildcard *.1.md))
 
 %.1: %.1.md
 	$(MANDOWN) $< > $@
