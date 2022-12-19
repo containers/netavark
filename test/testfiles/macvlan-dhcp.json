@@ -1,0 +1,27 @@
+{
+    "container_id": "someID",
+    "container_name": "someName",
+    "networks": {
+       "podman": {
+          "static_ips": [
+          ],
+          "interface_name": "eth0"
+       }
+    },
+    "network_info": {
+       "podman": {
+          "name": "podman",
+          "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+          "driver": "macvlan",
+          "network_interface": "enp9s0u2u1u2",
+          "subnets": [
+          ],
+          "ipv6_enabled": false,
+          "internal": false,
+          "dns_enabled": false,
+          "ipam_options": {
+             "driver": "dhcp"
+          }
+       }
+    }
+ }

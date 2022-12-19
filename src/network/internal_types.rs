@@ -63,6 +63,8 @@ pub struct PortForwardConfig<'a> {
 pub struct IPAMAddresses {
     // ip addresses for netlink
     pub container_addresses: Vec<ipnet::IpNet>,
+    // if using macvlan and dhcp, then true
+    pub dhcp_enabled: bool,
     pub gateway_addresses: Vec<ipnet::IpNet>,
     pub ipv6_enabled: bool,
     // result for podman

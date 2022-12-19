@@ -114,8 +114,8 @@ validate_task:
     - "build"
   gce_instance: &standard_gce_x86_64
     <<: *standard_build_gce_x86_64
-    cpu: 2
-    memory: "4Gb"
+    cpu: 8
+    memory: "8Gb"
   # From this point forward, all cache's become read-only - meaning
   # any changes made in this task aren't re-uploaded to the cache.
   # This avoids some flapping between tasks, along with the upload time.
@@ -226,8 +226,8 @@ ubuntu20_build_task:
       - "build"
     gce_instance: *standard_gce_x86_64
     container:
-        cpu: 2
-        memory: 2
+        cpu: 8
+        memory: "8Gb"
         image: quay.io/libpod/ubuntu20rust
     script:
         - cargo build
@@ -239,8 +239,8 @@ centos9_build_task:
       - "build"
     gce_instance: *standard_gce_x86_64
     container:
-        cpu: 2
-        memory: 2
+        cpu: 8
+        memory: "8Gb"
         image: quay.io/libpod/centos9rust
     script:
         - cargo build

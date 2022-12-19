@@ -141,6 +141,7 @@ pub fn get_ipam_addresses<'a>(
             }
             internal_types::IPAMAddresses {
                 container_addresses,
+                dhcp_enabled: false,
                 gateway_addresses,
                 net_addresses,
                 nameservers,
@@ -151,18 +152,21 @@ pub fn get_ipam_addresses<'a>(
             // no ipam just return empty vectors
             internal_types::IPAMAddresses {
                 container_addresses: vec![],
+                dhcp_enabled: false,
                 gateway_addresses: vec![],
                 net_addresses: vec![],
                 nameservers: vec![],
                 ipv6_enabled: false,
             }
         }
-        Some(constants::IPAM_DHCP) => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "dhcp ipam driver is not yet supported",
-            ));
-        }
+        Some(constants::IPAM_DHCP) => internal_types::IPAMAddresses {
+            container_addresses: vec![],
+            dhcp_enabled: true,
+            gateway_addresses: vec![],
+            ipv6_enabled: false,
+            net_addresses: vec![],
+            nameservers: vec![],
+        },
         Some(driver) => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
