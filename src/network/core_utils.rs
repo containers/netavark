@@ -325,7 +325,7 @@ pub fn open_netlink_sockets(
 }
 
 fn open_netlink_socket(netns_path: &str) -> NetavarkResult<(File, RawFd)> {
-    let ns = wrap!(File::open(netns_path), &format!("open {}", netns_path))?;
+    let ns = wrap!(File::open(netns_path), format!("open {}", netns_path))?;
     let ns_fd = ns.as_raw_fd();
     Ok((ns, ns_fd))
 }
@@ -365,7 +365,7 @@ pub fn add_default_routes(
             }
         };
         sock.add_route(&route)
-            .wrap(&format!("add default route {}", &route))?;
+            .wrap(format!("add default route {}", &route))?;
     }
     Ok(())
 }
