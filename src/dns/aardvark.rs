@@ -55,7 +55,7 @@ impl Aardvark {
     /// On success retuns aardvark server's pid or returns -1;
     fn get_aardvark_pid(&self) -> i32 {
         let path = Path::new(&self.config).join("aardvark.pid");
-        let pid: i32 = match fs::read_to_string(&path) {
+        let pid: i32 = match fs::read_to_string(path) {
             Ok(content) => match content.parse::<i32>() {
                 Ok(val) => val,
                 Err(_) => {
