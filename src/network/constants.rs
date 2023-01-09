@@ -9,6 +9,7 @@ pub const IPAM_DHCP: &str = "dhcp";
 pub const IPAM_NONE: &str = "none";
 
 pub const DRIVER_BRIDGE: &str = "bridge";
+pub const DRIVER_IPVLAN: &str = "ipvlan";
 pub const DRIVER_MACVLAN: &str = "macvlan";
 
 pub const OPTION_ISOLATE: &str = "isolate";
