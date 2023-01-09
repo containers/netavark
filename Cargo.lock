@@ -1249,10 +1249,11 @@ dependencies = [
 [[package]]
 name = "netavark_proxy"
 version = "0.1.0"
-source = "git+https://github.com/containers/netavark-dhcp-proxy#e38a730bb0c9d2c075348b29abfc4e02644def55"
+source = "git+https://github.com/containers/netavark-dhcp-proxy#cc11789a28c5c7b3a2253a65f254841c1a55ecae"
 dependencies = [
  "clap",
  "env_logger 0.10.0",
+ "futures-channel",
  "futures-core",
  "futures-util",
  "http",
@@ -1263,6 +1264,7 @@ dependencies = [
  "netavark 1.4.0",
  "nispor",
  "prost",
+ "rand",
  "rtnetlink",
  "serde",
  "serde_json",
