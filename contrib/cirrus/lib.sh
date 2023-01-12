@@ -32,6 +32,12 @@ else  # set default values - see make_cienv() below
     # VM Images are built with this setup
     CARGO_HOME="${CARGO_HOME:-/var/cache/cargo}"
     source $CARGO_HOME/env
+
+    # Make caching more effective - disable incremental compilation,
+    # so that the Rust compiler doesn't waste time creating the
+    # additional artifacts required for incremental builds.
+    # Ref: https://github.com/marketplace/actions/rust-cache#cache-details
+    CARGO_INCREMENTAL=0
 fi
 
 # END Global export of all variables
