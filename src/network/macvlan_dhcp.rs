@@ -1,7 +1,7 @@
 use crate::error::{NetavarkError, NetavarkResult};
 use crate::network::types::NetAddress;
 use ipnet::IpNet;
-use netavark_proxy::DEFAULT_UDS_PATH;
+use netavark_proxy::proxy_conf::DEFAULT_UDS_PATH;
 use std::net::IpAddr;
 use std::str::FromStr;
 
