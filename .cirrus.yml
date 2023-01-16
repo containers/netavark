@@ -50,7 +50,7 @@ build_task:
     # all PRs & branches will share caches with other PRs and branches
     # for a given $DEST_BRANCH and vX value.  Adjust vX if cache schema
     # changes.
-    fingerprint_script: echo -e "cargo_v3_${DEST_BRANCH}_amd64\n---\n$(<Cargo.lock)\n---\n$(<Cargo.toml)"yy
+    fingerprint_script: echo -e "cargo_v3_${DEST_BRANCH}_amd64\n---\n$(<Cargo.lock)\n---\n$(<Cargo.toml)"
     # Required to be set explicitly since fingerprint_key is also set
     reupload_on_changes: true
   targets_cache: &targets_cache
@@ -84,7 +84,7 @@ build_aarch64_task:
     folder: "$CARGO_HOME"
     # N/B: Should exactly match (except for arch) line from build_task (above).
     # (No, there isn't an easy way to not duplicate most of this :()
-    fingerprint_script: echo -e "cargo_v3_${DEST_BRANCH}_aarch64\n---\n$(<Cargo.lock)\n---\n$(<Cargo.toml)"yy
+    fingerprint_script: echo -e "cargo_v3_${DEST_BRANCH}_aarch64\n---\n$(<Cargo.lock)\n---\n$(<Cargo.toml)"
     reupload_on_changes: true
   targets_cache: &targets_cache_aarch64
     folder: "$CARGO_TARGET_DIR"
