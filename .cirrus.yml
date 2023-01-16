@@ -50,16 +50,15 @@ build_task:
     # all PRs & branches will share caches with other PRs and branches
     # for a given $DEST_BRANCH and vX value.  Adjust vX if cache schema
     # changes.
-    fingerprint_key: "cargo_v2_${DEST_BRANCH}_amd64"
+    fingerprint_script: echo -e "cargo_v3_${DEST_BRANCH}_amd64\n---\n$(<Cargo.lock)\n---\n$(<Cargo.toml)"yy
     # Required to be set explicitly since fingerprint_key is also set
     reupload_on_changes: true
   targets_cache: &targets_cache
-    # Similar to cargo_cache, but holds the actual compiled artifacts. This must
-    # be scoped similar to bin_cache to avoid binary pollution across cache
-    # contexts.  For example, two PRs that happen to coincidentally change
-    # and use cache.  Adjust vX if cache schema changes.
+    # Similar to cargo_cache, but holds the actual compiled dependent artifacts.
+    # This should be scoped to a hash of the dependency-metadata lock file.
+    # Cirrus-CI will automatically use separate caches for PRs and branches.
     folder: "$CARGO_TARGET_DIR"
-    fingerprint_key: "targets_v2_${CIRRUS_TAG}${DEST_BRANCH}${CIRRUS_PR}_amd64" # Cache only within same tag, branch, or PR (branch will be 'pull/#')
+    fingerprint_script: echo -e "targets_v3_${CIRRUS_TAG}${DEST_BRANCH}${CIRRUS_PR}_amd64\n---\n$(<Cargo.lock)\n---\n$(<Cargo.toml)"
     reupload_on_changes: true
   bin_cache: &bin_cache
     # This simply prevents rebuilding bin/netavark for every subsequent task.
@@ -70,6 +69,7 @@ build_task:
     reupload_on_changes: true
   setup_script: &setup "$SCRIPT_BASE/setup.sh"
   main_script: &main "$SCRIPT_BASE/runner.sh $CIRRUS_TASK_NAME"
+  cache_grooming_script: &groom bash "$SCRIPT_BASE/cache_groom.sh"
   upload_caches: [ "cargo", "targets", "bin" ]
 
 
@@ -82,11 +82,15 @@ build_aarch64_task:
     architecture: arm64  # CAUTION: This has to be "arm64", not "aarch64"
   cargo_cache: &cargo_cache_aarch64
     folder: "$CARGO_HOME"
-    fingerprint_key: "cargo_v2_${DEST_BRANCH}_aarch64"
+    # N/B: Should exactly match (except for arch) line from build_task (above).
+    # (No, there isn't an easy way to not duplicate most of this :()
+    fingerprint_script: echo -e "cargo_v3_${DEST_BRANCH}_aarch64\n---\n$(<Cargo.lock)\n---\n$(<Cargo.toml)"yy
     reupload_on_changes: true
   targets_cache: &targets_cache_aarch64
     folder: "$CARGO_TARGET_DIR"
-    fingerprint_key: "targets_v2_${CIRRUS_TAG}${DEST_BRANCH}${CIRRUS_PR}_aarch64" # Cache only within same tag, branch, or PR (branch will be 'pull/#')
+    # N/B: Should exactly match (except for arch) line from build_task (above).
+    # (No, there isn't an easy way to not duplicate most of this :()
+    fingerprint_script: echo -e "targets_v3_${CIRRUS_TAG}${DEST_BRANCH}${CIRRUS_PR}_aarch64\n---\n$(<Cargo.lock)\n---\n$(<Cargo.toml)"
     reupload_on_changes: true
   bin_cache: &bin_cache_aarch64
     # This simply prevents rebuilding bin/netavark for every subsequent task.
@@ -95,6 +99,7 @@ build_aarch64_task:
     reupload_on_changes: true
   setup_script: *setup
   main_script: *main
+  cache_grooming_script: *groom
   upload_caches: [ "cargo", "targets", "bin" ]
   # Downstream CI needs the aarch64 binaries from this CI system.
   # However, we don't want to confuse architectures.
