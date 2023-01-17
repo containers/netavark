@@ -5,6 +5,10 @@
 # involves removing files and directories which change frequently
 # but are cheap/quick to regenerate - i.e. prevent "cache-flapping".
 # Any other use of this script is not supported and may cause harm.
+#
+# WARNING: This script is re-used from $DEST_BRANCH by other
+# repositories.  Namely aardvark-dns and possibly others.  Check
+# before removing / changing / updating.
 
 set -eo pipefail
 
