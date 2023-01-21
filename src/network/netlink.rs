@@ -30,7 +30,7 @@ pub struct CreateLinkOptions {
     kind: InfoKind,
     pub info_data: Option<InfoData>,
     pub mtu: u32,
-    pub master_index: u32,
+    pub primary_index: u32,
     pub link: u32,
     pub mac: Vec<u8>,
     pub netns: RawFd,
@@ -459,7 +459,7 @@ impl CreateLinkOptions {
             kind,
             info_data: None,
             mtu: 0,
-            master_index: 0,
+            primary_index: 0,
             link: 0,
             mac: vec![],
             // 0 is a valid fd, so use -1 by default
@@ -491,9 +491,9 @@ pub fn parse_create_link_options(msg: &mut LinkMessage, options: CreateLinkOptio
         msg.nlas.push(Nla::Address(options.mac));
     }
 
-    // add master device
-    if options.master_index != 0 {
-        msg.nlas.push(Nla::Master(options.master_index));
+    // add primary device
+    if options.primary_index != 0 {
+        msg.nlas.push(Nla::Master(options.primary_index));
     }
 
     // add link device

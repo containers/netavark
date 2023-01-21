@@ -531,7 +531,7 @@ fn create_veth_pair(
     host: &mut netlink::Socket,
     netns: &mut netlink::Socket,
     data: &InternalData,
-    master_index: u32,
+    primary_index: u32,
     internal: bool,
     hostns_fd: RawFd,
     netns_fd: RawFd,
@@ -547,7 +547,7 @@ fn create_veth_pair(
 
     let mut host_veth = netlink::CreateLinkOptions::new(String::from(""), InfoKind::Veth);
     host_veth.mtu = data.mtu;
-    host_veth.master_index = master_index;
+    host_veth.primary_index = primary_index;
     host_veth.info_data = Some(InfoData::Veth(VethInfo::Peer(peer)));
 
     host.create_link(host_veth).map_err(|err| match err {
