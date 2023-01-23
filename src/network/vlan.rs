@@ -239,12 +239,12 @@ fn setup(
     netns_fd: RawFd,
     kind_data: &KindData,
 ) -> NetavarkResult<String> {
-    let master_ifname = match data.host_interface_name.as_ref() {
+    let primary_ifname = match data.host_interface_name.as_ref() {
         "" => get_default_route_interface(host)?,
         host_name => host_name.to_string(),
     };
 
-    let link = host.get_link(netlink::LinkID::Name(master_ifname))?;
+    let link = host.get_link(netlink::LinkID::Name(primary_ifname))?;
 
     let opts = match kind_data {
         KindData::IpVlan { mode } => {
