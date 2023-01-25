@@ -271,13 +271,28 @@ checksum = "71655c45cb9845d3270c9d6df84ebe72b4dad3c2ba3f7023ad47c144e4e473a5"
 dependencies = [
  "atty",
  "bitflags",
- "clap_derive",
- "clap_lex",
+ "clap_derive 3.2.18",
+ "clap_lex 0.2.4",
  "indexmap",
  "once_cell",
  "strsim",
  "termcolor",
  "textwrap",
+]
+
+[[package]]
+name = "clap"
+version = "4.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f13b9c79b5d1dd500d20ef541215a6423c75829ef43117e1b4d17fd8af0b5d76"
+dependencies = [
+ "bitflags",
+ "clap_derive 4.1.0",
+ "clap_lex 0.3.1",
+ "is-terminal",
+ "once_cell",
+ "strsim",
+ "termcolor",
 ]
 
 [[package]]
@@ -294,10 +309,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap_derive"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "684a277d672e91966334af371f1a7b5833f9aa00b07c84e92fbce95e00208ce8"
+dependencies = [
+ "heck",
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "clap_lex"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2850f2f5a82cbf437dd5af4d49848fbdfc27c157c3d010345776f952765261c5"
+dependencies = [
+ "os_str_bytes",
+]
+
+[[package]]
+name = "clap_lex"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "783fe232adfca04f90f56201b26d79682d4cd2625e0bc7290b95123afe558ade"
 dependencies = [
  "os_str_bytes",
 ]
@@ -1151,7 +1188,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b55347cda9f63c59f65bb21d7bc2abd98a3beb159b92738907da2f75e1edd7bc"
 dependencies = [
  "byteorder",
- "clap",
+ "clap 3.2.23",
  "dhcproto",
  "env_logger 0.9.3",
  "etherparse",
@@ -1196,7 +1233,7 @@ checksum = "da8e3484317cc3c6b1fef5acc20da2e34ff021828e1133759f001ecf311391d4"
 dependencies = [
  "anyhow",
  "chrono",
- "clap",
+ "clap 3.2.23",
  "env_logger 0.10.0",
  "fs2",
  "ipnet",
@@ -1223,7 +1260,7 @@ version = "1.4.1-dev"
 dependencies = [
  "anyhow",
  "chrono",
- "clap",
+ "clap 4.1.4",
  "env_logger 0.10.0",
  "fs2",
  "ipnet",
@@ -1251,7 +1288,7 @@ name = "netavark_proxy"
 version = "0.1.0"
 source = "git+https://github.com/containers/netavark-dhcp-proxy#d628692795efa57a1ddc4d55c64399e7b1afae35"
 dependencies = [
- "clap",
+ "clap 3.2.23",
  "env_logger 0.10.0",
  "futures-channel",
  "futures-core",
