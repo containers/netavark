@@ -106,7 +106,7 @@ validate: $(CARGO_TARGET_DIR)
 .PHONY: vendor-tarball
 vendor-tarball: build install.cargo-vendor-filterer
 	VERSION=$(shell bin/netavark --version | cut -f2 -d" ") && \
-	cargo vendor-filterer '--platform=*-unknown-linux-*' --format=tar.gz --prefix vendor/ && \
+	cargo vendor-filterer --format=tar.gz --prefix vendor/ && \
 	mv vendor.tar.gz netavark-v$$VERSION-vendor.tar.gz && \
 	gzip -c bin/netavark > netavark.gz && \
 	sha256sum netavark.gz netavark-v$$VERSION-vendor.tar.gz > sha256sum
