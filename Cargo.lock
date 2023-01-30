@@ -1249,7 +1249,7 @@ dependencies = [
 [[package]]
 name = "netavark_proxy"
 version = "0.1.0"
-source = "git+https://github.com/containers/netavark-dhcp-proxy#d628692795efa57a1ddc4d55c64399e7b1afae35"
+source = "git+https://github.com/containers/netavark-dhcp-proxy#6d23c684c0c3e86e50e6c7b8e17837a90ecb2f95"
 dependencies = [
  "clap",
  "env_logger 0.10.0",
