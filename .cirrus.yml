@@ -231,7 +231,7 @@ ubuntu20_build_task:
       - "build"
     gce_instance: *standard_gce_x86_64
     container:
-        cpu: 8
+        cpu: 2 # Do not increase, will result in scheduling delays
         memory: "8Gb"
         image: quay.io/libpod/ubuntu20rust
     script:
@@ -244,7 +244,7 @@ centos9_build_task:
       - "build"
     gce_instance: *standard_gce_x86_64
     container:
-        cpu: 8
+        cpu: 2 # Do not increase, will result in scheduling delays
         memory: "8Gb"
         image: quay.io/libpod/centos9rust
     script:
