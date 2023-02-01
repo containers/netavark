@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.5.0
+* Removed crossbeam-utils
+* Dependency updates
+* Preliminary macvlan dhcp support (not fully supported yet)
+* Addition of ipvlan support
+
 ## v1.4.0
 * Added network update command
 * Corrected issue #491 to only teardown network forwarding when on complete teardown only
