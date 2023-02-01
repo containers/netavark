@@ -1219,7 +1219,7 @@ dependencies = [
 
 [[package]]
 name = "netavark"
-version = "1.5.0"
+version = "1.6.0-dev"
 dependencies = [
  "anyhow",
  "chrono",
