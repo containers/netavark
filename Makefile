@@ -18,6 +18,9 @@ GIT_TAG ?= $(shell git describe --tags)
 # build w/ debugging features.
 debug ?=
 
+# Set path to cargo executable
+CARGO ?= cargo
+
 # All complication artifacts, including dependencies and intermediates
 # will be stored here, for all architectures.  Use a non-default name
 # since the (default) 'target' is used/referenced ambiguously in many
@@ -47,7 +50,7 @@ $(CARGO_TARGET_DIR):
 
 .PHONY: build
 build: bin $(CARGO_TARGET_DIR)
-	cargo build $(release)
+	$(CARGO) build $(release)
 	cp $(CARGO_TARGET_DIR)/$(profile)/netavark bin/netavark$(if $(debug),.debug,)
 
 .PHONY: crate-publish
@@ -57,8 +60,8 @@ crate-publish:
 		exit 1;\
 	fi
 	@echo "It is expected that you have already done 'cargo login' before running this command. If not command may fail later"
-	cargo publish --dry-run
-	cargo publish
+	$(CARGO) publish --dry-run
+	$(CARGO) publish
 
 .PHONY: clean
 clean:
@@ -86,11 +89,11 @@ test: unit integration
 # Used by CI to compile the unit tests but not run them
 .PHONY: build_unit
 build_unit: $(CARGO_TARGET_DIR)
-	cargo test --no-run
+	$(CARGO) test --no-run
 
 .PHONY: unit
 unit: $(CARGO_TARGET_DIR)
-	cargo test
+	$(CARGO) test
 
 .PHONY: integration
 integration: $(CARGO_TARGET_DIR)
@@ -99,21 +102,21 @@ integration: $(CARGO_TARGET_DIR)
 
 .PHONY: validate
 validate: $(CARGO_TARGET_DIR)
-	cargo fmt --all -- --check
-	cargo clippy -p netavark@$(CRATE_VERSION) -- -D warnings
+	$(CARGO) fmt --all -- --check
+	$(CARGO) clippy -p netavark@$(CRATE_VERSION) -- -D warnings
 	$(MAKE) docs
 
 .PHONY: vendor-tarball
 vendor-tarball: build install.cargo-vendor-filterer
 	VERSION=$(shell bin/netavark --version | cut -f2 -d" ") && \
-	cargo vendor-filterer --format=tar.gz --prefix vendor/ && \
+	$(CARGO) vendor-filterer --format=tar.gz --prefix vendor/ && \
 	mv vendor.tar.gz netavark-v$$VERSION-vendor.tar.gz && \
 	gzip -c bin/netavark > netavark.gz && \
 	sha256sum netavark.gz netavark-v$$VERSION-vendor.tar.gz > sha256sum
 
 .PHONY: install.cargo-vendor-filterer
 install.cargo-vendor-filterer:
-	cargo install cargo-vendor-filterer
+	$(CARGO) install cargo-vendor-filterer
 
 .PHONY: mock-rpm
 mock-rpm:
