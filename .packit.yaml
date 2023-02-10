@@ -1,0 +1,25 @@
+---
+# See the documentation for more information:
+# https://packit.dev/docs/configuration/
+
+# Build targets can be found at:
+# https://copr.fedorainfracloud.org/coprs/rhcontainerbot/packit-builds/
+
+specfile_path: netavark.spec
+
+jobs:
+  - job: copr_build
+    trigger: pull_request
+    owner: rhcontainerbot
+    project: packit-builds
+    enable_net: true
+    srpm_build_deps:
+      - cargo
+      - make
+      - openssl-devel
+      - rpkg
+    actions:
+      post-upstream-clone:
+        - "rpkg spec --outdir ./"
+      fix-spec-file:
+        - "bash .packit.sh"
