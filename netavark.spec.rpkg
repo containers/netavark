@@ -31,7 +31,9 @@ Source: {{{ git_dir_pack }}}
 BuildRequires: make
 BuildRequires: cargo
 BuildRequires: git-core
-BuildRequires: golang-github-cpuguy83-md2man
+BuildRequires: go-md2man
+BuildRequires: protobuf-c
+BuildRequires: protobuf-compiler
 Recommends: aardvark-dns
 Provides: container-network-stack
 %if 0%{?fedora}
@@ -45,8 +47,7 @@ OCI network stack.}
 %description %{_description}
 
 %prep
-#{{{ git_dir_setup_macro }}}
-%autosetup -Sgit -T -b 0 -n %{name}
+{{{ git_dir_setup_macro }}}
 
 %build
 %{__make} CARGO="%{__cargo}" build
