@@ -9,11 +9,14 @@ use crate::{
     wrap,
 };
 use log::{info, trace};
+use netlink_packet_core::{
+    NetlinkHeader, NetlinkMessage, NetlinkPayload, NLM_F_ACK, NLM_F_CREATE, NLM_F_DUMP, NLM_F_EXCL,
+    NLM_F_REQUEST,
+};
 use netlink_packet_route::{
     nlas::link::{Info, InfoData, InfoKind, Nla},
-    AddressMessage, LinkMessage, NetlinkHeader, NetlinkMessage, NetlinkPayload, RouteMessage,
-    RtnlMessage, AF_INET, AF_INET6, IFF_UP, NLM_F_ACK, NLM_F_CREATE, NLM_F_DUMP, NLM_F_EXCL,
-    NLM_F_REQUEST, RTN_UNICAST, RTPROT_STATIC, RTPROT_UNSPEC, RT_SCOPE_UNIVERSE, RT_TABLE_MAIN,
+    AddressMessage, LinkMessage, RouteMessage, RtnlMessage, AF_INET, AF_INET6, IFF_UP, RTN_UNICAST,
+    RTPROT_STATIC, RTPROT_UNSPEC, RT_SCOPE_UNIVERSE, RT_TABLE_MAIN,
 };
 use netlink_sys::{protocols::NETLINK_ROUTE, SocketAddr};
 
@@ -369,10 +372,7 @@ impl Socket {
     }
 
     fn send(&mut self, msg: RtnlMessage, flags: u16) -> NetavarkResult<()> {
-        let mut packet = NetlinkMessage {
-            header: NetlinkHeader::default(),
-            payload: NetlinkPayload::from(msg),
-        };
+        let mut packet = NetlinkMessage::new(NetlinkHeader::default(), NetlinkPayload::from(msg));
         packet.header.flags = NLM_F_REQUEST | flags;
         packet.header.sequence_number = {
             self.sequence_number += 1;
@@ -440,6 +440,7 @@ impl Socket {
                             return Ok(result);
                         }
                     }
+                    _ => {}
                 };
 
                 offset += rx_packet.header.length as usize;
