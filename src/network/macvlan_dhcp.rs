@@ -1,10 +1,11 @@
 use crate::error::{NetavarkError, NetavarkResult};
 use crate::network::types::NetAddress;
 use ipnet::IpNet;
-use netavark_proxy::proxy_conf::DEFAULT_UDS_PATH;
 use std::net::IpAddr;
 use std::str::FromStr;
 
+use crate::dhcp_proxy::lib::g_rpc::NetworkConfig;
+use crate::dhcp_proxy::proxy_conf::DEFAULT_UDS_PATH;
 /// dhcp performs the connection to the nv-proxy over grpc where it
 /// requests it to perform a lease via the host's network interface
 /// but passes it the network interface from the container netns.:w
@@ -30,7 +31,7 @@ pub fn get_dhcp_lease(
     ns_path: &str,
     container_macvlan_mac: &str,
 ) -> NetavarkResult<Vec<NetAddress>> {
-    let nvp_config = netavark_proxy::g_rpc::NetworkConfig {
+    let nvp_config = NetworkConfig {
         host_iface: host_network_interface.to_string(),
         // TODO add in domain name support
         domain_name: "".to_string(),
@@ -98,7 +99,7 @@ pub fn release_dhcp_lease(
     ns_path: &str,
     container_macvlan_mac: &str,
 ) -> NetavarkResult<()> {
-    let nvp_config = netavark_proxy::g_rpc::NetworkConfig {
+    let nvp_config = NetworkConfig {
         host_iface: host_network_interface.to_string(),
         // TODO add in domain name support
         domain_name: "".to_string(),
