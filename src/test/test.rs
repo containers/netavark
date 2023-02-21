@@ -30,7 +30,7 @@ mod tests {
     // Deserialize values correctly
     // Try mutating deserialized struct
     #[test]
-    fn test_setup_opts_mutablity() {
+    fn test_setup_opts_mutability() {
         match network::types::NetworkOptions::load(Some(
             "src/test/config/setupopts.test.json".to_owned(),
         )) {

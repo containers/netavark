@@ -52,7 +52,7 @@ impl Aardvark {
         }
     }
 
-    /// On success retuns aardvark server's pid or returns -1;
+    /// On success returns aardvark server's pid or returns -1;
     fn get_aardvark_pid(&self) -> i32 {
         let path = Path::new(&self.config).join("aardvark.pid");
         let pid: i32 = match fs::read_to_string(path) {
@@ -345,8 +345,8 @@ impl Aardvark {
             if idx == 0 {
                 // If this is first line, we have to modify this
                 // first line has a format of `<BINDIP>... <NETWORK_DNSSERVERS>..`
-                // We will read the first line and get the first coloumn and
-                // override the second coloumn with new network dns servers.
+                // We will read the first line and get the first column and
+                // override the second column with new network dns servers.
                 let network_parts = line.split(' ').collect::<Vec<&str>>();
                 if network_parts.is_empty() {
                     return Err(std::io::Error::new(

@@ -291,7 +291,7 @@ pub fn join_netns(fd: RawFd) -> NetavarkResult<()> {
 }
 
 /// safe way to join the namespace and join back to the host after the task is done
-/// This first arg should be the hostns fd, the second is the contianer ns fd.
+/// This first arg should be the hostns fd, the second is the container ns fd.
 /// The third is the result variable name and the last the closure that should be
 /// executed in the ns.
 #[macro_export]
@@ -388,7 +388,7 @@ pub fn add_default_routes(
 }
 
 pub fn disable_ipv6_autoconf(if_name: &str) -> NetavarkResult<()> {
-    // make sure autoconf is off, we want manaully config only
+    // make sure autoconf is off, we want manual config only
     if let Err(err) =
         CoreUtils::apply_sysctl_value(format!("/proc/sys/net/ipv6/conf/{}/autoconf", if_name), "0")
     {

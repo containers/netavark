@@ -30,7 +30,7 @@ req_env_vars CARGO_HOME CARGO_TARGET_DIR CIRRUS_BUILD_ID
 # re-populate cache.  This is ugly, but maybe the best option available :(
 if [[ "$CIRRUS_BRANCH" == "$DEST_BRANCH" ]] && ((CIRRUS_BUILD_ID%15==0)); then
   msg "It's a cache-clobber build, yay! This build has been randomly selected for"
-  msg "a forced cache-wipe!  Congradulations! This means the next build will be"
+  msg "a forced cache-wipe!  Congratulations! This means the next build will be"
   msg "slow, and nobody will know who to to blame!.  Lucky you!  Hurray!"
   msg "(This is necessary to prevent branch-level cache from infinitely growing)"
   cd $CARGO_TARGET_DIR

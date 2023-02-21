@@ -146,7 +146,7 @@ impl driver::NetworkDriver for Bridge<'_> {
                 .dns_server_ips
                 .insert(data.ipam.nameservers.clone());
             // Note: this is being added so podman setup is backward compatible with the design
-            // which we had with dnsname/dnsmasq. I belive this can be fixed in later releases.
+            // which we had with dnsname/dnsmasq. I believe this can be fixed in later releases.
             let _ = response
                 .dns_search_domains
                 .insert(vec![constants::PODMAN_DEFAULT_SEARCH_DOMAIN.to_string()]);
