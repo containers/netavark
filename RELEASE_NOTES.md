@@ -25,7 +25,7 @@
 
 ## v1.2.0
 * Reworked how netavark calls aardvark
-* Implemented locking when commiting
+* Implemented locking when committing
 * Remove bridge only when no containers are attached
 * Updated versions of libraries where possible
 
