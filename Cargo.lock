@@ -580,7 +580,7 @@ dependencies = [
  "netlink-packet-core 0.4.2",
  "netlink-packet-generic",
  "netlink-packet-utils",
- "netlink-proto",
+ "netlink-proto 0.10.0",
  "netlink-sys",
  "thiserror",
  "tokio",
@@ -756,7 +756,7 @@ dependencies = [
  "netlink-packet-core 0.4.2",
  "netlink-packet-generic",
  "netlink-packet-utils",
- "netlink-proto",
+ "netlink-proto 0.10.0",
  "thiserror",
 ]
 
@@ -1176,7 +1176,7 @@ dependencies = [
  "netlink-packet-core 0.4.2",
  "netlink-packet-generic",
  "netlink-packet-utils",
- "netlink-proto",
+ "netlink-proto 0.10.0",
  "netlink-sys",
  "thiserror",
  "tokio",
@@ -1249,7 +1249,7 @@ dependencies = [
 [[package]]
 name = "netavark_proxy"
 version = "0.1.0"
-source = "git+https://github.com/containers/netavark-dhcp-proxy#d628692795efa57a1ddc4d55c64399e7b1afae35"
+source = "git+https://github.com/containers/netavark-dhcp-proxy#f46414d14910d3f2a5613706b8e6d8407b66d1d3"
 dependencies = [
  "clap",
  "env_logger 0.10.0",
@@ -1265,7 +1265,7 @@ dependencies = [
  "nispor",
  "prost",
  "rand",
- "rtnetlink",
+ "rtnetlink 0.12.0",
  "serde",
  "serde_json",
  "tokio",
@@ -1368,6 +1368,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "netlink-proto"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26305d12193227ef7b8227e7d61ae4eaf174607f79bd8eeceff07aacaefde497"
+dependencies = [
+ "bytes",
+ "futures",
+ "log",
+ "netlink-packet-core 0.5.0",
+ "netlink-sys",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "netlink-sys"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1394,7 +1409,7 @@ dependencies = [
  "netlink-packet-route 0.13.0",
  "netlink-packet-utils",
  "netlink-sys",
- "rtnetlink",
+ "rtnetlink 0.11.0",
  "serde",
  "serde_json",
  "tokio",
@@ -1818,8 +1833,26 @@ dependencies = [
  "futures",
  "log",
  "netlink-packet-route 0.13.0",
- "netlink-proto",
+ "netlink-proto 0.10.0",
  "nix 0.24.3",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "rtnetlink"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ed7d42da676fdf7e470e2502717587dd1089d8b48d9d1b846dcc3c01072858cb"
+dependencies = [
+ "futures",
+ "log",
+ "netlink-packet-core 0.5.0",
+ "netlink-packet-route 0.15.0",
+ "netlink-packet-utils",
+ "netlink-proto 0.11.1",
+ "netlink-sys",
+ "nix 0.26.2",
  "thiserror",
  "tokio",
 ]
