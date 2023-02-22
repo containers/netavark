@@ -14,7 +14,7 @@ build = "build.rs"
 
 [package.metadata.vendor-filter]
 # This list is not exhaustive.
-platforms = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "powerpc64le-unknown-linux-gnu", 
+platforms = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "powerpc64le-unknown-linux-gnu",
              "s390x-unknown-linux-gnu", "riscv64gc-unknown-linux-gnu",
              "x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl",
              ]
@@ -41,11 +41,11 @@ zbus = { version = "3.10.0" }
 nix = "0.26.2"
 rand = "0.8.5"
 sha2 = "0.10.6"
-netlink-packet-route = "0.13"
-netlink-packet-core = "0.4.2"
+netlink-packet-route = "0.15"
+netlink-packet-core = "0.5"
 fs2 = "0.4.3"
 netlink-sys = "0.8.4"
-netavark_proxy = { git = "https://github.com/containers/netavark-dhcp-proxy"} 
+netavark_proxy = { git = "https://github.com/containers/netavark-dhcp-proxy"}
 tokio = { version = "1.25", features = ["rt"] }
 
 [build-dependencies]
