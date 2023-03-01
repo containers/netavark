@@ -7,6 +7,7 @@ use std::env;
 use zbus::blocking::Connection;
 
 pub mod firewalld;
+pub mod fwnone;
 pub mod iptables;
 mod varktables;
 
@@ -29,12 +30,13 @@ enum FirewallImpl {
     Iptables,
     Firewalld(Connection),
     Nftables,
+    Fwnone,
 }
 
 /// What firewall implementations does this system support?
 fn get_firewall_impl() -> NetavarkResult<FirewallImpl> {
     // First, check the NETAVARK_FW env var.
-    // It respects "firewalld", "iptables", "nftables".
+    // It respects "firewalld", "iptables", "nftables", "none".
     if let Ok(var) = env::var("NETAVARK_FW") {
         debug!("Forcibly using firewall driver {}", var);
         match var.to_lowercase().as_str() {
@@ -52,6 +54,7 @@ fn get_firewall_impl() -> NetavarkResult<FirewallImpl> {
             }
             "iptables" => return Ok(FirewallImpl::Iptables),
             "nftables" => return Ok(FirewallImpl::Nftables),
+            "none" => return Ok(FirewallImpl::Fwnone),
             any => {
                 return Err(NetavarkError::Message(format!(
                     "Must provide a valid firewall backend, got {}",
@@ -100,6 +103,10 @@ pub fn get_supported_firewall_driver() -> NetavarkResult<Box<dyn FirewallDriver>
                 Err(NetavarkError::msg(
                     "nftables support presently not available",
                 ))
+            }
+            FirewallImpl::Fwnone => {
+                info!("Not using firewall");
+                fwnone::new()
             }
         },
         Err(e) => Err(e),
