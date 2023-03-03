@@ -49,7 +49,7 @@ $(CARGO_TARGET_DIR):
 	mkdir -p $@
 
 .PHONY: build
-build: build_netavark build_proxy
+build: build_netavark build_proxy build_proxy_client
 
 .PHONY: build_netavark
 build_netavark: bin $(CARGO_TARGET_DIR)
@@ -109,6 +109,7 @@ unit: $(CARGO_TARGET_DIR)
 integration: $(CARGO_TARGET_DIR)
 	# needs to be run as root or with podman unshare --rootless-netns
 	bats test/
+	bats test-dhcp/
 
 .PHONY: validate
 validate: $(CARGO_TARGET_DIR)
