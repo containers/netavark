@@ -758,7 +758,7 @@ EOF
     assert_json "$default_route_v6" '.[0].metric' == "200" "v6 route metric matches v4"
 }
 
-@test "$fw_drive - default route metric" {
+@test "$fw_driver - default route metric" {
     run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json setup $(get_container_netns_path)
 
     run_in_container_netns ip -j route list match 0.0.0.0
