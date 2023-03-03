@@ -62,6 +62,7 @@ popd
 %license LICENSE
 %dir %{_libexecdir}/podman
 %{_libexecdir}/podman/%{name}
+%{_libexecdir}/podman/%{name}-dhcp-proxy
 %{_mandir}/man1/%{name}.1*
 
 %changelog
