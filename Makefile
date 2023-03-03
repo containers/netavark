@@ -136,7 +136,12 @@ mock-rpm:
 help:
 	@echo "usage: make $(prog) [debug=1]"
 
-.PHONY: proxy
-build_proxy:bin $(CARGO_TARGET_DIR)
+.PHONY: build_proxy
+build_proxy: bin $(CARGO_TARGET_DIR)
 	$(CARGO) build --bin netavark-dhcp-proxy $(release)
 	cp $(CARGO_TARGET_DIR)/$(profile)/netavark-dhcp-proxy bin/netavark-dhcp-proxy$(if $(debug),.debug,)
+
+.PHONY: build_proxy_client
+build_proxy_client: bin $(CARGO_TARGET_DIR)
+	$(CARGO) build --bin netavark-dhcp-proxy-client $(release)
+	cp $(CARGO_TARGET_DIR)/$(profile)/netavark-dhcp-proxy-client bin/netavark-dhcp-proxy-client$(if $(debug),.debug,)
