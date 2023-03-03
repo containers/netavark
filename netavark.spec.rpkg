@@ -61,7 +61,7 @@ popd
 %files
 %license LICENSE
 %dir %{_libexecdir}/podman
-%{_libexecdir}/podman/%{name}
+%{_libexecdir}/podman/%{name}*
 %{_mandir}/man1/%{name}.1*
 
 %changelog
