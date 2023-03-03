@@ -654,3 +654,120 @@ function add_dummy_interface_on_host() {
     fi
     run_in_host_netns ip link set "$name" up
 }
+
+
+### Below functions are taken from podman system tests,
+### see Stefano Brivio's commit  https://github.com/containers/podman/pull/16141/commits/ea4f168b3a6603991f2cbdc2dcfe6268a46bf1ba
+
+# ipv6_to_procfs() - RFC 5952 IPv6 address text representation to procfs format
+# $1:	Address in any notation described by RFC 5952
+function ipv6_to_procfs() {
+    local addr="${1}"
+
+    # Add leading zero if missing
+    case ${addr} in
+        "::"*) addr=0"${addr}" ;;
+    esac
+
+    # Double colon can mean any number of all-zero fields. Expand to fill
+    # as many colons as are missing. (This will not be a valid IPv6 form,
+    # but we don't need it for long). E.g., 0::1 -> 0:::::::1
+    case ${addr} in
+        *"::"*)
+            # All the colons in the address
+            local colons
+            colons=$(tr -dc : <<<$addr)
+            # subtract those from a string of eight colons; this gives us
+            # a string of two to six colons...
+            local pad
+            pad=$(sed -e "s/$colons//" <<<":::::::")
+            # ...which we then inject in place of the double colon.
+            addr=$(sed -e "s/::/::$pad/" <<<$addr)
+            ;;
+    esac
+
+    # Print as a contiguous string of zero-filled 16-bit words
+    # (The additional ":" below is needed because 'read -d x' actually
+    # means "x is a TERMINATOR, not a delimiter")
+    local group
+    while read -d : group; do
+        printf "%04X" "0x${group:-0}"
+    done <<<"${addr}:"
+}
+
+# __ipv4_to_procfs() - Print bytes in hexadecimal notation reversing arguments
+# $@:	IPv4 address as separate bytes
+function __ipv4_to_procfs() {
+    printf "%02X%02X%02X%02X" ${4} ${3} ${2} ${1}
+}
+
+# ipv4_to_procfs() - IPv4 address representation to big-endian procfs format
+# $1:	Text representation of IPv4 address
+function ipv4_to_procfs() {
+    IFS='.' __ipv4_to_procfs ${1}
+}
+
+# port_is_bound() - Check if TCP or UDP port is bound for a given address
+# $1:	Port number
+# $2:	Optional protocol, or optional IPv4 or IPv6 address, default: tcp
+# $3:	Optional IPv4 or IPv6 address, or optional protocol, default: any
+function port_is_bound() {
+    local port=${1?Usage: port_is_bound PORT [tcp|udp] [ADDRESS]}
+
+    if   [ "${2}" = "tcp" ] || [ "${2}" = "udp" ]; then
+        local address="${3}"
+        local proto="${2}"
+    elif [ "${3}" = "tcp" ] || [ "${3}" = "udp" ]; then
+        local address="${2}"
+        local proto="${3}"
+    else
+        local address="${2}"	# Might be empty
+        local proto="tcp"
+    fi
+
+    port=$(printf %04X ${port})
+    case "${address}" in
+    *":"*)
+        grep -e "^[^:]*: $(ipv6_to_procfs "${address}"):${port} .*" \
+             -e "^[^:]*: $(ipv6_to_procfs "::0"):${port} .*"        \
+             -q "/proc/net/${proto}6"
+        ;;
+    *"."*)
+        grep -e "^[^:]*: $(ipv4_to_procfs "${address}"):${port}"    \
+             -e "^[^:]*: $(ipv4_to_procfs "0.0.0.0"):${port}"       \
+             -q "/proc/net/${proto}"
+        ;;
+    *)
+        # No address: check both IPv4 and IPv6, for any bound address
+        grep "^[^:]*: [^:]*:${port} .*" -q "/proc/net/${proto}6" || \
+        grep "^[^:]*: [^:]*:${port} .*" -q "/proc/net/${proto}"
+        ;;
+    esac
+}
+
+# port_is_free() - Check if TCP or UDP port is free to bind for a given address
+# $1:	Port number
+# $2:	Optional protocol, or optional IPv4 or IPv6 address, default: tcp
+# $3:	Optional IPv4 or IPv6 address, or optional protocol, default: any
+function port_is_free() {
+    ! port_is_bound ${@}
+}
+
+# wait_for_port() - Return once port is available on the host
+# $1:	Host or address to check for possible binding
+# $2:	Port number
+# $3:	Optional timeout, 5 seconds if not given
+function wait_for_port() {
+    local host=$1
+    local port=$2
+    local _timeout=${3:-5}
+
+    # Wait
+    while [ $_timeout -gt 0 ]; do
+        port_is_free ${port} "${host}" && return
+        sleep 1
+        _timeout=$(( $_timeout - 1 ))
+    done
+
+    die "Timed out waiting for $host:$port"
+}
