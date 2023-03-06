@@ -44,7 +44,7 @@ sha2 = "0.10.6"
 netlink-packet-route = "0.15"
 netlink-packet-core = "0.5"
 fs2 = "0.4.3"
-netlink-sys = "0.8.4"
+netlink-sys = "0.8.5"
 netavark_proxy = { git = "https://github.com/containers/netavark-dhcp-proxy"}
 tokio = { version = "1.26", features = ["rt"] }
 
