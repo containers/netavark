@@ -1,0 +1,9 @@
+[Unit]
+Description=Netavark DHCP proxy socket
+
+[Socket]
+ListenStream=%t/podman/nv-proxy.sock
+SocketMode=0660
+
+[Install]
+WantedBy=sockets.target

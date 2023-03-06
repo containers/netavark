@@ -1,0 +1,9 @@
+{
+  "host_iface": "veth1",
+  "container_iface": "veth0",
+  "container_mac_addr": "66:c0:05:74:df:d0",
+  "domain_name": "example.com",
+  "host_name": "foobar",
+  "version": 0,
+  "ns_path": "/run/netns/foobar"
+}
