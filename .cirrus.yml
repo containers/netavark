@@ -109,6 +109,10 @@ build_aarch64_task:
     - mv netavark netavark.$(uname -m)-unknown-linux-gnu
     - mv netavark.debug netavark.debug.$(uname -m)-unknown-linux-gnu
     - mv netavark.info netavark.info.$(uname -m)-unknown-linux-gnu
+    - mv netavark-dhcp-proxy netavark-dhcp-proxy.$(uname -m)-unknown-linux-gnu
+    - mv netavark-dhcp-proxy.debug netavark-dhcp-proxy.debug.$(uname -m)-unknown-linux-gnu
+    - mv netavark-dhcp-proxy-client netavark-dhcp-proxy-client.$(uname -m)-unknown-linux-gnu
+    - mv netavark-dhcp-proxy-client.debug netavark-dhcp-proxy-client.debug.$(uname -m)-unknown-linux-gnu
   armbinary_artifacts:  # See success_task
     path: ./bin/netavark*
 
