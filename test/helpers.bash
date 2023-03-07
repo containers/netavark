@@ -464,15 +464,6 @@ EOF
 
     for proto in "${protocols[@]}"; do
 
-        local nc_proto_arg=""
-
-        case $proto in
-        tcp) ;; # nothing to do (default)
-        udp) nc_proto_arg=--udp ;;
-        sctp) nc_proto_arg=--sctp ;;
-        *) die "unknown port proto '$proto'" ;;
-        esac
-
         # ports can be a range, we have to check the full range
         i=0
         while [ $i -lt $range ]; do
@@ -485,9 +476,7 @@ EOF
                     connect_ip=$host_ip
                 fi
 
-                if is_ipv4 "$connect_ip"; then
-                    run_nc_test "0" "-4 $nc_proto_arg" $cport $connect_ip $hport
-                fi
+                run_nc_test "0" "$proto" $cport $connect_ip $hport
             fi
 
 
@@ -497,9 +486,7 @@ EOF
                     connect_ip=$host_ip
                 fi
 
-                if is_ipv6 "$connect_ip"; then
-                    run_nc_test "0" "-6 $nc_proto_arg" $cport $connect_ip $hport
-                fi
+                run_nc_test "0" "$proto" $cport $connect_ip $hport
             fi
 
             ((i = i + 1))
@@ -538,17 +525,32 @@ function is_ipv4() {
 # $4 == host port, the nc client will connect to this port
 function run_nc_test() {
     local container_ns=$1
-    local nc_common_args=$2
+    local proto=$2
     local container_port=$3
     local connect_ip=$4
     local host_port=$5
 
-    # for some reason we have to attach STDIN to the server only for the sctp proto
-    # otherwise it will just exit for unknown reasons. However we must not add STDIN
-    # to udp and tcp otherwise those tests will fail.
+    local nc_common_args=""
     local stdin=/dev/null
-    if [[ "$nc_common_args" =~ "--sctp" ]]; then
+
+    case $proto in
+    tcp) ;; # nothing to do (default)
+    udp) nc_common_args=--udp ;;
+    sctp)
+        nc_common_args=--sctp
+        # for some reason we have to attach STDIN to the server only for the sctp proto
+        # otherwise it will just exit for unknown reasons. However we must not add STDIN
+        # to udp and tcp otherwise those tests will fail.
         stdin=/dev/zero
+        ;;
+    *) die "unknown port proto '$proto'" ;;
+    esac
+
+    if is_ipv4 "$connect_ip"; then
+        nc_common_args="-4 $nc_common_args"
+    fi
+    if is_ipv6 "$connect_ip"; then
+        nc_common_args="-6 $nc_common_args"
     fi
 
     nsenter -n -t "${CONTAINER_NS_PIDS[$container_ns]}" timeout --foreground -v --kill=10 5 \
