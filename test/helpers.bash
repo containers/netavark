@@ -556,6 +556,16 @@ function run_nc_test() {
     nsenter -n -t "${CONTAINER_NS_PIDS[$container_ns]}" timeout --foreground -v --kill=10 5 \
         nc $nc_common_args -l -p $container_port &>"$NETAVARK_TMPDIR/nc-out" <$stdin &
 
+    # make sure to wait until port is bound otherwise test can flake
+    # https://github.com/containers/netavark/issues/433
+    if [ "$proto" = "tcp" ] || [ "$proto" = "udp" ]; then
+        wait_for_port "${CONTAINER_NS_PIDS[$container_ns]}" $container_port $proto
+    else
+        # TODO add support for sctp port reading from /proc/net/sctp/eps,
+        # for now just sleep
+        sleep 0.5
+    fi
+
     data=$(random_string)
     run_in_host_netns nc $nc_common_args $connect_ip $host_port <<<"$data"
 
