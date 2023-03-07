@@ -708,63 +708,70 @@ function ipv4_to_procfs() {
 }
 
 # port_is_bound() - Check if TCP or UDP port is bound for a given address
-# $1:	Port number
-# $2:	Optional protocol, or optional IPv4 or IPv6 address, default: tcp
-# $3:	Optional IPv4 or IPv6 address, or optional protocol, default: any
+# $1:   Netns PID
+# $2:	Port number
+# $3:	Optional protocol, or optional IPv4 or IPv6 address, default: tcp
+# $4:	Optional IPv4 or IPv6 address, or optional protocol, default: any
 function port_is_bound() {
-    local port=${1?Usage: port_is_bound PORT [tcp|udp] [ADDRESS]}
+    local pid=$1
+    local port=${2?Usage: port_is_bound PORT [tcp|udp] [ADDRESS]}
 
-    if   [ "${2}" = "tcp" ] || [ "${2}" = "udp" ]; then
-        local address="${3}"
-        local proto="${2}"
-    elif [ "${3}" = "tcp" ] || [ "${3}" = "udp" ]; then
-        local address="${2}"
+    if   [ "${3}" = "tcp" ] || [ "${3}" = "udp" ]; then
+        local address="${4}"
         local proto="${3}"
+    elif [ "${4}" = "tcp" ] || [ "${4}" = "udp" ]; then
+        local address="${3}"
+        local proto="${4}"
     else
-        local address="${2}"	# Might be empty
+        local address="${3}"	# Might be empty
         local proto="tcp"
     fi
 
     port=$(printf %04X ${port})
     case "${address}" in
     *":"*)
-        grep -e "^[^:]*: $(ipv6_to_procfs "${address}"):${port} .*" \
+        nsenter -n -t $pid grep -e "^[^:]*: $(ipv6_to_procfs "${address}"):${port} .*" \
              -e "^[^:]*: $(ipv6_to_procfs "::0"):${port} .*"        \
              -q "/proc/net/${proto}6"
         ;;
     *"."*)
-        grep -e "^[^:]*: $(ipv4_to_procfs "${address}"):${port}"    \
+        nsenter -n -t $pid grep -e "^[^:]*: $(ipv4_to_procfs "${address}"):${port}"    \
              -e "^[^:]*: $(ipv4_to_procfs "0.0.0.0"):${port}"       \
              -q "/proc/net/${proto}"
         ;;
     *)
         # No address: check both IPv4 and IPv6, for any bound address
-        grep "^[^:]*: [^:]*:${port} .*" -q "/proc/net/${proto}6" || \
-        grep "^[^:]*: [^:]*:${port} .*" -q "/proc/net/${proto}"
+        nsenter -n -t $pid grep "^[^:]*: [^:]*:${port} .*" -q "/proc/net/${proto}6" || \
+        nsenter -n -t $pid grep "^[^:]*: [^:]*:${port} .*" -q "/proc/net/${proto}"
         ;;
     esac
 }
 
 # port_is_free() - Check if TCP or UDP port is free to bind for a given address
-# $1:	Port number
-# $2:	Optional protocol, or optional IPv4 or IPv6 address, default: tcp
-# $3:	Optional IPv4 or IPv6 address, or optional protocol, default: any
+# $1:   Netns PID
+# $2:	Port number
+# $3:	Optional protocol, or optional IPv4 or IPv6 address, default: tcp
+# $4:	Optional IPv4 or IPv6 address, or optional protocol, default: any
 function port_is_free() {
     ! port_is_bound ${@}
 }
 
-# wait_for_port() - Return once port is available on the host
-# $1:	Host or address to check for possible binding
+# wait_for_port() - Return when port is binded
+# $1:   Netns PID
 # $2:	Port number
-# $3:	Optional timeout, 5 seconds if not given
+# $3:	Optional protocol, or optional IPv4 or IPv6 address, default: tcp
+# $4:	Optional IPv4 or IPv6 address, or optional protocol, default: any
+# $5:	Optional timeout, 5 seconds if not given
 function wait_for_port() {
-    local host=$1
+    local pid=$1
     local port=$2
-    local _timeout=${3:-5}
+    local proto=$3
+    local host=$4
+    local _timeout=${5:-5}
 
     # Wait
     while [ $_timeout -gt 0 ]; do
-        port_is_free ${port} "${host}" && return
+        port_is_bound ${pid} ${port} ${proto} ${host} && return
         sleep 1
         _timeout=$(( $_timeout - 1 ))
     done
