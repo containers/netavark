@@ -18,7 +18,7 @@ git archive --prefix=netavark-$HEAD_VERSION/ -o netavark-$HEAD_VERSION.tar.gz HE
 sed -i "s/^Version:.*/Version: $HEAD_VERSION/" netavark.spec
 
 # Update Release in spec with Packit's release envvar
-sed -i "s/^Release: %autorelease/Release: $PACKIT_RPMSPEC_RELEASE%{?dist}/" netavark.spec
+sed -i "s/^Release:.*/Release: $PACKIT_RPMSPEC_RELEASE%{?dist}/" netavark.spec
 
 # Update Source tarball name in spec
 sed -i "s/^Source:.*.tar.gz/Source: %{name}-$HEAD_VERSION.tar.gz/" netavark.spec
