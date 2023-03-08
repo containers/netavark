@@ -50,7 +50,7 @@ struct NetavarkProxyService<W: Write + Clear> {
     // cache is the lease hashmap
     cache: Arc<Mutex<LeaseCache<W>>>,
     // the timeout for the dora operation
-    dora_timeout: isize,
+    dora_timeout: u32,
     // channel send-side for resetting the inactivity timeout
     timeout_sender: Arc<Mutex<Sender<i32>>>,
 }
@@ -186,7 +186,7 @@ struct Opts {
     uds: Option<String>,
     /// optional time in seconds to time out after looking for a lease
     #[clap(short, long)]
-    timeout: Option<isize>,
+    timeout: Option<u32>,
     /// activity timeout
     #[clap(short, long)]
     activity_timout: Option<u64>,

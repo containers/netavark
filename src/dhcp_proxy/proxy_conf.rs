@@ -15,7 +15,7 @@ pub const DEFAULT_CONFIG_DIR: &str = "";
 // Default Network configuration path
 pub const DEFAULT_NETWORK_CONFIG: &str = "/dev/stdin";
 // Default epoll wait time before dhcp socket times out
-pub const DEFAULT_TIMEOUT: isize = 8;
+pub const DEFAULT_TIMEOUT: u32 = 8;
 // Proxy server gRPC socket file name
 pub const PROXY_SOCK_NAME: &str = "nv-proxy.sock";
 // Where leases are stored on the filesystem
