@@ -511,19 +511,6 @@ dependencies = [
 
 [[package]]
 name = "env_logger"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a12e6657c4c97ebab115a42dcee77225f7f482cdd841cf7088c657a42e9e00e7"
-dependencies = [
- "atty",
- "humantime",
- "log",
- "regex",
- "termcolor",
-]
-
-[[package]]
-name = "env_logger"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85cdab6a89accf66733ad5a1693a4dcced6aeff64602b634530dd73c1f3ee9f0"
@@ -1142,15 +1129,14 @@ dependencies = [
 
 [[package]]
 name = "mozim"
-version = "0.1.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b55347cda9f63c59f65bb21d7bc2abd98a3beb159b92738907da2f75e1edd7bc"
+checksum = "fae7c98c95699590f1921d4ee780d8ae0143add56ad90fe37f0b54800251ab99"
 dependencies = [
  "byteorder",
- "clap",
  "dhcproto",
- "env_logger 0.9.3",
  "etherparse",
+ "futures",
  "libc",
  "log",
  "nispor",
@@ -1191,7 +1177,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
- "env_logger 0.10.0",
+ "env_logger",
  "fs2",
  "futures-channel",
  "futures-core",

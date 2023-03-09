@@ -45,7 +45,7 @@ pub enum DhcpClient {
 pub struct DhcpService {
     client: Option<DhcpClient>,
     network_config: NetworkConfig,
-    timeout: isize,
+    timeout: u32,
 }
 
 trait IP4Conv {
@@ -75,7 +75,7 @@ impl IP6Conv for IpAddr {
 }
 
 impl DhcpService {
-    pub fn new(nc: &NetworkConfig, timeout: isize) -> Result<DhcpService, DhcpServiceError> {
+    pub fn new(nc: &NetworkConfig, timeout: u32) -> Result<DhcpService, DhcpServiceError> {
         let client = Self::create_client(nc)?;
         Ok(DhcpService {
             client: Some(client),
@@ -183,10 +183,7 @@ impl DhcpService {
         match version {
             //V4
             0 => {
-                let config = match DhcpV4Config::new_proxy(iface, &nc.container_mac_addr) {
-                    Ok(c) => c,
-                    Err(e) => return Err(DhcpServiceError::new(InvalidArgument, e.to_string())),
-                };
+                let config = DhcpV4Config::new_proxy(iface, &nc.container_mac_addr);
                 match DhcpV4Client::init(config, None) {
                     Ok(client) => Ok(DhcpClient::V4Client(Box::new(client))),
                     Err(err) => Err(DhcpServiceError::new(InvalidArgument, err.to_string())),
