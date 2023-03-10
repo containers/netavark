@@ -49,7 +49,7 @@ $(CARGO_TARGET_DIR):
 	mkdir -p $@
 
 .PHONY: build
-build: build_netavark build_proxy build_proxy_client
+build: build_netavark build_proxy_client
 
 .PHONY: build_netavark
 build_netavark: bin $(CARGO_TARGET_DIR)
@@ -84,13 +84,11 @@ docs: ## build the docs on the host
 .PHONY: install
 install:
 	install ${SELINUXOPT} -D -m0755 bin/netavark $(DESTDIR)/$(LIBEXECPODMAN)/netavark
-	install ${SELINUXOPT} -D -m0755 bin/netavark-dhcp-proxy $(DESTDIR)/$(LIBEXECPODMAN)/netavark-dhcp-proxy
 	$(MAKE) -C docs install
 
 .PHONY: uninstall
 uninstall:
 	rm -f $(DESTDIR)/$(LIBEXECPODMAN)/netavark
-	rm -f $(DESTDIR)/$(LIBEXECPODMAN)/netavark-dhcp-proxy
 	rm -f $(PREFIX)/share/man/man1/netavark*.1
 
 .PHONY: test
@@ -136,11 +134,6 @@ mock-rpm:
 .PHONY: help
 help:
 	@echo "usage: make $(prog) [debug=1]"
-
-.PHONY: build_proxy
-build_proxy: bin $(CARGO_TARGET_DIR)
-	$(CARGO) build --bin netavark-dhcp-proxy $(release)
-	cp $(CARGO_TARGET_DIR)/$(profile)/netavark-dhcp-proxy bin/netavark-dhcp-proxy$(if $(debug),.debug,)
 
 .PHONY: build_proxy_client
 build_proxy_client: bin $(CARGO_TARGET_DIR)

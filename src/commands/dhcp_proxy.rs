@@ -6,13 +6,15 @@ use macaddr::MacAddr;
 
 use crate::dhcp_proxy::cache::{Clear, LeaseCache};
 use crate::dhcp_proxy::dhcp_service::DhcpService;
-use crate::dhcp_proxy::lib::g_rpc::netavark_proxy_server::{NetavarkProxy, NetavarkProxyServer};
-use crate::dhcp_proxy::lib::g_rpc::{Empty, Lease as NetavarkLease, NetworkConfig, OperationResponse};
 use crate::dhcp_proxy::ip;
+use crate::dhcp_proxy::lib::g_rpc::netavark_proxy_server::{NetavarkProxy, NetavarkProxyServer};
+use crate::dhcp_proxy::lib::g_rpc::{
+    Empty, Lease as NetavarkLease, NetworkConfig, OperationResponse,
+};
 use crate::dhcp_proxy::proxy_conf::{
     get_cache_fqname, get_proxy_sock_fqname, DEFAULT_INACTIVITY_TIMEOUT, DEFAULT_TIMEOUT,
 };
-
+use crate::error::NetavarkResult;
 
 use std::fs::File;
 use std::io::Write;
@@ -49,7 +51,7 @@ struct NetavarkProxyService<W: Write + Clear> {
     // cache is the lease hashmap
     cache: Arc<Mutex<LeaseCache<W>>>,
     // the timeout for the dora operation
-    dora_timeout: isize,
+    dora_timeout: u32,
     // channel send-side for resetting the inactivity timeout
     timeout_sender: Arc<Mutex<Sender<i32>>>,
 }
@@ -176,7 +178,7 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
 
 #[derive(Parser, Debug)]
 #[clap(version = env!("CARGO_PKG_VERSION"))]
-struct Opts {
+pub struct Opts {
     /// location to store backup files
     #[clap(short, long)]
     dir: Option<String>,
@@ -185,7 +187,7 @@ struct Opts {
     uds: Option<String>,
     /// optional time in seconds to time out after looking for a lease
     #[clap(short, long)]
-    timeout: Option<isize>,
+    timeout: Option<u32>,
     /// activity timeout
     #[clap(short, long)]
     activity_timout: Option<u64>,
@@ -218,9 +220,7 @@ async fn handle_signal(uds_path: PathBuf) {
 
 #[tokio::main]
 #[allow(unused)]
-pub async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    env_logger::builder().format_timestamp(None).init();
-    let opts = Opts::parse();
+pub async fn serve(opts: Opts) -> NetavarkResult<()> {
     let optional_run_dir = opts.dir.as_deref();
     let dora_timeout = opts.timeout.unwrap_or(DEFAULT_TIMEOUT);
     let inactivity_timeout =

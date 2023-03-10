@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 
+use netavark::commands::dhcp_proxy;
 use netavark::commands::setup;
 use netavark::commands::teardown;
 use netavark::commands::update;
@@ -35,6 +36,8 @@ enum SubCommand {
     Teardown(teardown::Teardown),
     /// Display info about netavark.
     Version(version::Version),
+    /// Start dhcp-proxy
+    DHCPProxy(dhcp_proxy::Opts),
 }
 
 fn main() {
@@ -52,6 +55,7 @@ fn main() {
         SubCommand::Teardown(teardown) => teardown.exec(opts.file, config, aardvark_bin, rootless),
         SubCommand::Update(update) => update.exec(config, aardvark_bin, rootless),
         SubCommand::Version(version) => version.exec(),
+        SubCommand::DHCPProxy(proxy) => dhcp_proxy::serve(proxy),
     };
 
     match result {
