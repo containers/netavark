@@ -12,7 +12,7 @@ pub struct Update {
     #[clap(forbid_empty_values = true, required = true)]
     network_name: String,
     /// DNS Servers to update for the network
-    #[clap(long, required = true, forbid_empty_values = true)]
+    #[clap(long, required = true, forbid_empty_values = false)]
     network_dns_servers: Vec<String>,
 }
 
