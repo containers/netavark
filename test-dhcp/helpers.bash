@@ -10,7 +10,7 @@ TMP_TESTDIR=
 
 
 # Netavark binary to run
-NV_PROXY=${NV_PROXY:-./bin/nv-dhcp-proxy}
+NETAVARK=${NETAVARK:-./bin/netavark}
 
 TESTSDIR=${TESTSDIR:-$(dirname ${BASH_SOURCE})}
 
@@ -378,7 +378,7 @@ function stop_dhcp() {
 }
 
 function start_proxy() {
-  ip netns exec "$NS_NAME" ./bin/netavark-dhcp-proxy --dir "$TMP_TESTDIR" --uds "$TMP_TESTDIR"  &
+  ip netns exec "$NS_NAME" $NETAVARK dhcp-proxy --dir "$TMP_TESTDIR" --uds "$TMP_TESTDIR"  &
   PROXY_PID=$!
 }
 

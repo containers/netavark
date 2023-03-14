@@ -58,7 +58,7 @@ $ make all
 Then run the server with debug enabled:
 
 ```
-$ sudo RUST_LOG=debug ./bin/netavark-dhcp-proxy
+$ sudo RUST_LOG=debug ./bin/netavark dhcp-proxy
 ```
 
 Note: When doing debug of the client or server, it can be very nice to run the server in your IDE.  This allows

@@ -6,7 +6,7 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=exec
-ExecStart=/usr/libexec/podman/netavark-dhcp-proxy -a 30
+ExecStart=/usr/libexec/podman/netavark dhcp-proxy -a 30
 
 [Install]
 WantedBy=default.target

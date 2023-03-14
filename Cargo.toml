@@ -24,10 +24,6 @@ name = "netavark"
 path = "src/main.rs"
 
 [[bin]]
-name = "netavark-dhcp-proxy"
-path = "src/dhcp_proxy_server/server.rs"
-
-[[bin]]
 name = "netavark-dhcp-proxy-client"
 path = "src/dhcp_proxy_client/client.rs"
 
