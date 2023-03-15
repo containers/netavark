@@ -103,14 +103,12 @@ build_aarch64_task:
   upload_caches: [ "cargo", "targets", "bin" ]
   # Downstream CI needs the aarch64 binaries from this CI system.
   # However, we don't want to confuse architectures.
-  art_prep_script:
-    - cd bin
-    - ls -la
-    - mv netavark netavark.$(uname -m)-unknown-linux-gnu
-    - mv netavark.debug netavark.debug.$(uname -m)-unknown-linux-gnu
-    - mv netavark.info netavark.info.$(uname -m)-unknown-linux-gnu
-    - mv netavark-dhcp-proxy-client netavark-dhcp-proxy-client.$(uname -m)-unknown-linux-gnu
-    - mv netavark-dhcp-proxy-client.debug netavark-dhcp-proxy-client.debug.$(uname -m)-unknown-linux-gnu
+  art_prep_script: |
+    cd bin
+    ls -la
+    for filename in ./*; do
+      mv "$filename" "${filename}.$(uname -m)-unknown-linux-gnu"
+    done
   armbinary_artifacts:  # See success_task
     path: ./bin/netavark*
 
