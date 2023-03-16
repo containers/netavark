@@ -65,7 +65,7 @@ build_task:
     folder: "$CIRRUS_WORKING_DIR/bin"
     # Avoid binary pollution by scoping this to only this specific build.
     # Adjust vX if cache schema changes.
-    fingerprint_key: "bin_v2_${CIRRUS_TAG}${DEST_BRANCH}${CIRRUS_PR}_amd64" # Cache only within same tag, branch, or PR (branch will be 'pull/#')
+    fingerprint_key: "bin_v3_${CIRRUS_TAG}${DEST_BRANCH}${CIRRUS_PR}_amd64" # Cache only within same tag, branch, or PR (branch will be 'pull/#')
     reupload_on_changes: true
   setup_script: &setup "$SCRIPT_BASE/setup.sh"
   main_script: &main "$SCRIPT_BASE/runner.sh $CIRRUS_TASK_NAME"
