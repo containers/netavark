@@ -34,6 +34,8 @@ BuildRequires: git-core
 BuildRequires: go-md2man
 BuildRequires: protobuf-c
 BuildRequires: protobuf-compiler
+%{?systemd_requires}
+BuildRequires: systemd
 Recommends: aardvark-dns
 Provides: container-network-stack
 %if 0%{?fedora}
@@ -58,11 +60,19 @@ popd
 %install
 %{__make} DESTDIR=%{buildroot} PREFIX=%{_prefix} install
 
+%preun
+%systemd_preun %{name}-dhcp-proxy.service
+
+%postun
+%systemd_postun %{name}-dhcp-proxy.service
+
 %files
 %license LICENSE
 %dir %{_libexecdir}/podman
 %{_libexecdir}/podman/%{name}
 %{_mandir}/man1/%{name}.1*
+%{_unitdir}/%{name}-dhcp-proxy.service
+%{_unitdir}/%{name}-dhcp-proxy.socket
 
 %changelog
 {{{ git_dir_changelog }}}
