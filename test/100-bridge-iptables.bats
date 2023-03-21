@@ -427,32 +427,50 @@ fw_driver=iptables
 
 @test "$fw_driver - port forwarding with hostip ipv4 - tcp" {
     add_dummy_interface_on_host dummy0 "172.16.0.1/24"
-    run_in_host_netns ip addr
     test_port_fw hostip="172.16.0.1"
 }
 
-@test "$fw_driver - port forwarding with hostip ipv4 dual stack- tcp" {
+@test "$fw_driver - port forwarding with hostip ipv4 dual stack - tcp" {
     add_dummy_interface_on_host dummy0 "172.16.0.1/24"
-    run_in_host_netns ip addr
     test_port_fw ip=dual hostip="172.16.0.1"
 }
 
-@test "$fw_driver - port range forwarding with hostip ipv6 - tcp" {
+@test "$fw_driver - port forwarding with hostip ipv6 - tcp" {
     add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
     test_port_fw ip=6 hostip="fd65:8371:648b:0c06::1"
 }
 
-@test "$fw_driver - port range forwarding with hostip ipv6 dual stack - tcp" {
+@test "$fw_driver - port forwarding with hostip ipv6 dual stack - tcp" {
     add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
     test_port_fw ip=dual hostip="fd65:8371:648b:0c06::1"
 }
 
-@test "$fw_driver - port range forwarding with hostip ipv4 - udp" {
+@test "$fw_driver - port forwarding with wildcard hostip ipv4 - tcp" {
+    add_dummy_interface_on_host dummy0 "172.16.0.1/24"
+    test_port_fw hostip="0.0.0.0" connectip="172.16.0.1"
+}
+
+@test "$fw_driver - port forwarding with wildcard hostip ipv4 dual stack - tcp" {
+    add_dummy_interface_on_host dummy0 "172.16.0.1/24"
+    test_port_fw ip=dual hostip="0.0.0.0" connectip="172.16.0.1"
+}
+
+@test "$fw_driver - port forwarding with wildcard hostip ipv6 - tcp" {
+    add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
+    test_port_fw ip=6 hostip="::" connectip="fd65:8371:648b:0c06::1"
+}
+
+@test "$fw_driver - port forwarding with wildcard hostip ipv6 dual stack - tcp" {
+    add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
+    test_port_fw ip=dual hostip="::" connectip="fd65:8371:648b:0c06::1"
+}
+
+@test "$fw_driver - port forwarding with hostip ipv4 - udp" {
     add_dummy_interface_on_host dummy0 "172.16.0.1/24"
     test_port_fw proto=udp hostip="172.16.0.1"
 }
 
-@test "$fw_driver - port range forwarding with hostip ipv6 - udp" {
+@test "$fw_driver - port forwarding with hostip ipv6 - udp" {
     add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
     test_port_fw ip=6 proto=udp hostip="fd65:8371:648b:0c06::1"
 }
@@ -782,4 +800,9 @@ EOF
     default_route_v6="$output"
     assert_json "$default_route_v6" '.[0].dst' == "default" "Default route was selected"
     assert_json "$default_route_v6" '.[0].metric' == "100" "v6 route metric matches v4"
+}
+
+@test "netavark error - invalid host_ip in port mappings" {
+    expected_rc=1 run_netavark -f ${TESTSDIR}/testfiles/invalid-port.json setup $(get_container_netns_path)
+    assert_json ".error" "invalid host ip \"abcd\" provided for port 8080" "host ip error"
 }
