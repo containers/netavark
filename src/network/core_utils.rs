@@ -196,7 +196,6 @@ impl CoreUtils {
     pub fn decode_address_from_hex(input: &str) -> Result<Vec<u8>, std::io::Error> {
         let bytes: Result<Vec<u8>, _> = input
             .split(|c| c == ':' || c == '-')
-            .into_iter()
             .map(|b| u8::from_str_radix(b, 16))
             .collect();
 
