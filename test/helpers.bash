@@ -329,6 +329,7 @@ function assert_json() {
 #     hostport=$port the port which is binded on the host
 #     containerport=$port the port which is binded in the container
 #     range=$num >=1 specify a port range which will forward hostport+range ports
+#     connectip=$ip the ip which is used to connect to in the ncat test
 #
 function test_port_fw() {
     local ipv4=true
@@ -338,6 +339,7 @@ function test_port_fw() {
     local host_port=""
     local container_port=""
     local range=1
+    local connect_ip=""
 
     # parse arguments
     while [[ "$#" -gt 0 ]]; do
@@ -359,6 +361,9 @@ function test_port_fw() {
             ;;
         hostip)
             host_ip="$value"
+            ;;
+        connectip)
+            connect_ip="$value"
             ;;
         hostport)
             host_port="$value"
@@ -471,9 +476,11 @@ EOF
             ((hport = host_port + i))
 
             if [ $ipv4 = true ]; then
-                connect_ip=$ipv4_gateway
-                if [[ -n "$host_ip" ]]; then
-                    connect_ip=$host_ip
+                if [[ -z "$connect_ip" ]]; then
+                    connect_ip=$ipv4_gateway
+                    if [[ -n "$host_ip" ]]; then
+                        connect_ip=$host_ip
+                    fi
                 fi
 
                 run_nc_test "0" "$proto" $cport $connect_ip $hport
@@ -481,9 +488,11 @@ EOF
 
 
             if [ $ipv6 = true ]; then
-                connect_ip=$ipv6_gateway
-                if [[ -n "$host_ip" ]]; then
-                    connect_ip=$host_ip
+                if [[ -z "$connect_ip" ]]; then
+                    connect_ip=$ipv6_gateway
+                    if [[ -n "$host_ip" ]]; then
+                        connect_ip=$host_ip
+                    fi
                 fi
 
                 run_nc_test "0" "$proto" $cport $connect_ip $hport

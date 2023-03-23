@@ -143,7 +143,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                 }
             };
             let chains =
-                get_port_forwarding_chains(&self.conn, &setup_portfw, &v4, &subnet_v4, false);
+                get_port_forwarding_chains(&self.conn, &setup_portfw, &v4, &subnet_v4, false)?;
             create_network_chains(chains)?;
         }
         if let Some(v6) = setup_portfw.container_ip_v6 {
@@ -158,7 +158,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                 }
             };
             let chains =
-                get_port_forwarding_chains(&self.conn6, &setup_portfw, &v6, &subnet_v6, true);
+                get_port_forwarding_chains(&self.conn6, &setup_portfw, &v6, &subnet_v6, true)?;
             create_network_chains(chains)?;
         };
         Result::Ok(())
@@ -178,7 +178,7 @@ impl firewall::FirewallDriver for IptablesDriver {
             };
 
             let chains =
-                get_port_forwarding_chains(&self.conn, &tear.config, &v4, &subnet_v4, false);
+                get_port_forwarding_chains(&self.conn, &tear.config, &v4, &subnet_v4, false)?;
 
             for chain in &chains {
                 chain.remove_rules(tear.complete_teardown)?;
@@ -211,7 +211,7 @@ impl firewall::FirewallDriver for IptablesDriver {
             };
 
             let chains =
-                get_port_forwarding_chains(&self.conn6, &tear.config, &v6, &subnet_v6, true);
+                get_port_forwarding_chains(&self.conn6, &tear.config, &v6, &subnet_v6, true)?;
 
             for chain in &chains {
                 chain.remove_rules(tear.complete_teardown)?;

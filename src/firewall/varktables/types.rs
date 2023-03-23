@@ -331,7 +331,7 @@ pub fn get_port_forwarding_chains<'a>(
     container_ip: &IpAddr,
     network_address: &IpNet,
     is_ipv6: bool,
-) -> Vec<VarkChain<'a>> {
+) -> NetavarkResult<Vec<VarkChain<'a>>> {
     let mut localhost_ip = "127.0.0.1";
     if is_ipv6 {
         localhost_ip = "::1";
@@ -453,20 +453,40 @@ pub fn get_port_forwarding_chains<'a>(
     match pfwd.port_mappings {
         Some(ports) => {
             for i in ports {
-                if let Ok(ip) = i.host_ip.parse::<IpAddr>() {
-                    match ip {
-                        IpAddr::V4(_) => {
-                            if is_ipv6 {
-                                continue;
+                let host_ip = if i.host_ip.is_empty() {
+                    None
+                } else {
+                    match i.host_ip.parse() {
+                        Ok(ip) => match ip {
+                            IpAddr::V4(v4) => {
+                                if is_ipv6 {
+                                    continue;
+                                }
+                                if !v4.is_unspecified() {
+                                    Some(IpAddr::V4(v4))
+                                } else {
+                                    None
+                                }
                             }
-                        }
-                        IpAddr::V6(_) => {
-                            if !is_ipv6 {
-                                continue;
+                            IpAddr::V6(v6) => {
+                                if !is_ipv6 {
+                                    continue;
+                                }
+                                if !v6.is_unspecified() {
+                                    Some(IpAddr::V6(v6))
+                                } else {
+                                    None
+                                }
                             }
+                        },
+                        Err(_) => {
+                            return Err(NetavarkError::msg(format!(
+                                "invalid host ip \"{}\" provided for port {}",
+                                i.host_ip, i.host_port,
+                            )));
                         }
                     }
-                }
+                };
 
                 // hostport dnat
                 let is_range = i.range > 1;
@@ -497,10 +517,10 @@ pub fn get_port_forwarding_chains<'a>(
 
                 // if a destination ip address is provided, we need to alter
                 // the rule a bit
-                if !i.host_ip.is_empty() {
+                if let Some(host_ip) = host_ip {
                     dn_setmark_rule_localhost =
-                        format!("{} -d {}", dn_setmark_rule_localhost, i.host_ip);
-                    dn_setmark_rule_subnet = format!("{} -d {}", dn_setmark_rule_subnet, i.host_ip);
+                        format!("{} -d {}", dn_setmark_rule_localhost, host_ip);
+                    dn_setmark_rule_subnet = format!("{} -d {}", dn_setmark_rule_subnet, host_ip);
                 }
 
                 // dn container (the actual port usages)
@@ -528,8 +548,8 @@ pub fn get_port_forwarding_chains<'a>(
 
                 // if a destination ip address is provided, we need to alter
                 // the rule a bit
-                if !i.host_ip.is_empty() {
-                    dnat_rule = format!("{} -d {}", dnat_rule, i.host_ip)
+                if let Some(host_ip) = host_ip {
+                    dnat_rule = format!("{} -d {}", dnat_rule, host_ip)
                 }
                 netavark_hashed_dn_chain.build_rule(VarkRule::new(dnat_rule, None));
             }
@@ -543,5 +563,5 @@ pub fn get_port_forwarding_chains<'a>(
     chains.push(prerouting_chain);
     chains.push(output_chain);
 
-    chains
+    Ok(chains)
 }
