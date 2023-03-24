@@ -17,9 +17,9 @@ pub fn append_unique(
         Err(e) => return Err(NetavarkError::Message(e.to_string())),
     };
     if exists {
+        debug_rule_exists(table, chain, rule.to_string());
         return Ok(());
     }
-    debug_rule_exists(table, chain, rule.to_string());
     if let Err(e) = driver
         .append(table, chain, rule)
         .map(|_| debug_rule_create(table, chain, rule.to_string()))
