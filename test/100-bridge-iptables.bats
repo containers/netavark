@@ -158,7 +158,7 @@ fw_driver=iptables
 
     # check aardvark config and running
     run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
-    assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1" "aardvark set to listen to all IPs"
+    assert "${lines[0]}" == "10.89.3.1,fd10:88:a::1" "aardvark set to listen to all IPs"
     assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2 fd10:88:a::2 somename 8.8.8.8,1.1.1.1$" "aardvark config's container"
     assert "${#lines[@]}" = 2 "too many lines in aardvark config"
 

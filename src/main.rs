@@ -53,7 +53,7 @@ fn main() {
     let result = match opts.subcmd {
         SubCommand::Setup(setup) => setup.exec(opts.file, config, aardvark_bin, rootless),
         SubCommand::Teardown(teardown) => teardown.exec(opts.file, config, aardvark_bin, rootless),
-        SubCommand::Update(update) => update.exec(config, aardvark_bin, rootless),
+        SubCommand::Update(mut update) => update.exec(config, aardvark_bin, rootless),
         SubCommand::Version(version) => version.exec(),
         SubCommand::DHCPProxy(proxy) => dhcp_proxy::serve(proxy),
     };
