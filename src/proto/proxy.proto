@@ -2,6 +2,7 @@ syntax = "proto3";
 package netavark_proxy;
 
 service NetavarkProxy {
+  //  Client side streaming to detect client disconnection
   rpc Setup(NetworkConfig) returns (Lease) {}
   rpc Teardown(NetworkConfig) returns (Lease) {}
   rpc Clean(Empty) returns (OperationResponse) {}

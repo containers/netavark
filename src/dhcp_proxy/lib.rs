@@ -1,6 +1,7 @@
 extern crate core;
 
 use crate::dhcp_proxy::lib::g_rpc::{Lease, NetworkConfig};
+
 use std::convert::TryFrom;
 use std::error::Error;
 
@@ -245,6 +246,7 @@ impl NetworkConfig {
         Ok(lease)
     }
 }
+
 trait VectorConv {
     fn to_v4_addrs(&self) -> Result<Option<Vec<Ipv4Addr>>, AddrParseError>;
     fn to_v6_addrs(&self) -> Result<Option<Vec<Ipv6Addr>>, AddrParseError>;
