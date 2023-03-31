@@ -82,8 +82,14 @@ client: bin $(CARGO_TARGET_DIR)
 docs: ## build the docs on the host
 	$(MAKE) -C docs
 
+NV_UNIT_FILES = contrib/systemd/system/netavark-dhcp-proxy.service
+
+%.service: %.service.in
+	sed -e 's;@@NETAVARK@@;$(LIBEXECPODMAN)/netavark;g' $< >$@.tmp.$$ \
+		&& mv -f $@.tmp.$$ $@
+
 .PHONY: install
-install:
+install: $(NV_UNIT_FILES)
 	install ${SELINUXOPT} -D -m0755 bin/netavark $(DESTDIR)/$(LIBEXECPODMAN)/netavark
 	$(MAKE) -C docs install
 	install ${SELINUXOPT} -m 755 -d ${DESTDIR}${SYSTEMDDIR}
