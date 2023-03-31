@@ -12,7 +12,7 @@ pub struct Update {
     #[clap(forbid_empty_values = true, required = true)]
     network_name: String,
     /// DNS Servers to update for the network
-    #[clap(long, required = true, forbid_empty_values = true)]
+    #[clap(long, required = true, forbid_empty_values = false)]
     network_dns_servers: Vec<String>,
 }
 
@@ -26,7 +26,7 @@ impl Update {
     }
 
     pub fn exec(
-        &self,
+        &mut self,
         config_dir: &str,
         aardvark_bin: String,
         rootless: bool,
@@ -38,6 +38,10 @@ impl Update {
             if let Ok(path_string) = path.into_os_string().into_string() {
                 let aardvark_interface =
                     Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
+                // if empty network_dns_servers are passed, pass empty array instead of `[""]`
+                if self.network_dns_servers.len() == 1 && self.network_dns_servers[0].is_empty() {
+                    self.network_dns_servers = Vec::new();
+                }
                 if let Err(err) = aardvark_interface
                     .modify_network_dns_servers(&self.network_name, &self.network_dns_servers)
                 {
