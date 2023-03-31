@@ -229,17 +229,6 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
         &uds_path.clone().into_os_string().into_string().unwrap()
     );
 
-    // Create a new uds socket path
-    match Path::new(&uds_path).parent() {
-        None => {
-            log::error!("Could not find uds path");
-            return Ok(());
-        }
-        Some(f) => tokio::fs::create_dir_all(f).await?,
-    }
-    // Watch for signals after the uds path has been created, so that the socket can be closed.
-    handle_signal(uds_path.clone()).await;
-
     let mut is_systemd_activated = false;
 
     // check if the UDS is a systemd socket activated service.  if it is,
@@ -256,7 +245,19 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
             UnixListener::from_std(systemd_socket)?
         }
         // Use the standard socket approach
-        Err(..) => UnixListener::bind(&uds_path)?,
+        Err(..) => {
+            // Create a new uds socket path
+            match Path::new(&uds_path).parent() {
+                None => {
+                    log::error!("Could not find uds path");
+                    return Ok(());
+                }
+                Some(f) => tokio::fs::create_dir_all(f).await?,
+            }
+            // Watch for signals after the uds path has been created, so that the socket can be closed.
+            handle_signal(uds_path.clone()).await;
+            UnixListener::bind(&uds_path)?
+        }
     };
 
     let uds_stream = UnixListenerStream::new(uds);
