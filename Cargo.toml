@@ -62,7 +62,7 @@ futures-channel="0.3.28"
 futures-core = "0.3.28"
 futures-util = "0.3.28"
 nispor = "1.2.10"
-http = "0.2.8"
+http = "0.2.9"
 macaddr = "1.0.1"
 tower = { version = "0.4" }
 
