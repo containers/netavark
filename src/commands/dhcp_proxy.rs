@@ -229,16 +229,7 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
         &uds_path.clone().into_os_string().into_string().unwrap()
     );
 
-    // Create a new uds socket path
-    match Path::new(&uds_path).parent() {
-        None => {
-            log::error!("Could not find uds path");
-            return Ok(());
-        }
-        Some(f) => tokio::fs::create_dir_all(f).await?,
-    }
-    // Watch for signals after the uds path has been created, so that the socket can be closed.
-    handle_signal(uds_path.clone()).await;
+    let mut is_systemd_activated = false;
 
     // check if the UDS is a systemd socket activated service.  if it is,
     // then systemd hands this over to us on FD 3.
@@ -248,12 +239,25 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
                 error!("Received more than one FD from systemd");
                 return Ok(());
             }
+            is_systemd_activated = true;
             let systemd_socket = unsafe { stdUnixListener::from_raw_fd(3) };
             systemd_socket.set_nonblocking(true)?;
             UnixListener::from_std(systemd_socket)?
         }
         // Use the standard socket approach
-        Err(..) => UnixListener::bind(&uds_path)?,
+        Err(..) => {
+            // Create a new uds socket path
+            match Path::new(&uds_path).parent() {
+                None => {
+                    log::error!("Could not find uds path");
+                    return Ok(());
+                }
+                Some(f) => tokio::fs::create_dir_all(f).await?,
+            }
+            // Watch for signals after the uds path has been created, so that the socket can be closed.
+            handle_signal(uds_path.clone()).await;
+            UnixListener::bind(&uds_path)?
+        }
     };
 
     let uds_stream = UnixListenerStream::new(uds);
@@ -300,7 +304,11 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
         _ = &mut server => {},
     };
 
-    fs::remove_file(uds_path);
+    // Make sure to only remove the socket path when we do not run socket activated,
+    // otherwise we delete the socket systemd is using which causes all new connections to fail.
+    if !is_systemd_activated {
+        fs::remove_file(uds_path);
+    }
     Ok(())
 }
 
