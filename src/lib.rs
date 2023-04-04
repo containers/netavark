@@ -8,3 +8,4 @@ pub mod dns;
 pub mod error;
 pub mod firewall;
 pub mod network;
+pub mod plugin;

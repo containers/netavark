@@ -28,6 +28,7 @@ impl Teardown {
         input_file: Option<String>,
         config_dir: &str,
         aardvark_bin: String,
+        plugin_directories: Option<Vec<String>>,
         rootless: bool,
     ) -> NetavarkResult<()> {
         debug!("{:?}", "Tearing down..");
@@ -74,19 +75,22 @@ impl Teardown {
                 }
             };
 
-            let driver = match get_network_driver(DriverInfo {
-                firewall: firewall_driver.as_ref(),
-                container_id: &network_options.container_id,
-                container_name: &network_options.container_name,
-                container_dns_servers: &network_options.dns_servers,
-                netns_host: hostns.fd,
-                netns_container: netns.fd,
-                netns_path: &self.network_namespace_path,
-                network,
-                per_network_opts,
-                port_mappings: &network_options.port_mappings,
-                dns_port,
-            }) {
+            let driver = match get_network_driver(
+                DriverInfo {
+                    firewall: firewall_driver.as_ref(),
+                    container_id: &network_options.container_id,
+                    container_name: &network_options.container_name,
+                    container_dns_servers: &network_options.dns_servers,
+                    netns_host: hostns.fd,
+                    netns_container: netns.fd,
+                    netns_path: &self.network_namespace_path,
+                    network,
+                    per_network_opts,
+                    port_mappings: &network_options.port_mappings,
+                    dns_port,
+                },
+                &plugin_directories,
+            ) {
                 Ok(driver) => driver,
                 Err(err) => {
                     error_list.push(err);

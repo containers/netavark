@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use netavark::network::netlink::*;
-    use netlink_packet_route::nlas::link::InfoKind;
+    use netlink_packet_route::{address, nlas::link::InfoKind};
 
     macro_rules! test_setup {
         () => {
@@ -152,5 +152,37 @@ mod tests {
         assert!(out.status.success(), "failed to show addr via ip");
 
         assert!(!stdout.contains(net), "route should not exist");
+    }
+
+    #[test]
+    fn test_dump_addr() {
+        test_setup!();
+        let mut sock = Socket::new().expect("Socket::new()");
+
+        let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
+        eprintln!("{}", String::from_utf8(out.stderr).unwrap());
+        assert!(out.status.success(), "failed to add link via ip");
+
+        let net = "10.0.0.2/24";
+
+        let out = run_command!("ip", "addr", "add", net, "dev", "test1");
+        eprintln!("{}", String::from_utf8(out.stderr).unwrap());
+        assert!(out.status.success(), "failed to add addr via ip");
+
+        let out = run_command!("ip", "link", "set", "up", "lo");
+        eprintln!("{}", String::from_utf8(out.stderr).unwrap());
+        assert!(out.status.success(), "failed to set up lo via ip");
+
+        let addresses = sock.dump_addresses().expect("dump_addresses failed");
+        for nla in addresses[0].nlas.iter() {
+            if let address::Nla::Address(a) = nla {
+                assert_eq!(a, &vec![127, 0, 0, 1])
+            }
+        }
+        for nla in addresses[1].nlas.iter() {
+            if let address::Nla::Address(a) = nla {
+                assert_eq!(a, &vec![10, 0, 0, 2])
+            }
+        }
     }
 }

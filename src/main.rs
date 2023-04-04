@@ -21,6 +21,9 @@ struct Opts {
     #[clap(short, long)]
     /// Path to the aardvark-dns binary.
     aardvark_binary: Option<String>,
+    /// Path to netavark plugin directories, can be set multiple times to specify more than one directory.
+    #[clap(long, long = "plugin-directory")]
+    plugin_directories: Option<Vec<String>>,
     /// Netavark trig command
     #[clap(subcommand)]
     subcmd: SubCommand,
@@ -51,8 +54,20 @@ fn main() {
         .aardvark_binary
         .unwrap_or_else(|| String::from("/usr/libexec/podman/aardvark-dns"));
     let result = match opts.subcmd {
-        SubCommand::Setup(setup) => setup.exec(opts.file, config, aardvark_bin, rootless),
-        SubCommand::Teardown(teardown) => teardown.exec(opts.file, config, aardvark_bin, rootless),
+        SubCommand::Setup(setup) => setup.exec(
+            opts.file,
+            config,
+            aardvark_bin,
+            opts.plugin_directories,
+            rootless,
+        ),
+        SubCommand::Teardown(teardown) => teardown.exec(
+            opts.file,
+            config,
+            aardvark_bin,
+            opts.plugin_directories,
+            rootless,
+        ),
         SubCommand::Update(mut update) => update.exec(config, aardvark_bin, rootless),
         SubCommand::Version(version) => version.exec(),
         SubCommand::DHCPProxy(proxy) => dhcp_proxy::serve(proxy),

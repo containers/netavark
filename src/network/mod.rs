@@ -16,6 +16,7 @@ pub mod driver;
 pub mod internal_types;
 mod macvlan_dhcp;
 pub mod netlink;
+pub mod plugin;
 pub mod vlan;
 
 impl types::NetworkOptions {

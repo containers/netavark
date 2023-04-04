@@ -220,3 +220,23 @@ pub struct LeaseRange {
     #[serde(rename = "start_ip")]
     pub start_ip: Option<String>,
 }
+
+/// Type used for the plugin setup and teardown command
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NetworkPluginExec {
+    /// The id for the container
+    #[serde(rename = "container_id")]
+    pub container_id: String,
+    /// The name for the container
+    #[serde(rename = "container_name")]
+    pub container_name: String,
+
+    /// The port mappings for this container. Optional
+    #[serde(rename = "port_mappings")]
+    pub port_mappings: Option<Vec<PortMapping>>,
+
+    /// The network config for this network
+    pub network: Network,
+    /// The special network options for this specific container
+    pub network_options: PerNetworkOptions,
+}

@@ -4,14 +4,16 @@ use crate::{
     firewall::FirewallDriver,
 };
 
-use std::net::IpAddr;
+use std::{net::IpAddr, path::Path};
 
 use super::{
     bridge::Bridge,
     constants, netlink,
+    plugin::PluginDriver,
     types::{Network, PerNetworkOptions, PortMapping, StatusBlock},
     vlan::Vlan,
 };
+use std::os::unix::fs::PermissionsExt;
 use std::os::unix::io::RawFd;
 
 pub struct DriverInfo<'a> {
@@ -46,14 +48,30 @@ pub trait NetworkDriver {
     fn network_name(&self) -> String;
 }
 
-pub fn get_network_driver(info: DriverInfo) -> NetavarkResult<Box<dyn NetworkDriver + '_>> {
+pub fn get_network_driver<'a>(
+    info: DriverInfo<'a>,
+    plugins_directories: &Option<Vec<String>>,
+) -> NetavarkResult<Box<dyn NetworkDriver + 'a>> {
     match info.network.driver.as_str() {
         constants::DRIVER_BRIDGE => Ok(Box::new(Bridge::new(info))),
         constants::DRIVER_IPVLAN | constants::DRIVER_MACVLAN => Ok(Box::new(Vlan::new(info))),
 
-        _ => Err(NetavarkError::Message(format!(
-            "unknown network driver {}",
-            info.network.driver
-        ))),
+        name => {
+            if let Some(dirs) = plugins_directories {
+                for path in dirs.iter() {
+                    let path = Path::new(path).join(name);
+                    if let Ok(meta) = path.metadata() {
+                        if meta.is_file() && meta.permissions().mode() & 0o111 != 0 {
+                            return Ok(Box::new(PluginDriver::new(path, info)));
+                        }
+                    }
+                }
+            }
+
+            Err(NetavarkError::Message(format!(
+                "unknown network driver \"{}\"",
+                info.network.driver
+            )))
+        }
     }
 }

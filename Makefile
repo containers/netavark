@@ -57,6 +57,10 @@ build_netavark: bin $(CARGO_TARGET_DIR)
 	$(CARGO) build $(release)
 	cp $(CARGO_TARGET_DIR)/$(profile)/netavark bin/netavark$(if $(debug),.debug,)
 
+.PHONY: examples
+examples: bin $(CARGO_TARGET_DIR)
+	cargo build --examples $(release)
+
 .PHONY: crate-publish
 crate-publish:
 	@if [ "$(CRATE_VERSION)" != "$(GIT_TAG)" ]; then\
@@ -116,7 +120,7 @@ unit: $(CARGO_TARGET_DIR)
 	$(CARGO) test
 
 .PHONY: integration
-integration: $(CARGO_TARGET_DIR)
+integration: $(CARGO_TARGET_DIR) examples
 	# needs to be run as root or with podman unshare --rootless-netns
 	bats test/
 	bats test-dhcp/

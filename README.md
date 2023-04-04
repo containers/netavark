@@ -39,3 +39,7 @@ For general questions and discussion, please use Podman's
 For discussions around issues/bugs and features, you can use the GitHub
 [issues](https://github.com/containers/netavark/issues)
 and [PRs](https://github.com/containers/netavark/pulls) tracking system.
+
+## Plugins
+
+Netavark also supports executing external plugins, see [./plugin-API.md](./plugin-API.md).

@@ -174,6 +174,16 @@ impl Socket {
         Ok(())
     }
 
+    pub fn set_link_ns(&mut self, link_id: u32, netns_fd: i32) -> NetavarkResult<()> {
+        let mut msg = LinkMessage::default();
+        msg.header.index = link_id;
+        msg.nlas.push(Nla::NetNsFd(netns_fd));
+
+        let result = self.make_netlink_request(RtnlMessage::SetLink(msg), NLM_F_ACK)?;
+        expect_netlink_result!(result, 0);
+        Ok(())
+    }
+
     fn create_addr_msg(link_id: u32, addr: &ipnet::IpNet) -> AddressMessage {
         let mut msg = AddressMessage::default();
         msg.header.index = link_id;
@@ -340,6 +350,28 @@ impl Socket {
             };
         }
         Ok(links)
+    }
+
+    pub fn dump_addresses(&mut self) -> NetavarkResult<Vec<AddressMessage>> {
+        let msg = AddressMessage::default();
+
+        let results =
+            self.make_netlink_request(RtnlMessage::GetAddress(msg), NLM_F_DUMP | NLM_F_ACK)?;
+
+        let mut addresses = Vec::with_capacity(results.len());
+
+        for res in results {
+            match res {
+                RtnlMessage::NewAddress(m) => addresses.push(m),
+                m => {
+                    return Err(NetavarkError::Message(format!(
+                        "unexpected netlink message type: {}",
+                        m.message_type()
+                    )))
+                }
+            };
+        }
+        Ok(addresses)
     }
 
     pub fn set_up(&mut self, id: LinkID) -> NetavarkResult<()> {
