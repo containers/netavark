@@ -78,6 +78,8 @@ pub enum NetavarkError {
 
     Netlink(netlink_packet_core::error::ErrorMessage),
 
+    DHCPProxy(tonic::Status),
+
     List(NetavarkErrorList),
 }
 
@@ -146,6 +148,7 @@ impl fmt::Display for NetavarkError {
             NetavarkError::Sysctl(e) => write!(f, "Sysctl error: {}", e),
             NetavarkError::Serde(e) => write!(f, "JSON Decoding error: {}", e),
             NetavarkError::Netlink(e) => write!(f, "Netlink error: {}", e),
+            NetavarkError::DHCPProxy(e) => write!(f, "dhcp proxy error: {}", e),
             NetavarkError::List(list) => {
                 if list.0.len() == 1 {
                     write!(f, "{}", list.0[0])
@@ -202,5 +205,11 @@ impl From<ipnet::PrefixLenError> for NetavarkError {
 impl From<netlink_packet_core::error::ErrorMessage> for NetavarkError {
     fn from(err: netlink_packet_core::error::ErrorMessage) -> Self {
         NetavarkError::Netlink(err)
+    }
+}
+
+impl From<tonic::Status> for NetavarkError {
+    fn from(err: tonic::Status) -> Self {
+        NetavarkError::DHCPProxy(err)
     }
 }

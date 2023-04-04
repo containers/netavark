@@ -5,6 +5,7 @@ use tonic::{Code, Status};
 
 use netavark::dhcp_proxy::lib::g_rpc::{Lease, NetworkConfig};
 use netavark::dhcp_proxy::proxy_conf::{DEFAULT_NETWORK_CONFIG, DEFAULT_UDS_PATH};
+use netavark::error::NetavarkError;
 
 pub mod commands;
 
@@ -57,9 +58,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let r = match result {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("Error: {}", e.message());
             eprintln!("Error: {e}");
-            process_failure(e)
+            match e {
+                NetavarkError::DHCPProxy(status) => process_failure(status),
+                _ => process::exit(1),
+            }
         }
     };
 
