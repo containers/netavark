@@ -1,7 +1,7 @@
 extern crate core;
 
 use crate::dhcp_proxy::lib::g_rpc::{Lease, NetworkConfig};
-
+use crate::error::NetavarkError;
 use std::convert::TryFrom;
 use std::error::Error;
 
@@ -14,7 +14,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use tokio::net::UnixStream;
 use tonic::transport::{Channel, Endpoint};
-use tonic::{Request, Status};
+use tonic::Request;
 use tower::service_fn;
 
 #[allow(clippy::unwrap_used)]
@@ -174,19 +174,20 @@ impl NetworkConfig {
     ///
     /// * `p`: path to uds
     ///
-    /// returns: Result<NetavarkProxyClient<Channel>, Status>
+    /// returns: Result<NetavarkProxyClient<Channel>, NetavarkError>
     ///
     /// # Examples
     ///
     /// ```
     ///
     /// ```
-    async fn get_client(p: String) -> Result<NetavarkProxyClient<Channel>, Status> {
+    async fn get_client(p: String) -> Result<NetavarkProxyClient<Channel>, NetavarkError> {
         // We do not know why the uds connections need to be done like this.  The
         // maintainer suggested it is part of the their API.
-        let endpoint = Endpoint::try_from("http://[::1]:10000")
-            .map_err(|e| Status::internal(e.to_string()))?;
+        // We know this is safe and if it ever fails test will catch it
+        let endpoint = Endpoint::try_from("http://[::1]").unwrap();
 
+        let path = p.clone();
         let channel = endpoint
             .connect_with_connector(service_fn(move |_: Uri| {
                 let pp = p.clone();
@@ -194,7 +195,29 @@ impl NetworkConfig {
                 UnixStream::connect(pp)
             }))
             .await
-            .map_err(|e| Status::internal(e.to_string()))?;
+            .map_err(|e| {
+                let msg = match e.source() {
+                    Some(err) => {
+                        // this is a bit ugly but we check if the socket was not found to provide a proper error message
+                        // and hint at the systemd socket unit
+                        match err
+                            .source()
+                            .and_then(|e| e.downcast_ref::<std::io::Error>())
+                            .and_then(|e| {
+                                if e.kind() == std::io::ErrorKind::NotFound || e.kind() == std::io::ErrorKind::ConnectionRefused {
+                                    Some(format!("socket \"{path}\": {e}, is the netavark-dhcp-proxy.socket unit enabled?"))
+                                } else {
+                                    None
+                                }
+                            }) {
+                            Some(msg) => msg,
+                            None => err.to_string(),
+                        }
+                    }
+                    None => e.to_string(),
+                };
+                NetavarkError::msg(msg)
+            })?;
 
         Ok(NetavarkProxyClient::new(channel))
     }
@@ -206,18 +229,18 @@ impl NetworkConfig {
     ///
     /// * `p`: path to uds
     ///
-    /// returns: Result<Lease, Status>
+    /// returns: Result<Lease, NetavarkError>
     ///
     /// # Examples
     ///
     /// ```
     ///
     /// ```
-    pub async fn get_lease(self, p: &str) -> Result<Lease, Status> {
+    pub async fn get_lease(self, p: &str) -> Result<Lease, NetavarkError> {
         let mut client = NetworkConfig::get_client(p.to_string()).await?;
         let lease = match client.setup(Request::new(self)).await {
             Ok(l) => l.into_inner(),
-            Err(s) => return Err(s),
+            Err(s) => return Err(s.into()),
         };
         Ok(lease)
     }
@@ -230,18 +253,18 @@ impl NetworkConfig {
     ///
     /// * `p`:  path to uds
     ///
-    /// returns: Result<Lease, Status>
+    /// returns: Result<Lease, NetavarkError>
     ///
     /// # Examples
     ///
     /// ```
     ///
     /// ```
-    pub async fn drop_lease(self, p: &str) -> Result<Lease, Status> {
+    pub async fn drop_lease(self, p: &str) -> Result<Lease, NetavarkError> {
         let mut client = NetworkConfig::get_client(p.to_string()).await?;
         let lease = match client.teardown(Request::new(self)).await {
             Ok(l) => l.into_inner(),
-            Err(e) => return Err(e),
+            Err(e) => return Err(e.into()),
         };
         Ok(lease)
     }
