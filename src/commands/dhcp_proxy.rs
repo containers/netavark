@@ -14,7 +14,7 @@ use crate::dhcp_proxy::lib::g_rpc::{
 use crate::dhcp_proxy::proxy_conf::{
     get_cache_fqname, get_proxy_sock_fqname, DEFAULT_INACTIVITY_TIMEOUT, DEFAULT_TIMEOUT,
 };
-use crate::error::NetavarkResult;
+use crate::error::{NetavarkError, NetavarkResult};
 
 use std::fs::File;
 use std::io::Write;
@@ -216,7 +216,6 @@ async fn handle_signal(uds_path: PathBuf) {
 }
 
 #[tokio::main]
-#[allow(unused)]
 pub async fn serve(opts: Opts) -> NetavarkResult<()> {
     let optional_run_dir = opts.dir.as_deref();
     let dora_timeout = opts.timeout.unwrap_or(DEFAULT_TIMEOUT);
@@ -236,8 +235,7 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
     let uds: UnixListener = match env::var("LISTEN_FDS") {
         Ok(effds) => {
             if effds != "1" {
-                error!("Received more than one FD from systemd");
-                return Ok(());
+                return Err(NetavarkError::msg("Received more than one FD from systemd"));
             }
             is_systemd_activated = true;
             let systemd_socket = unsafe { stdUnixListener::from_raw_fd(3) };
@@ -249,8 +247,7 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
             // Create a new uds socket path
             match Path::new(&uds_path).parent() {
                 None => {
-                    log::error!("Could not find uds path");
-                    return Ok(());
+                    return Err(NetavarkError::msg("Could not get parent from uds path"));
                 }
                 Some(f) => tokio::fs::create_dir_all(f).await?,
             }
@@ -270,16 +267,18 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
             file
         }
         Err(e) => {
-            error!("Exiting. Could not create lease cache file: {:?}", e);
-            return Ok(());
+            return Err(NetavarkError::msg(format!(
+                "Exiting. Could not create lease cache file: {e}",
+            )));
         }
     };
 
     let cache = match LeaseCache::new(file) {
         Ok(c) => Arc::new(Mutex::new(c)),
         Err(e) => {
-            log::error!("Could not setup the cache: {}", e.to_string());
-            return Ok(());
+            return Err(NetavarkError::msg(format!(
+                "Could not setup the cache: {e}"
+            )));
         }
     };
 
@@ -307,7 +306,7 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
     // Make sure to only remove the socket path when we do not run socket activated,
     // otherwise we delete the socket systemd is using which causes all new connections to fail.
     if !is_systemd_activated {
-        fs::remove_file(uds_path);
+        fs::remove_file(uds_path)?;
     }
     Ok(())
 }
