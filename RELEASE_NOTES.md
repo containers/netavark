@@ -1,5 +1,10 @@
 # Release Notes
 
+## v1.6.0
+* Now supports a driver plugin module for user defined network drivers
+* Initial MACVLAN DHCP support (additional unit file required for packagers)
+* Dependency updates
+
 ## v1.5.0
 * Removed crossbeam-utils
 * Dependency updates
