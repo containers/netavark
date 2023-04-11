@@ -187,7 +187,7 @@ pub struct Opts {
     timeout: Option<u32>,
     /// activity timeout
     #[clap(short, long)]
-    activity_timout: Option<u64>,
+    activity_timeout: Option<u64>,
 }
 
 /// Handle SIGINT signal.
@@ -220,7 +220,7 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
     let optional_run_dir = opts.dir.as_deref();
     let dora_timeout = opts.timeout.unwrap_or(DEFAULT_TIMEOUT);
     let inactivity_timeout =
-        Duration::from_secs(opts.activity_timout.unwrap_or(DEFAULT_INACTIVITY_TIMEOUT));
+        Duration::from_secs(opts.activity_timeout.unwrap_or(DEFAULT_INACTIVITY_TIMEOUT));
 
     let uds_path = get_proxy_sock_fqname(optional_run_dir);
     debug!(
