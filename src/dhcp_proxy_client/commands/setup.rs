@@ -6,24 +6,13 @@ use netavark::{
 };
 
 #[derive(Parser, Debug)]
-pub struct Setup {
-    /// Network namespace path
-    #[clap(forbid_empty_values = false, required = false)]
-    config: NetworkConfig,
-}
+pub struct Setup {}
 
 impl Setup {
-    pub fn new(config: NetworkConfig) -> Self {
-        Self { config }
-    }
-
-    pub async fn exec(&self, p: &str) -> Result<Lease, NetavarkError> {
+    pub async fn exec(&self, p: &str, config: NetworkConfig) -> Result<Lease, NetavarkError> {
         debug!("{:?}", "Setting up...");
-        debug!(
-            "input: {:#?}",
-            serde_json::to_string_pretty(&self.config.clone())
-        );
+        debug!("input: {:#?}", serde_json::to_string_pretty(&config));
 
-        self.config.clone().get_lease(p).await
+        config.clone().get_lease(p).await
     }
 }
