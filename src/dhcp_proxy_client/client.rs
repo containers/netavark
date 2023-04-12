@@ -46,14 +46,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let uds_path = opts.uds.unwrap_or_else(|| DEFAULT_UDS_PATH.to_string());
     let input_config = NetworkConfig::load(&file)?;
     let result = match opts.subcmd {
-        SubCommand::Setup(_) => {
-            let s = setup::Setup::new(input_config);
-            s.exec(&uds_path).await
-        }
-        SubCommand::Teardown(_) => {
-            let t = teardown::Teardown::new(input_config);
-            t.exec(&uds_path).await
-        }
+        SubCommand::Setup(s) => s.exec(&uds_path, input_config).await,
+        SubCommand::Teardown(t) => t.exec(&uds_path, input_config).await,
     };
     let r = match result {
         Ok(r) => r,

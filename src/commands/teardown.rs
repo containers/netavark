@@ -4,6 +4,7 @@ use crate::network::core_utils;
 use crate::network::driver::{get_network_driver, DriverInfo};
 
 use crate::{firewall, network};
+use clap::builder::NonEmptyStringValueParser;
 use clap::Parser;
 use log::debug;
 use std::path::Path;
@@ -11,7 +12,7 @@ use std::path::Path;
 #[derive(Parser, Debug)]
 pub struct Teardown {
     /// Network namespace path
-    #[clap(forbid_empty_values = true, required = true)]
+    #[clap(required = true, value_parser = NonEmptyStringValueParser::new())]
     network_namespace_path: String,
 }
 

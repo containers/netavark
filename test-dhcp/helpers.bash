@@ -408,7 +408,7 @@ function run_teardown(){
 function run_client(){
   local verb=$1
   local conf=$2
-  run_in_container_netns "./bin/netavark-dhcp-proxy-client" --uds "$TMP_TESTDIR/nv-proxy.sock" -f "${conf}" "${verb}" "foo"
+  run_in_container_netns "./bin/netavark-dhcp-proxy-client" --uds "$TMP_TESTDIR/nv-proxy.sock" -f "${conf}" "${verb}"
 }
 
 ###################

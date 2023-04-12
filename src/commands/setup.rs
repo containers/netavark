@@ -7,6 +7,7 @@ use crate::network::netlink::LinkID;
 use crate::network::{self};
 use crate::network::{core_utils, types};
 
+use clap::builder::NonEmptyStringValueParser;
 use clap::Parser;
 use log::{debug, error, info};
 use std::collections::HashMap;
@@ -16,7 +17,7 @@ use std::path::Path;
 #[derive(Parser, Debug)]
 pub struct Setup {
     /// Network namespace path
-    #[clap(forbid_empty_values = true, required = true)]
+    #[clap(required = true, value_parser = NonEmptyStringValueParser::new())]
     network_namespace_path: String,
 }
 

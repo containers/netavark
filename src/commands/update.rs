@@ -2,6 +2,7 @@ use crate::dns::aardvark::Aardvark;
 use crate::error::{NetavarkError, NetavarkResult};
 use crate::network::core_utils;
 
+use clap::builder::NonEmptyStringValueParser;
 use clap::Parser;
 use log::debug;
 use std::path::Path;
@@ -9,10 +10,10 @@ use std::path::Path;
 #[derive(Parser, Debug)]
 pub struct Update {
     /// Network name to update
-    #[clap(forbid_empty_values = true, required = true)]
+    #[clap(required = true, value_parser = NonEmptyStringValueParser::new())]
     network_name: String,
     /// DNS Servers to update for the network
-    #[clap(long, required = true, forbid_empty_values = false)]
+    #[clap(long, required = true)]
     network_dns_servers: Vec<String>,
 }
 
