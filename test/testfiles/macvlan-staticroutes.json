@@ -1,0 +1,55 @@
+{
+    "container_id": "someID",
+    "container_name": "someName",
+    "networks": {
+       "podman": {
+          "static_ips": [
+             "10.88.0.2",
+             "fd:1f1f::2"
+          ],
+          "interface_name": "eth0"
+       }
+    },
+    "network_info": {
+       "podman": {
+          "name": "podman",
+          "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+          "driver": "macvlan",
+          "network_interface": "dummy0",
+          "subnets": [
+             {
+                "subnet": "10.88.0.0/16",
+                "gateway": "10.88.0.1"
+             },
+             {
+               "subnet": "fd:1f1f::/64",
+               "gateway": "fd:1f1f::1"
+             }
+          ],
+          "routes": [
+            {
+                "destination": "10.89.0.0/24",
+                "gateway": "10.88.0.2"
+            },
+            {
+                "destination": "10.90.0.0/24",
+                "gateway": "10.88.0.3"
+            },
+            {
+               "destination": "10.92.0.0/24",
+               "gateway": "10.91.0.1"
+            },
+            {
+               "destination": "fd:2f2f::/64",
+               "gateway": "fd:1f1f::20"
+            }
+         ],
+          "ipv6_enabled": true,
+          "internal": false,
+          "dns_enabled": true,
+          "ipam_options": {
+             "driver": "host-local"
+          }
+       }
+    }
+ }

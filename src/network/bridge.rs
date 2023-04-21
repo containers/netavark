@@ -234,6 +234,13 @@ impl driver::NetworkDriver for Bridge<'_> {
 
         let mut error_list = NetavarkErrorList::new();
 
+        let routes = core_utils::create_route_list(&self.info.network.routes)?;
+        for route in routes.iter() {
+            netns_sock
+                .del_route(route)
+                .unwrap_or_else(|err| error_list.push(err))
+        }
+
         let complete_teardown = match remove_link(
             host_sock,
             netns_sock,
@@ -628,6 +635,11 @@ fn create_veth_pair(
 
     if !internal {
         core_utils::add_default_routes(netns, &data.ipam.gateway_addresses, data.metric)?;
+    }
+
+    // add static routes
+    for route in data.ipam.routes.iter() {
+        netns.add_route(route)?
     }
 
     Ok(mac)

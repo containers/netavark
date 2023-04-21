@@ -41,6 +41,49 @@ function setup() {
     assert "" "no errors"
 }
 
+@test "ipvlan setup with static routes" {
+    # add second interface and routes through that interface to test proper teardown
+    run_in_container_netns ip link add type dummy
+    run_in_container_netns ip a add 10.91.0.10/24 dev dummy0
+    run_in_container_netns ip link set dummy0 up
+
+    run_netavark --file ${TESTSDIR}/testfiles/ipvlan-staticroutes.json setup $(get_container_netns_path)
+
+    # check static routes
+    run_in_container_netns ip r
+    assert "$output" "=~" "10.89.0.0/24 via 10.88.0.2" "static route not set"
+    assert "$output" "=~" "10.90.0.0/24 via 10.88.0.3" "static route not set"
+    assert "$output" "=~" "10.92.0.0/24 via 10.91.0.1" "static route not set"
+    run_in_container_netns ip -6 r
+    assert "$output" "=~" "fd:2f2f::/64 via fd:1f1f::20" "static route not set"
+
+    run_netavark --file ${TESTSDIR}/testfiles/ipvlan-staticroutes.json teardown $(get_container_netns_path)
+    assert "" "no errors"
+
+    # check static routes get removed
+    run_in_container_netns ip r
+    assert "$output" "!~" "10.89.0.0/24 via 10.88.0.2" "static route not removed"
+    assert "$output" "!~" "10.90.0.0/24 via 10.88.0.3" "static route not removed"
+    assert "$output" "!~" "10.92.0.0/24 via 10.91.0.1" "static route not removed"
+    run_in_container_netns ip -6 r
+    assert "$output" "!~" "fd:2f2f::/64 via fd:1f1f::20" "static route not removed"
+
+    run_in_container_netns ip link delete dummy0
+}
+
+@test "ipvlan setup with no default gateway" {
+    run_netavark --file ${TESTSDIR}/testfiles/ipvlan-nogateway.json setup $(get_container_netns_path)
+
+    run_in_container_netns ip r
+    assert "$output" "!~" "default" "default gateway exists"
+
+    run_in_container_netns ip -6 r
+    assert "$output" "!~" "default" "default gateway exists"
+
+    run_netavark --file ${TESTSDIR}/testfiles/ipvlan-nogateway.json teardown $(get_container_netns_path)
+    assert "" "no errors"
+}
+
 @test "ipvlan setup internal" {
     run_netavark --file ${TESTSDIR}/testfiles/ipvlan-internal.json setup $(get_container_netns_path)
     result="$output"

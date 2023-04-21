@@ -223,6 +223,11 @@ impl driver::NetworkDriver for Vlan<'_> {
             )?
         }
 
+        let routes = core_utils::create_route_list(&self.info.network.routes)?;
+        for route in routes.iter() {
+            netlink_sockets.1.del_route(route)?;
+        }
+
         netlink_sockets.1.del_link(netlink::LinkID::Name(
             self.info.per_network_opts.interface_name.to_string(),
         ))?;
@@ -339,6 +344,11 @@ fn setup(
         .wrap(format!("set {} up", kind_data))?;
 
     core_utils::add_default_routes(netns, &data.ipam.gateway_addresses, data.metric)?;
+
+    // add static routes
+    for route in data.ipam.routes.iter() {
+        netns.add_route(route)?
+    }
 
     get_mac_address(dev.nlas)
 }
