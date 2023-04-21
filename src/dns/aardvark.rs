@@ -329,6 +329,9 @@ impl Aardvark {
 
     // Modifies network dns_servers for a specific network and notifies aardvark-dns server
     // with the change.
+    // Note: If no aardvark dns config exists for a network function will return success without
+    // doing anything, because `podman network update` is applicable for networks even when no
+    // container is attached to it.
     pub fn modify_network_dns_servers(
         &self,
         network_name: &str,
@@ -336,7 +339,21 @@ impl Aardvark {
     ) -> Result<()> {
         let mut dns_servers_modified = false;
         let path = Path::new(&self.config).join(network_name);
-        let file_content = fs::read_to_string(&path)?;
+        let file_content = match fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(error) => {
+                if error.kind() == std::io::ErrorKind::NotFound {
+                    // Most likely `podman network update` was called
+                    // but no container on the network is running hence
+                    // no aardvark file is there in such case return success
+                    // since podman database still got updated and it will be
+                    // populated correctly for the next container.
+                    return Ok(());
+                } else {
+                    return Err(error);
+                }
+            }
+        };
 
         let mut file = File::create(&path)?;
 
