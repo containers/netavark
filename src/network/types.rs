@@ -196,7 +196,7 @@ pub struct NetAddress {
 /// Subnet for a network.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Subnet {
-    /// Subnet for this Network in CIDR form.
+    /// Gateway IP for this Network.
     #[serde(rename = "gateway")]
     pub gateway: Option<IpAddr>,
 
@@ -204,7 +204,7 @@ pub struct Subnet {
     #[serde(rename = "lease_range")]
     pub lease_range: Option<LeaseRange>,
 
-    /// Gateway IP for this Network.
+    /// Subnet for this Network in CIDR form.
     #[serde(rename = "subnet")]
     pub subnet: IpNet,
 }
