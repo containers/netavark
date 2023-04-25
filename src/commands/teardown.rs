@@ -47,7 +47,7 @@ impl Teardown {
                     Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
                 if let Err(err) = aardvark_interface.delete_from_netavark_entries(&network_options)
                 {
-                    error_list.push(err.into());
+                    error_list.push(NetavarkError::wrap("remove aardvark entries", err));
                 }
             } else {
                 error_list.push(NetavarkError::msg(
