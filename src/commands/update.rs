@@ -48,7 +48,7 @@ impl Update {
                 {
                     return Err(NetavarkError::wrap(
                         "unable to modify network dns servers",
-                        NetavarkError::Io(err),
+                        err,
                     ));
                 }
             } else {
