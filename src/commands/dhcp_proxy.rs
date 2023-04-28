@@ -223,10 +223,7 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
         Duration::from_secs(opts.activity_timeout.unwrap_or(DEFAULT_INACTIVITY_TIMEOUT));
 
     let uds_path = get_proxy_sock_fqname(optional_run_dir);
-    debug!(
-        "socket path: {}",
-        &uds_path.clone().into_os_string().into_string().unwrap()
-    );
+    debug!("socket path: {}", &uds_path.display());
 
     let mut is_systemd_activated = false;
 

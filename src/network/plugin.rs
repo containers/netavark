@@ -39,13 +39,8 @@ impl NetworkDriver for PluginDriver<'_> {
         _netlink_sockets: (&mut super::netlink::Socket, &mut super::netlink::Socket),
     ) -> NetavarkResult<(types::StatusBlock, Option<AardvarkEntry>)> {
         let result = self.exec_plugin(true, self.info.netns_path).wrap(format!(
-            "plugin \"{}\" failed",
-            &self
-                .path
-                .file_name()
-                .unwrap_or_default()
-                .to_str()
-                .unwrap_or_default()
+            "plugin {:?} failed",
+            &self.path.file_name().unwrap_or_default()
         ))?;
         // The unwrap should be safe, only if the exec_plugin has a bug this
         // could fail, in which case the test should catch it.
@@ -57,13 +52,8 @@ impl NetworkDriver for PluginDriver<'_> {
         _netlink_sockets: (&mut super::netlink::Socket, &mut super::netlink::Socket),
     ) -> NetavarkResult<()> {
         self.exec_plugin(false, self.info.netns_path).wrap(format!(
-            "plugin \"{}\" failed",
-            &self
-                .path
-                .file_name()
-                .unwrap_or_default()
-                .to_str()
-                .unwrap_or_default()
+            "plugin {:?} failed",
+            &self.path.file_name().unwrap_or_default()
         ))?;
         Ok(())
     }
