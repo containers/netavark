@@ -63,7 +63,7 @@ examples: bin $(CARGO_TARGET_DIR)
 
 .PHONY: crate-publish
 crate-publish:
-	@if [ "$(CRATE_VERSION)" != "$(GIT_TAG)" ]; then\
+	@if [ "v$(CRATE_VERSION)" != "$(GIT_TAG)" ]; then\
 		echo "Git tag is not equivalent to the version set in Cargo.toml. Please checkout the correct tag";\
 		exit 1;\
 	fi
