@@ -1,6 +1,7 @@
 use crate::error::{ErrorWrap, NetavarkError, NetavarkResult};
 use crate::network::{constants, internal_types, types};
 use crate::wrap;
+use ipnet::IpNet;
 use log::debug;
 use netlink_packet_route::{
     MACVLAN_MODE_BRIDGE, MACVLAN_MODE_PASSTHRU, MACVLAN_MODE_PRIVATE, MACVLAN_MODE_SOURCE,
@@ -143,10 +144,19 @@ pub fn get_ipam_addresses<'a>(
                     ipnet: container_address,
                 });
             }
+
+            let routes: Vec<netlink::Route> = match create_route_list(&network.routes) {
+                Ok(r) => r,
+                Err(e) => {
+                    return Err(Error::new(std::io::ErrorKind::Other, e));
+                }
+            };
+
             internal_types::IPAMAddresses {
                 container_addresses,
                 dhcp_enabled: false,
                 gateway_addresses,
+                routes,
                 net_addresses,
                 nameservers,
                 ipv6_enabled,
@@ -158,6 +168,7 @@ pub fn get_ipam_addresses<'a>(
                 container_addresses: vec![],
                 dhcp_enabled: false,
                 gateway_addresses: vec![],
+                routes: vec![],
                 net_addresses: vec![],
                 nameservers: vec![],
                 ipv6_enabled: false,
@@ -167,6 +178,7 @@ pub fn get_ipam_addresses<'a>(
             container_addresses: vec![],
             dhcp_enabled: true,
             gateway_addresses: vec![],
+            routes: vec![],
             ipv6_enabled: false,
             net_addresses: vec![],
             nameservers: vec![],
@@ -384,6 +396,43 @@ pub fn add_default_routes(
             .wrap(format!("add default route {}", &route))?;
     }
     Ok(())
+}
+
+pub fn create_route_list(
+    routes: &Option<Vec<types::Route>>,
+) -> NetavarkResult<Vec<netlink::Route>> {
+    match routes {
+        Some(rs) => rs
+            .iter()
+            .map(|r| {
+                let gw = r.gateway;
+                let dst = r.destination;
+                let mtr = r.metric;
+                match (gw, dst) {
+                    (IpAddr::V4(gw4), IpNet::V4(dst4)) => Ok(netlink::Route::Ipv4 {
+                        dest: dst4,
+                        gw: gw4,
+                        metric: mtr,
+                    }),
+                    (IpAddr::V6(gw6), IpNet::V6(dst6)) => Ok(netlink::Route::Ipv6 {
+                        dest: dst6,
+                        gw: gw6,
+                        metric: mtr,
+                    }),
+                    (IpAddr::V4(gw4), IpNet::V6(dst6)) => Err(NetavarkError::Message(format!(
+                        "Route with ipv6 destination and ipv4 gateway ({} via {})",
+                        dst6, gw4
+                    ))),
+
+                    (IpAddr::V6(gw6), IpNet::V4(dst4)) => Err(NetavarkError::Message(format!(
+                        "Route with ipv4 destination and ipv6 gateway ({} via {})",
+                        dst4, gw6
+                    ))),
+                }
+            })
+            .collect(),
+        None => Ok(vec![]),
+    }
 }
 
 pub fn disable_ipv6_autoconf(if_name: &str) -> NetavarkResult<()> {

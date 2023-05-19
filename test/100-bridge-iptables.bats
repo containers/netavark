@@ -111,6 +111,41 @@ fw_driver=iptables
     expected_rc=1 run_in_host_netns ip addr show podman0
 }
 
+@test "$fw_driver - bridge with static routes" {
+    # add second interface and routes through that interface to test proper teardown
+    run_in_container_netns ip link add type dummy
+    run_in_container_netns ip a add 10.91.0.10/24 dev dummy0
+    run_in_container_netns ip link set dummy0 up
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-staticroutes.json setup $(get_container_netns_path)
+
+    # check static routes
+    run_in_container_netns ip r
+    assert "$output" "=~" "10.89.0.0/24 via 10.88.0.2" "static route not set"
+    assert "$output" "=~" "10.90.0.0/24 via 10.88.0.3" "static route not set"
+    assert "$output" "=~" "10.92.0.0/24 via 10.91.0.1" "static route not set"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-staticroutes.json teardown $(get_container_netns_path)
+
+    # check static routes get removed
+    assert "$output" "!~" "10.89.0.0/24 via 10.88.0.2" "static route not set"
+    assert "$output" "!~" "10.90.0.0/24 via 10.88.0.3" "static route not set"
+    assert "$output" "!~" "10.92.0.0/24 via 10.91.0.1" "static route not removed"
+}
+
+@test "$fw_driver - bridge with no default gateway" {
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-nogateway.json setup $(get_container_netns_path)
+
+    run_in_container_netns ip r
+    assert "$output" "!~" "default" "default gateway exists"
+
+    run_in_container_netns ip -6 r
+    assert "$output" "!~" "default" "default gateway exists"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-nogateway.json teardown $(get_container_netns_path)
+    assert "" "no errors"
+}
+
 @test "$fw_driver - bridge driver must generate config for aardvark with multiple custom dns server with network dns servers and perform update" {
     # get a random port directly to avoid low ports e.g. 53 would not create iptables
     dns_port=$((RANDOM+10000))
@@ -215,6 +250,31 @@ fw_driver=iptables
     run_in_host_netns ping6 -c 1 fd10:88:a::2
 
     run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge.json teardown $(get_container_netns_path)
+}
+
+@test "$fw_driver - ipv6 bridge with static routes" {
+    # add second interface and routes through that interface to test proper teardown
+    run_in_container_netns ip link add type dummy
+    run_in_container_netns ip a add fd10:49:b::2/64 dev dummy0
+    run_in_container_netns ip link set dummy0 up
+
+    run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge-staticroutes.json setup $(get_container_netns_path)
+
+    # check static routes
+    run_in_container_netns ip -6 -br r
+    assert "$output" "=~" "fd10:89:b::/64 via fd10:88:a::ac02" "static route not set"
+    assert "$output" "=~" "fd10:89:c::/64 via fd10:88:a::ac03" "static route not set"
+    assert "$output" "=~" "fd10:51:b::/64 via fd10:49:b::30" "static route not set"
+
+    run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge-staticroutes.json teardown $(get_container_netns_path)
+
+    # check static routes get removed
+    run_in_container_netns ip -6 -br r
+    assert "$output" "!~" "fd10:89:b::/64 via fd10:88:a::ac02" "static route not removed"
+    assert "$output" "!~" "fd10:89:c::/64 via fd10:88:a::ac03" "static route not removed"
+    assert "$output" "!~" "fd10:51:b::/64 via fd10:49:b::30" "static route not removed"
+
+    run_in_container_netns ip link delete dummy0
 }
 
 @test "$fw_driver - bridge driver must generate config for aardvark with custom dns server" {

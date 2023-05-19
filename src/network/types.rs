@@ -50,6 +50,10 @@ pub struct Network {
     #[serde(rename = "subnets")]
     pub subnets: Option<Vec<Subnet>>,
 
+    /// Static routes to use for this network.
+    #[serde(rename = "routes")]
+    pub routes: Option<Vec<Route>>,
+
     /// Network DNS servers for aardvark-dns.
     #[serde(rename = "network_dns_servers")]
     pub network_dns_servers: Option<Vec<IpAddr>>,
@@ -196,7 +200,7 @@ pub struct NetAddress {
 /// Subnet for a network.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Subnet {
-    /// Subnet for this Network in CIDR form.
+    /// Gateway IP for this Network.
     #[serde(rename = "gateway")]
     pub gateway: Option<IpAddr>,
 
@@ -204,9 +208,25 @@ pub struct Subnet {
     #[serde(rename = "lease_range")]
     pub lease_range: Option<LeaseRange>,
 
-    /// Gateway IP for this Network.
+    /// Subnet for this Network in CIDR form.
     #[serde(rename = "subnet")]
     pub subnet: IpNet,
+}
+
+/// Static routes for a network.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Route {
+    /// Gateway IP for this route.
+    #[serde(rename = "gateway")]
+    pub gateway: IpAddr,
+
+    /// Destination for this route in CIDR form.
+    #[serde(rename = "destination")]
+    pub destination: IpNet,
+
+    /// Route Metric
+    #[serde(rename = "metric")]
+    pub metric: Option<u32>,
 }
 
 /// LeaseRange contains the range where IP are leased.
