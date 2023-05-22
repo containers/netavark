@@ -13,7 +13,10 @@ use crate::{
 };
 
 use super::{
-    constants::{NO_CONTAINER_INTERFACE_ERROR, OPTION_METRIC, OPTION_MODE, OPTION_MTU},
+    constants::{
+        NO_CONTAINER_INTERFACE_ERROR, OPTION_METRIC, OPTION_MODE, OPTION_MTU,
+        OPTION_NO_DEFAULT_ROUTE,
+    },
     core_utils::{self, get_ipam_addresses, parse_option, CoreUtils},
     driver::{self, DriverInfo},
     internal_types::IPAMAddresses,
@@ -56,6 +59,8 @@ struct InternalData {
     metric: Option<u32>,
     /// kind-specific data
     kind: KindData,
+    /// if set, no default gateway will be added
+    no_default_route: bool,
     // TODO: add vlan
 }
 
@@ -89,6 +94,8 @@ impl driver::NetworkDriver for Vlan<'_> {
 
         let mtu = parse_option(&self.info.network.options, OPTION_MTU, 0)?;
         let metric = parse_option(&self.info.network.options, OPTION_METRIC, 100)?;
+        let no_default_route: bool =
+            parse_option(&self.info.network.options, OPTION_NO_DEFAULT_ROUTE, false)?;
 
         // Remove gateways when marked as internal network
         if self.info.network.internal {
@@ -124,6 +131,7 @@ impl driver::NetworkDriver for Vlan<'_> {
                     )))
                 }
             },
+            no_default_route,
         });
         Ok(())
     }
@@ -343,7 +351,9 @@ fn setup(
         .set_up(netlink::LinkID::ID(dev.header.index))
         .wrap(format!("set {} up", kind_data))?;
 
-    core_utils::add_default_routes(netns, &data.ipam.gateway_addresses, data.metric)?;
+    if !data.no_default_route {
+        core_utils::add_default_routes(netns, &data.ipam.gateway_addresses, data.metric)?;
+    }
 
     // add static routes
     for route in data.ipam.routes.iter() {

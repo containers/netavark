@@ -16,7 +16,10 @@ use crate::{
 };
 
 use super::{
-    constants::{NO_CONTAINER_INTERFACE_ERROR, OPTION_ISOLATE, OPTION_METRIC, OPTION_MTU},
+    constants::{
+        NO_CONTAINER_INTERFACE_ERROR, OPTION_ISOLATE, OPTION_METRIC, OPTION_MTU,
+        OPTION_NO_DEFAULT_ROUTE,
+    },
     core_utils::{self, get_ipam_addresses, join_netns, parse_option, CoreUtils},
     driver::{self, DriverInfo},
     internal_types::{
@@ -43,6 +46,8 @@ struct InternalData {
     isolate: bool,
     /// Route metric for any default routes added for the network
     metric: Option<u32>,
+    /// if set, no default gateway will be added
+    no_default_route: bool,
     // TODO: add vlan
 }
 
@@ -72,6 +77,8 @@ impl driver::NetworkDriver for Bridge<'_> {
         let mtu: u32 = parse_option(&self.info.network.options, OPTION_MTU, 0)?;
         let isolate: bool = parse_option(&self.info.network.options, OPTION_ISOLATE, false)?;
         let metric: u32 = parse_option(&self.info.network.options, OPTION_METRIC, 100)?;
+        let no_default_route: bool =
+            parse_option(&self.info.network.options, OPTION_NO_DEFAULT_ROUTE, false)?;
 
         let static_mac = match &self.info.per_network_opts.static_mac {
             Some(mac) => Some(CoreUtils::decode_address_from_hex(mac)?),
@@ -86,6 +93,7 @@ impl driver::NetworkDriver for Bridge<'_> {
             mtu,
             isolate,
             metric: Some(metric),
+            no_default_route,
         });
         Ok(())
     }
@@ -633,7 +641,7 @@ fn create_veth_pair(
         .set_up(netlink::LinkID::ID(veth.header.index))
         .wrap("set container veth up")?;
 
-    if !internal {
+    if !internal && !data.no_default_route {
         core_utils::add_default_routes(netns, &data.ipam.gateway_addresses, data.metric)?;
     }
 

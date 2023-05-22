@@ -71,16 +71,16 @@ function setup() {
     run_in_container_netns ip link delete dummy0
 }
 
-@test "ipvlan setup with no default gateway" {
-    run_netavark --file ${TESTSDIR}/testfiles/ipvlan-nogateway.json setup $(get_container_netns_path)
+@test "ipvlan setup no default route" {
+    run_netavark --file ${TESTSDIR}/testfiles/ipvlan-nodefaultroute.json setup $(get_container_netns_path)
 
     run_in_container_netns ip r
-    assert "$output" "!~" "default" "default gateway exists"
+    assert "$output" "!~" "default" "default route exists"
 
     run_in_container_netns ip -6 r
-    assert "$output" "!~" "default" "default gateway exists"
+    assert "$output" "!~" "default" "default route exists"
 
-    run_netavark --file ${TESTSDIR}/testfiles/ipvlan-nogateway.json teardown $(get_container_netns_path)
+    run_netavark --file ${TESTSDIR}/testfiles/ipvlan-nodefaultroute.json teardown $(get_container_netns_path)
     assert "" "no errors"
 }
 
