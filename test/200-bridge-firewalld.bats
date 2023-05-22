@@ -114,16 +114,16 @@ function teardown() {
     assert "$output" "!~" "10.92.0.0/24 via 10.91.0.1" "static route not removed"
 }
 
-@test "$fw_driver - bridge with no default gateway" {
-    run_netavark --file ${TESTSDIR}/testfiles/bridge-nogateway.json setup $(get_container_netns_path)
+@test "$fw_driver - bridge with no default route" {
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-nodefaultroute.json setup $(get_container_netns_path)
 
     run_in_container_netns ip r
-    assert "$output" "!~" "default" "default gateway exists"
+    assert "$output" "!~" "default" "default route exists"
 
     run_in_container_netns ip -6 r
-    assert "$output" "!~" "default" "default gateway exists"
+    assert "$output" "!~" "default" "default route exists"
 
-    run_netavark --file ${TESTSDIR}/testfiles/bridge-nogateway.json teardown $(get_container_netns_path)
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-nodefaultroute.json teardown $(get_container_netns_path)
     assert "" "no errors"
 }
 

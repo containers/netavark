@@ -4,8 +4,7 @@
     "networks": {
        "podman": {
           "static_ips": [
-             "10.88.0.2",
-             "fd:1f1f::2"
+             "10.88.0.2"
           ],
           "interface_name": "eth0"
        }
@@ -18,20 +17,18 @@
           "network_interface": "dummy0",
           "subnets": [
              {
-                "subnet": "10.88.0.0/16"
-             },
-             {
-                "subnet": "fd:1f1f::/64"
+                "subnet": "10.88.0.0/16",
+                "gateway": "10.88.0.1"
              }
           ],
-          "options": {
-            "no_auto_gateway": "1"
-          },
-          "ipv6_enabled": true,
+          "ipv6_enabled": false,
           "internal": false,
           "dns_enabled": true,
           "ipam_options": {
              "driver": "host-local"
+          },
+          "options": {
+            "no_default_route": "true"
           }
        }
     }
