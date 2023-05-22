@@ -163,6 +163,22 @@ fw_driver=iptables
     assert "${#lines[@]}" = 2 "too many lines in aardvark config"
 }
 
+# netavark must do no-op on upates when no aardvark config is there
+@test "run netavark update - no-op" {
+    # get a random port directly to avoid low ports e.g. 53 would not create iptables
+    dns_port=$((RANDOM+10000))
+
+    rootless=false
+    if [[ ! -e "/run/dbus/system_bus_socket" ]]; then
+        rootless=true
+    fi
+
+    mkdir -p "$NETAVARK_TMPDIR/config"
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-network-container-dns-server.json \
+        --rootless "$rootless" --config "$NETAVARK_TMPDIR/config" \
+        update podman1 --network-dns-servers 8.8.8.8
+}
+
 @test "$fw_driver - ipv6 bridge" {
     run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge.json setup $(get_container_netns_path)
     result="$output"
