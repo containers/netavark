@@ -2,6 +2,7 @@ use log::{debug, error};
 use std::{collections::HashMap, net::IpAddr, os::unix::prelude::RawFd};
 
 use netlink_packet_route::nlas::link::{InfoData, InfoIpVlan, InfoKind, InfoMacVlan, Nla};
+use netlink_packet_utils::nla::DefaultNla;
 use rand::distributions::{Alphanumeric, DistString};
 
 use crate::network::macvlan_dhcp::{get_dhcp_lease, release_dhcp_lease};
@@ -13,7 +14,9 @@ use crate::{
 };
 
 use super::{
-    constants::{NO_CONTAINER_INTERFACE_ERROR, OPTION_METRIC, OPTION_MODE, OPTION_MTU},
+    constants::{
+        NO_CONTAINER_INTERFACE_ERROR, OPTION_BCLIM, OPTION_METRIC, OPTION_MODE, OPTION_MTU,
+    },
     core_utils::{self, get_ipam_addresses, parse_option, CoreUtils},
     driver::{self, DriverInfo},
     internal_types::IPAMAddresses,
@@ -27,6 +30,9 @@ enum KindData {
         mac_address: Option<Vec<u8>>,
         /// macvlan mode
         mode: u32,
+
+        // IFLA_MACVLAN_BC_CUTOFF option if set
+        bclim: Option<i32>,
     },
     IpVlan {
         /// ipvlan mode
@@ -110,13 +116,17 @@ impl driver::NetworkDriver for Vlan<'_> {
                 super::constants::DRIVER_IPVLAN => KindData::IpVlan {
                     mode: CoreUtils::get_ipvlan_mode_from_string(mode.as_deref())?,
                 },
-                super::constants::DRIVER_MACVLAN => KindData::MacVlan {
-                    mode: CoreUtils::get_macvlan_mode_from_string(mode.as_deref())?,
-                    mac_address: match &self.info.per_network_opts.static_mac {
-                        Some(mac) => Some(CoreUtils::decode_address_from_hex(mac)?),
-                        None => None,
-                    },
-                },
+                super::constants::DRIVER_MACVLAN => {
+                    let bclim = parse_option(&self.info.network.options, OPTION_BCLIM)?;
+                    KindData::MacVlan {
+                        mode: CoreUtils::get_macvlan_mode_from_string(mode.as_deref())?,
+                        mac_address: match &self.info.per_network_opts.static_mac {
+                            Some(mac) => Some(CoreUtils::decode_address_from_hex(mac)?),
+                            None => None,
+                        },
+                        bclim,
+                    }
+                }
                 other => {
                     return Err(NetavarkError::msg(format!(
                         "unsupported VLAN type {}",
@@ -255,13 +265,30 @@ fn setup(
             opts.info_data = Some(InfoData::IpVlan(vec![InfoIpVlan::Mode(*mode)]));
             opts
         }
-        KindData::MacVlan { mode, mac_address } => {
+        KindData::MacVlan {
+            mode,
+            mac_address,
+            bclim,
+        } => {
             let mut opts = CreateLinkOptions::new(if_name.to_string(), InfoKind::MacVlan);
             opts.mac = mac_address.clone().unwrap_or_default();
             opts.mtu = data.mtu;
             opts.netns = netns_fd;
             opts.link = link.header.index;
-            opts.info_data = Some(InfoData::MacVlan(vec![InfoMacVlan::Mode(*mode)]));
+
+            let mut mv_opts = vec![InfoMacVlan::Mode(*mode)];
+            if let Some(bclim) = bclim {
+                debug!("setting macvlan bclim to {bclim}");
+                // TODO: change this to use the upstream const when available
+                // https://github.com/rust-netlink/netlink-packet-route/pull/32
+                // IFLA_MACVLAN_BC_CUTOFF const in the kernel is 9
+                mv_opts.push(InfoMacVlan::Other(DefaultNla::new(
+                    9,
+                    bclim.to_ne_bytes().to_vec(),
+                )))
+            }
+
+            opts.info_data = Some(InfoData::MacVlan(mv_opts));
             opts
         }
     };
