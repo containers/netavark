@@ -69,9 +69,10 @@ impl driver::NetworkDriver for Bridge<'_> {
         }
         let ipam = get_ipam_addresses(self.info.per_network_opts, self.info.network)?;
 
-        let mtu: u32 = parse_option(&self.info.network.options, OPTION_MTU, 0)?;
-        let isolate: bool = parse_option(&self.info.network.options, OPTION_ISOLATE, false)?;
-        let metric: u32 = parse_option(&self.info.network.options, OPTION_METRIC, 100)?;
+        let mtu: u32 = parse_option(&self.info.network.options, OPTION_MTU)?.unwrap_or(0);
+        let isolate: bool =
+            parse_option(&self.info.network.options, OPTION_ISOLATE)?.unwrap_or(false);
+        let metric: u32 = parse_option(&self.info.network.options, OPTION_METRIC)?.unwrap_or(100);
 
         let static_mac = match &self.info.per_network_opts.static_mac {
             Some(mac) => Some(CoreUtils::decode_address_from_hex(mac)?),
@@ -374,9 +375,8 @@ impl<'a> Bridge<'a> {
             Some(d) => (&d.ipam.container_addresses, &d.ipam.nameservers, d.isolate),
             None => {
                 // options are not yet parsed
-                let isolate = match parse_option(&self.info.network.options, OPTION_ISOLATE, false)
-                {
-                    Ok(i) => i,
+                let isolate: bool = match parse_option(&self.info.network.options, OPTION_ISOLATE) {
+                    Ok(i) => i.unwrap_or(false),
                     Err(e) => {
                         // just log we still try to do as much as possible for cleanup
                         error!("failed to parse {} option: {}", OPTION_ISOLATE, e);
