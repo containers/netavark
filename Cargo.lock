@@ -1219,6 +1219,7 @@ dependencies = [
  "mozim",
  "netlink-packet-core",
  "netlink-packet-route",
+ "netlink-packet-utils",
  "netlink-sys",
  "nispor",
  "nix 0.26.2",
