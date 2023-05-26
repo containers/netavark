@@ -46,12 +46,10 @@ pub fn get_netavark_dns_port() -> Result<u16, NetavarkError> {
 pub fn parse_option<T>(
     opts: &Option<HashMap<String, String>>,
     name: &str,
-    default: T,
-) -> NetavarkResult<T>
+) -> NetavarkResult<Option<T>>
 where
     T: FromStr,
     <T as FromStr>::Err: Display,
-    T: Default,
 {
     let val = match opts.as_ref().and_then(|map| map.get(name)) {
         Some(val) => match val.parse::<T>() {
@@ -63,10 +61,10 @@ where
                 )));
             }
         },
-        // if no option is set return the default value
-        None => default,
+        // if no option is set return None
+        None => return Ok(None),
     };
-    Ok(val)
+    Ok(Some(val))
 }
 
 pub fn get_ipam_addresses<'a>(
@@ -221,29 +219,29 @@ impl CoreUtils {
         Ok(result)
     }
 
-    pub fn get_macvlan_mode_from_string(mode: &str) -> NetavarkResult<u32> {
+    pub fn get_macvlan_mode_from_string(mode: Option<&str>) -> NetavarkResult<u32> {
         match mode {
             // default to bridge when unset
-            "" | "bridge" => Ok(MACVLAN_MODE_BRIDGE),
-            "private" => Ok(MACVLAN_MODE_PRIVATE),
-            "vepa" => Ok(MACVLAN_MODE_VEPA),
-            "passthru" => Ok(MACVLAN_MODE_PASSTHRU),
-            "source" => Ok(MACVLAN_MODE_SOURCE),
+            None | Some("") | Some("bridge") => Ok(MACVLAN_MODE_BRIDGE),
+            Some("private") => Ok(MACVLAN_MODE_PRIVATE),
+            Some("vepa") => Ok(MACVLAN_MODE_VEPA),
+            Some("passthru") => Ok(MACVLAN_MODE_PASSTHRU),
+            Some("source") => Ok(MACVLAN_MODE_SOURCE),
             // default to bridge
-            name => Err(NetavarkError::msg(format!(
+            Some(name) => Err(NetavarkError::msg(format!(
                 "invalid macvlan mode \"{}\"",
                 name
             ))),
         }
     }
 
-    pub fn get_ipvlan_mode_from_string(mode: &str) -> NetavarkResult<u16> {
+    pub fn get_ipvlan_mode_from_string(mode: Option<&str>) -> NetavarkResult<u16> {
         match mode {
             // default to l2 when unset
-            "" | "l2" => Ok(IPVLAN_MODE_L2),
-            "l3" => Ok(IPVLAN_MODE_L3),
-            "l3s" => Ok(IPVLAN_MODE_L3S),
-            name => Err(NetavarkError::msg(format!(
+            None | Some("") | Some("l2") => Ok(IPVLAN_MODE_L2),
+            Some("l3") => Ok(IPVLAN_MODE_L3),
+            Some("l3s") => Ok(IPVLAN_MODE_L3S),
+            Some(name) => Err(NetavarkError::msg(format!(
                 "invalid ipvlan mode \"{}\"",
                 name
             ))),

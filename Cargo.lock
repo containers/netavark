@@ -1233,6 +1233,7 @@ dependencies = [
  "netavark_proxy",
  "netlink-packet-core",
  "netlink-packet-route",
+ "netlink-packet-utils",
  "netlink-sys",
  "nix 0.26.2",
  "rand",
@@ -1316,9 +1317,9 @@ dependencies = [
 
 [[package]]
 name = "netlink-packet-utils"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25af9cf0dc55498b7bd94a1508af7a78706aa0ab715a73c5169273e03c84845e"
+checksum = "0ede8a08c71ad5a95cdd0e4e52facd37190977039a4704eb82a283f713747d34"
 dependencies = [
  "anyhow",
  "byteorder",
