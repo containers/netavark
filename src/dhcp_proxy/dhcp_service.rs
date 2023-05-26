@@ -8,7 +8,6 @@ use log::{debug, warn};
 use mozim::{
     DhcpError, DhcpV4ClientAsync, DhcpV4Config, DhcpV4Lease as MozimV4Lease, DhcpV4Lease, ErrorKind,
 };
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use tokio_stream::StreamExt;
 
 use tonic::{Code, Status};
@@ -48,32 +47,6 @@ pub enum DhcpClient {
 pub struct DhcpService {
     client: Option<DhcpClient>,
     network_config: NetworkConfig,
-}
-
-trait IP4Conv {
-    fn from(self) -> Ipv4Addr;
-}
-
-impl IP4Conv for IpAddr {
-    fn from(self) -> Ipv4Addr {
-        if let IpAddr::V4(ipv4) = self {
-            return ipv4;
-        }
-        Ipv4Addr::from(0)
-    }
-}
-
-trait IP6Conv {
-    fn from(self) -> Ipv6Addr;
-}
-
-impl IP6Conv for IpAddr {
-    fn from(self) -> Ipv6Addr {
-        if let IpAddr::V6(ipv6) = self {
-            return ipv6;
-        }
-        Ipv6Addr::from(0)
-    }
 }
 
 impl DhcpService {
