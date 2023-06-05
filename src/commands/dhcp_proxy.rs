@@ -1,7 +1,7 @@
 #![cfg_attr(not(unix), allow(unused_imports))]
 
 use crate::dhcp_proxy::cache::{Clear, LeaseCache};
-use crate::dhcp_proxy::dhcp_service::DhcpService;
+use crate::dhcp_proxy::dhcp_service::DhcpV4Service;
 use crate::dhcp_proxy::ip;
 use crate::dhcp_proxy::lib::g_rpc::netavark_proxy_server::{NetavarkProxy, NetavarkProxyServer};
 use crate::dhcp_proxy::lib::g_rpc::{
@@ -100,7 +100,7 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
                 log::debug!("Request dropped, aborting DORA");
                 return Err(Status::new(Code::Aborted, "client disconnected"));
             }
-            let get_lease = process_setup(network_config, &timeout, cache);
+            let get_lease = process_setup(network_config, timeout, cache);
             // watch the client and the lease, which ever finishes first return
             let get_lease: NetavarkLease = tokio::select! {
                 _ = &mut rx => {
@@ -139,7 +139,6 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
         let nc = request.into_inner();
 
         let cache = self.cache.clone();
-        let timeout = self.dora_timeout;
 
         std::thread::spawn(move || {
             // Remove the client from the cache dir
@@ -148,11 +147,6 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
                 .lock()
                 .expect("Could not unlock cache. A thread was poisoned")
                 .remove_lease(&nc.container_mac_addr)
-                .map_err(|e| Status::internal(e.to_string()))?;
-
-            // Send the DHCP release message
-            DhcpService::new(&nc, &timeout)?
-                .release_lease(&lease)
                 .map_err(|e| Status::internal(e.to_string()))?;
 
             Ok(Response::new(lease))
@@ -388,7 +382,7 @@ fn is_catch_empty<W: Write + Clear>(current_cache: Arc<Mutex<LeaseCache<W>>>) ->
 /// returns: Result<Lease, Status>
 async fn process_setup<W: Write + Clear>(
     network_config: NetworkConfig,
-    timeout: &u32,
+    timeout: u32,
     cache: Arc<Mutex<LeaseCache<W>>>,
 ) -> Result<NetavarkLease, Status> {
     let container_network_interface = network_config.container_iface.clone();
@@ -397,15 +391,27 @@ async fn process_setup<W: Write + Clear>(
     // test if mac is valid
     core_utils::CoreUtils::decode_address_from_hex(&network_config.container_mac_addr)
         .map_err(|e| Status::new(InvalidArgument, format!("{e}")))?;
-    let nv_lease = DhcpService::new(&network_config, timeout)?
-        .get_lease()
-        .await?;
-    debug!("found a lease for {:?}", &network_config.container_mac_addr);
+    let mac = &network_config.container_mac_addr.clone();
+
+    let nv_lease = match network_config.version {
+        //V4
+        0 => {
+            let mut service = DhcpV4Service::new(network_config, timeout)?;
+            service.get_lease().await?
+        }
+        //V6 TODO implement DHCPv6
+        1 => {
+            return Err(Status::new(InvalidArgument, "ipv6 not yet supported"));
+        }
+        _ => {
+            return Err(Status::new(InvalidArgument, "invalid protocol version"));
+        }
+    };
 
     if let Err(e) = cache
         .lock()
         .expect("Could not unlock cache. A thread was poisoned")
-        .add_lease(&network_config.container_mac_addr, &nv_lease)
+        .add_lease(mac, &nv_lease)
     {
         return Err(Status::new(
             Internal,
