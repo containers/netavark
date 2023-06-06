@@ -1,7 +1,7 @@
 #![cfg_attr(not(unix), allow(unused_imports))]
 
 use crate::dhcp_proxy::cache::{Clear, LeaseCache};
-use crate::dhcp_proxy::dhcp_service::DhcpV4Service;
+use crate::dhcp_proxy::dhcp_service::{process_client_stream, DhcpV4Service};
 use crate::dhcp_proxy::ip;
 use crate::dhcp_proxy::lib::g_rpc::netavark_proxy_server::{NetavarkProxy, NetavarkProxyServer};
 use crate::dhcp_proxy::lib::g_rpc::{
@@ -14,7 +14,9 @@ use crate::error::{NetavarkError, NetavarkResult};
 use crate::network::core_utils;
 use clap::Parser;
 use log::{debug, error, warn};
+use tokio::task::AbortHandle;
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::os::unix::io::FromRawFd;
@@ -55,6 +57,9 @@ struct NetavarkProxyService<W: Write + Clear> {
     dora_timeout: u32,
     // channel send-side for resetting the inactivity timeout
     timeout_sender: Arc<Mutex<Sender<i32>>>,
+    // All dhcp poll will be spawned on a new task, keep track of it so
+    // we can remove it on teardown. The key is the container mac.
+    task_map: Arc<Mutex<HashMap<String, AbortHandle>>>,
 }
 
 impl<W: Write + Clear> NetavarkProxyService<W> {
@@ -88,6 +93,7 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
 
         let cache = self.cache.clone();
         let timeout = self.dora_timeout;
+        let task_map = self.task_map.clone();
 
         // setup client side streaming
         let network_config = request.into_inner();
@@ -100,7 +106,7 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
                 log::debug!("Request dropped, aborting DORA");
                 return Err(Status::new(Code::Aborted, "client disconnected"));
             }
-            let get_lease = process_setup(network_config, timeout, cache);
+            let get_lease = process_setup(network_config, timeout, cache, task_map);
             // watch the client and the lease, which ever finishes first return
             let get_lease: NetavarkLease = tokio::select! {
                 _ = &mut rx => {
@@ -139,20 +145,24 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
         let nc = request.into_inner();
 
         let cache = self.cache.clone();
+        let tasks = self.task_map.clone();
 
-        std::thread::spawn(move || {
-            // Remove the client from the cache dir
-            let lease = cache
-                .clone()
-                .lock()
-                .expect("Could not unlock cache. A thread was poisoned")
-                .remove_lease(&nc.container_mac_addr)
-                .map_err(|e| Status::internal(e.to_string()))?;
+        let task = tasks
+            .lock()
+            .expect("lock tasks")
+            .remove(&nc.container_mac_addr);
+        if let Some(handle) = task {
+            handle.abort();
+        }
 
-            Ok(Response::new(lease))
-        })
-        .join()
-        .expect("Error joining thread")
+        // Remove the client from the cache dir
+        let lease = cache
+            .lock()
+            .expect("Could not unlock cache. A thread was poisoned")
+            .remove_lease(&nc.container_mac_addr)
+            .map_err(|e| Status::internal(e.to_string()))?;
+
+        Ok(Response::new(lease))
     }
 
     /// On teardown of the proxy the cache will be cleared gracefully.
@@ -280,6 +290,7 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
         cache: cache.clone(),
         dora_timeout,
         timeout_sender: Arc::new(Mutex::new(activity_timeout_tx.clone())),
+        task_map: Arc::new(Mutex::new(HashMap::new())),
     };
 
     let server = Server::builder()
@@ -384,6 +395,7 @@ async fn process_setup<W: Write + Clear>(
     network_config: NetworkConfig,
     timeout: u32,
     cache: Arc<Mutex<LeaseCache<W>>>,
+    tasks: Arc<Mutex<HashMap<String, AbortHandle>>>,
 ) -> Result<NetavarkLease, Status> {
     let container_network_interface = network_config.container_iface.clone();
     let ns_path = network_config.ns_path.clone();
@@ -397,7 +409,14 @@ async fn process_setup<W: Write + Clear>(
         //V4
         0 => {
             let mut service = DhcpV4Service::new(network_config, timeout)?;
-            service.get_lease().await?
+
+            let lease = service.get_lease().await?;
+            let task = tokio::spawn(process_client_stream(service));
+            tasks
+                .lock()
+                .expect("lock tasks")
+                .insert(mac.to_string(), task.abort_handle());
+            lease
         }
         //V6 TODO implement DHCPv6
         1 => {

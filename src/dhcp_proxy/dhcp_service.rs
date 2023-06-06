@@ -32,18 +32,11 @@ impl DhcpServiceError {
     }
 }
 
-/// The dhcp client can either be a Ipv4 or Ipv6.
-///
-/// These clients are managed differently. so it is important to keep these separate.
-pub enum DhcpClient {
-    V4Client(Box<DhcpV4ClientAsync>),
-    V6Client(/*TODO implement v6 client*/),
-}
-
 /// DHCP service is responsible for creating, handling, and managing the dhcp lease process.
 pub struct DhcpV4Service {
     client: DhcpV4ClientAsync,
     network_config: NetworkConfig,
+    previous_lease: Option<NetavarkLease>,
 }
 
 impl DhcpV4Service {
@@ -55,8 +48,9 @@ impl DhcpV4Service {
             Err(err) => Err(DhcpServiceError::new(InvalidArgument, err.to_string())),
         }?;
         Ok(Self {
-            client: client,
+            client,
             network_config: nc,
+            previous_lease: None,
         })
     }
 
@@ -69,11 +63,6 @@ impl DhcpV4Service {
     ///
     pub async fn get_lease(&mut self) -> Result<NetavarkLease, DhcpServiceError> {
         if let Some(Ok(lease)) = self.client.next().await {
-            debug!(
-                "successfully found a lease for {:?}",
-                &self.network_config.container_mac_addr
-            );
-
             let mut netavark_lease = <NetavarkLease as From<MozimV4Lease>>::from(lease);
             netavark_lease.add_domain_name(&self.network_config.domain_name);
             netavark_lease.add_mac_address(&self.network_config.container_mac_addr);
@@ -82,6 +71,7 @@ impl DhcpV4Service {
                 "found a lease for {:?}, {:?}",
                 &self.network_config.container_mac_addr, &netavark_lease
             );
+            self.previous_lease = Some(netavark_lease.clone());
 
             return Ok(netavark_lease);
         }
@@ -106,6 +96,36 @@ impl From<DhcpServiceError> for Status {
             NoLease => Status::new(Code::NotFound, err.msg),
             Bug => Status::new(Code::Internal, err.msg),
             _ => Status::new(Code::Internal, err.msg),
+        }
+    }
+}
+
+pub async fn process_client_stream(mut client: DhcpV4Service) {
+    while let Some(lease) = client.client.next().await {
+        match lease {
+            Ok(lease) => {
+                log::debug!(
+                    "got new lease for mac {}: {:?}",
+                    &client.network_config.container_mac_addr,
+                    &lease
+                );
+                let lease = NetavarkLease::from(lease);
+                // get previous lease and check if ip addr changed, if not we do not have to do anything
+                if let Some(old_lease) = &client.previous_lease {
+                    if old_lease.yiaddr != lease.yiaddr
+                        || old_lease.gateways != lease.gateways
+                        || old_lease.subnet_mask != lease.subnet_mask
+                    {
+                        // ips do not match, remove old ones and assign new ones.
+                        log::error!("ips do not match, reassign not implemented")
+                    }
+                }
+                client.previous_lease = Some(lease)
+            }
+            Err(err) => log::error!(
+                "Failed to renew lease for {}: {err}",
+                &client.network_config.container_mac_addr
+            ),
         }
     }
 }
