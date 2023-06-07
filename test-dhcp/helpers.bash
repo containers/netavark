@@ -495,5 +495,8 @@ function random_string() {
 
 function has_ip() {
   local container_ip=$1
-  run_in_container_netns ip -j address show tun0 | jq .[0].addr_info | jq -c 'map(select(.local | contains("$container_ip")))'
+  local interface=$2
+  run_in_container_netns ip -j address show $interface
+  addr_info=$(jq '.[0].addr_info' <<<"$output")
+  assert "$addr_info" =~ "$container_ip" "ip not set on interface $interface"
 }
