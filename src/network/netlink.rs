@@ -250,8 +250,6 @@ impl Socket {
         msg.header.scope = RT_SCOPE_UNIVERSE;
         msg.header.kind = RTN_UNICAST;
 
-        info!("Adding route {}", route);
-
         let (dest_vec, dest_prefix, gateway_vec, final_metric) = match route {
             Route::Ipv4 { dest, gw, metric } => {
                 msg.header.address_family = AF_INET as u8;
@@ -285,6 +283,7 @@ impl Socket {
 
     pub fn add_route(&mut self, route: &Route) -> NetavarkResult<()> {
         let msg = Self::create_route_msg(route);
+        info!("Adding route {}", route);
 
         let result =
             self.make_netlink_request(RtnlMessage::NewRoute(msg), NLM_F_ACK | NLM_F_CREATE)?;
@@ -295,6 +294,7 @@ impl Socket {
 
     pub fn del_route(&mut self, route: &Route) -> NetavarkResult<()> {
         let msg = Self::create_route_msg(route);
+        info!("Deleting route {}", route);
 
         let result = self.make_netlink_request(RtnlMessage::DelRoute(msg), NLM_F_ACK)?;
         expect_netlink_result!(result, 0);
