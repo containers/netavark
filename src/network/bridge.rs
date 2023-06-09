@@ -17,13 +17,15 @@ use crate::{
 
 use super::{
     constants::{
+        ISOLATE_OPTION_FALSE, ISOLATE_OPTION_STRICT, ISOLATE_OPTION_TRUE,
         NO_CONTAINER_INTERFACE_ERROR, OPTION_ISOLATE, OPTION_METRIC, OPTION_MTU,
         OPTION_NO_DEFAULT_ROUTE,
     },
     core_utils::{self, get_ipam_addresses, join_netns, parse_option, CoreUtils},
     driver::{self, DriverInfo},
     internal_types::{
-        IPAMAddresses, PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
+        IPAMAddresses, IsolateOption, PortForwardConfig, SetupNetwork, TearDownNetwork,
+        TeardownPortForward,
     },
     netlink,
     types::StatusBlock,
@@ -43,7 +45,7 @@ struct InternalData {
     /// mtu for the network interfaces (0 if default)
     mtu: u32,
     /// if this network should be isolated from others
-    isolate: bool,
+    isolate: IsolateOption,
     /// Route metric for any default routes added for the network
     metric: Option<u32>,
     /// if set, no default gateway will be added
@@ -75,8 +77,7 @@ impl driver::NetworkDriver for Bridge<'_> {
         let ipam = get_ipam_addresses(self.info.per_network_opts, self.info.network)?;
 
         let mtu: u32 = parse_option(&self.info.network.options, OPTION_MTU)?.unwrap_or(0);
-        let isolate: bool =
-            parse_option(&self.info.network.options, OPTION_ISOLATE)?.unwrap_or(false);
+        let isolate: IsolateOption = get_isolate_option(&self.info.network.options)?;
         let metric: u32 = parse_option(&self.info.network.options, OPTION_METRIC)?.unwrap_or(100);
         let no_default_route: bool =
             parse_option(&self.info.network.options, OPTION_NO_DEFAULT_ROUTE)?.unwrap_or(false);
@@ -303,7 +304,7 @@ impl<'a> Bridge<'a> {
         &'a self,
         container_addresses: &Vec<IpNet>,
         nameservers: &'a Vec<IpAddr>,
-        isolate: bool,
+        isolate: IsolateOption,
     ) -> NetavarkResult<(SetupNetwork, PortForwardConfig)> {
         let id_network_hash =
             CoreUtils::create_network_hash(&self.info.network.name, MAX_HASH_SIZE);
@@ -389,15 +390,11 @@ impl<'a> Bridge<'a> {
         let (container_addresses_ref, nameservers_ref, isolate) = match &self.data {
             Some(d) => (&d.ipam.container_addresses, &d.ipam.nameservers, d.isolate),
             None => {
-                // options are not yet parsed
-                let isolate: bool = match parse_option(&self.info.network.options, OPTION_ISOLATE) {
-                    Ok(i) => i.unwrap_or(false),
-                    Err(e) => {
-                        // just log we still try to do as much as possible for cleanup
-                        error!("failed to parse {} option: {}", OPTION_ISOLATE, e);
-                        false
-                    }
-                };
+                let isolate = get_isolate_option(&self.info.network.options).unwrap_or_else(|e| {
+                    // just log we still try to do as much as possible for cleanup
+                    error!("failed to parse {} option: {}", OPTION_ISOLATE, e);
+                    IsolateOption::Never
+                });
 
                 (container_addresses, nameservers) =
                     match get_ipam_addresses(self.info.per_network_opts, self.info.network) {
@@ -705,4 +702,15 @@ fn remove_link(
         return Ok(true);
     }
     Ok(false)
+}
+
+fn get_isolate_option(opts: &Option<HashMap<String, String>>) -> NetavarkResult<IsolateOption> {
+    let isolate = parse_option(opts, OPTION_ISOLATE)?.unwrap_or(ISOLATE_OPTION_FALSE.to_string());
+    // return isolate option value "false" if unknown value or no value passed
+    Ok(match isolate.as_str() {
+        ISOLATE_OPTION_STRICT => IsolateOption::Strict,
+        ISOLATE_OPTION_TRUE => IsolateOption::Nomal,
+        ISOLATE_OPTION_FALSE => IsolateOption::Never,
+        _ => IsolateOption::Never,
+    })
 }
