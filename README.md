@@ -18,7 +18,7 @@ Netavark is a tool for configuring networking for Linux containers. Its features
 ## Requires
 
 - [Rust](https://www.rust-lang.org/tools/install)
-- [Podman](https://podman.io/getting-started/) 4.0+
+- [Podman](https://podman.io/docs) 4.0+
 
 ## Build
 
