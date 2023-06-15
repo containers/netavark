@@ -263,6 +263,7 @@ function basic_teardown(){
   remove_bridge "br0"
   stop_dhcp "$DNSMASQ_PID"
   run_in_container_netns ip link set lo down
+  rm -rf "$TMP_TESTDIR"
 }
 
 
@@ -276,7 +277,6 @@ function basic_setup() {
   add_veth "veth1" "br0"
   run_in_container_netns ip link set lo up
   run_dhcp "$TESTSDIR/dnsmasqfiles"
-  DNSMASQ_PID="$output"
   start_proxy
 }
 
@@ -346,7 +346,7 @@ port=0
 
 
 # To enable dnsmasq's DHCP server functionality.
-dhcp-range=${stripped_subnet}50,${stripped_subnet}59,255.255.255.0,12h
+dhcp-range=${stripped_subnet}50,${stripped_subnet}59,255.255.255.0,2m
 
 # Set gateway as Router. Following two lines are identical.
 dhcp-option=3,$gw
@@ -362,27 +362,30 @@ log-dhcp    # log dhcp related messages.
 \0
 EOF
   dnsmasq_testdir="${TMP_TESTDIR}/dnsmasq"
-  DNSMASQ_PIDFILE="${TMP_TESTDIR}/dns.PID"
-  mkdir $dnsmasq_testdir
+  mkdir -p $dnsmasq_testdir
   echo "$dnsmasq_config" > "$dnsmasq_testdir/test.conf"
 
-   run_in_container_netns dnsmasq --log-debug --log-queries --conf-dir "${dnsmasq_testdir}" -x "${DNSMASQ_PIDFILE}" &
+  ip netns exec "${NS_NAME}" dnsmasq --log-debug --log-dhcp --no-daemon --conf-dir "${dnsmasq_testdir}" &>>"$TMP_TESTDIR/dnsmasq.log" &
+  DNSMASQ_PID=$!
 }
 
 #
 #  stop_dhcp 27231
 #
 function stop_dhcp() {
-  run_helper cat "$DNSMASQ_PIDFILE"
-  kill -9 "$output"
+  echo "dnsmasq log:"
+  cat "${TMP_TESTDIR}/dnsmasq.log"
+  kill -9 "$DNSMASQ_PID"
 }
 
 function start_proxy() {
-  ip netns exec "$NS_NAME" $NETAVARK dhcp-proxy --dir "$TMP_TESTDIR" --uds "$TMP_TESTDIR"  &
+  RUST_LOG=info ip netns exec "$NS_NAME" $NETAVARK dhcp-proxy --dir "$TMP_TESTDIR" --uds "$TMP_TESTDIR" &>"$TMP_TESTDIR/proxy.log" &
   PROXY_PID=$!
 }
 
 function stop_proxy(){
+  echo "proxy log:"
+  cat "$TMP_TESTDIR/proxy.log"
   kill -9 $PROXY_PID
 }
 
@@ -495,5 +498,8 @@ function random_string() {
 
 function has_ip() {
   local container_ip=$1
-  run_in_container_netns ip -j address show tun0 | jq .[0].addr_info | jq -c 'map(select(.local | contains("$container_ip")))'
+  local interface=$2
+  run_in_container_netns ip -j address show $interface
+  addr_info=$(jq '.[0].addr_info' <<<"$output")
+  assert "$addr_info" =~ "$container_ip" "ip not set on interface $interface"
 }

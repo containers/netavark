@@ -24,7 +24,7 @@ EOF
         # Check that gateway provided is the first IP in the subnet
         assert `echo "$output" | jq -r .siaddr` == $(gateway_from_subnet "$SUBNET_CIDR")
         container_ip=$(echo "$output" | jq -r .yiaddr)
-        has_ip "$container_ip"
+        has_ip "$container_ip" veth0
 }
 
 

@@ -175,7 +175,7 @@ impl<W: Write + Clear> LeaseCache<W> {
 mod cache_tests {
     use super::super::cache::LeaseCache;
     use super::super::lib::g_rpc::{Lease as NetavarkLease, Lease};
-    use macaddr::MacAddr6;
+    use crate::network::core_utils;
     use rand::{thread_rng, Rng};
     use std::collections::HashMap;
     use std::io::Cursor;
@@ -192,16 +192,17 @@ mod cache_tests {
         )
     }
     // Create a single random mac address
-    fn random_macaddr() -> MacAddr6 {
+    fn random_macaddr() -> String {
         let mut rng = thread_rng();
-        MacAddr6::new(
+        let bytes = vec![
             rng.gen::<u8>(),
             rng.gen::<u8>(),
             rng.gen::<u8>(),
             rng.gen::<u8>(),
             rng.gen::<u8>(),
             rng.gen::<u8>(),
-        )
+        ];
+        core_utils::CoreUtils::encode_address_to_hex(&bytes)
     }
     // Create a single random lease
     fn random_lease(mac_address: &String) -> Lease {
@@ -262,7 +263,7 @@ mod cache_tests {
 
         for i in 0..range {
             // Create a random mac address to create a random lease of that mac address
-            let mac_address = random_macaddr().to_string();
+            let mac_address = random_macaddr();
             macaddrs.push(mac_address.clone());
             let lease = random_lease(&mac_address);
 
@@ -305,7 +306,7 @@ mod cache_tests {
         let range = setup.range;
         for i in 0..range {
             // Create a random mac address to create a random lease of that mac address
-            let mac_address = random_macaddr().to_string();
+            let mac_address = random_macaddr();
             macaddrs.push(mac_address.clone());
             let lease = random_lease(&mac_address);
 
@@ -392,7 +393,7 @@ mod cache_tests {
 
         for i in 0..range {
             // Create a random mac address to create a random lease of that mac address
-            let mac_address = random_macaddr().to_string();
+            let mac_address = random_macaddr();
             macaddrs.push(mac_address.clone());
             let lease = random_lease(&mac_address);
 
