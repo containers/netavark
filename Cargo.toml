@@ -48,7 +48,7 @@ url = "2.4.0"
 zbus = { version = "3.13.1" }
 nix = "0.26.2"
 rand = "0.8.5"
-sha2 = "0.10.6"
+sha2 = "0.10.7"
 netlink-packet-utils = "0.5"
 netlink-packet-route = "0.15"
 netlink-packet-core = "0.5"
