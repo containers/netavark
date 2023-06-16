@@ -630,46 +630,142 @@ EOF
 }
 
 @test "$fw_driver - isolate networks" {
+    # create container/networks with isolation
+
+    # isolate1: 10.89.0.2/24, fd90::2, isolate=true
     run_netavark --file ${TESTSDIR}/testfiles/isolate1.json setup $(get_container_netns_path)
 
+    # isolate2: 10.89.1.2/24, fd99::2, isolate=true
     create_container_ns
     run_netavark --file ${TESTSDIR}/testfiles/isolate2.json setup $(get_container_netns_path 1)
 
+    # isolate3: 10.89.2.2/24, fd92::2, isolate=strict
+    create_container_ns
+    run_netavark --file ${TESTSDIR}/testfiles/isolate3.json setup $(get_container_netns_path 2)
+
+    # isolate4: 10.89.3.2/24, fd93::2, isolate=strict
+    create_container_ns
+    run_netavark --file ${TESTSDIR}/testfiles/isolate4.json setup $(get_container_netns_path 3)
+
     # check iptables NETAVARK_ISOLATION_1 chain
     run_in_host_netns iptables -S NETAVARK_ISOLATION_1
-    assert "${lines[1]}" == "-A NETAVARK_ISOLATION_1 -i isolate2 ! -o isolate2 -j NETAVARK_ISOLATION_2"
-    assert "${lines[2]}" == "-A NETAVARK_ISOLATION_1 -i isolate1 ! -o isolate1 -j NETAVARK_ISOLATION_2"
+    assert "${lines[1]}" == "-A NETAVARK_ISOLATION_1 -i isolate4 ! -o isolate4 -j NETAVARK_ISOLATION_3"
+    assert "${lines[2]}" == "-A NETAVARK_ISOLATION_1 -i isolate3 ! -o isolate3 -j NETAVARK_ISOLATION_3"
+    assert "${lines[3]}" == "-A NETAVARK_ISOLATION_1 -i isolate2 ! -o isolate2 -j NETAVARK_ISOLATION_2"
+    assert "${lines[4]}" == "-A NETAVARK_ISOLATION_1 -i isolate1 ! -o isolate1 -j NETAVARK_ISOLATION_2"
 
     run_in_host_netns iptables -nvL FORWARD
     assert "${lines[2]}" =~ "NETAVARK_ISOLATION_1"
 
     # check iptables NETAVARK_ISOLATION_2 chain
     run_in_host_netns iptables -S NETAVARK_ISOLATION_2
-    assert "${lines[1]}" == "-A NETAVARK_ISOLATION_2 -o isolate2 -j DROP"
-    assert "${lines[2]}" == "-A NETAVARK_ISOLATION_2 -o isolate1 -j DROP"
+    assert "${lines[1]}" == "-A NETAVARK_ISOLATION_2 -o isolate4 -j DROP"
+    assert "${lines[2]}" == "-A NETAVARK_ISOLATION_2 -o isolate3 -j DROP"
+    assert "${lines[3]}" == "-A NETAVARK_ISOLATION_2 -o isolate2 -j DROP"
+    assert "${lines[4]}" == "-A NETAVARK_ISOLATION_2 -o isolate1 -j DROP"
+
+    # check iptables NETAVARK_ISOLATION_3 chain
+    run_in_host_netns iptables -S NETAVARK_ISOLATION_3
+    assert "${lines[1]}" == "-A NETAVARK_ISOLATION_3 -j NETAVARK_ISOLATION_2"
 
     # ping our own ip to make sure the ips work and there is no typo
     run_in_container_netns ping -w 1 -c 1 10.89.0.2
     run_in_container_netns 1 ping -w 1 -c 1 10.89.1.2
+    run_in_container_netns 2 ping -w 1 -c 1 10.89.2.2
+    run_in_container_netns 3 ping -w 1 -c 1 10.89.3.2
 
     # make sure the isolated network cannot reach the other network
+
+    # from network isolate1 to isolate2
     expected_rc=1 run_in_container_netns ping -w 1 -c 1 10.89.1.2
+    # from network isolate1 to isolate3
+    expected_rc=1 run_in_container_netns ping -w 1 -c 1 10.89.2.2
+    # from network isolate1 to isolate4
+    expected_rc=1 run_in_container_netns ping -w 1 -c 1 10.89.3.2
+
+    # from network isolate2 to isolate1
     expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 10.89.0.2
+    # from network isolate2 to isolate3
+    expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 10.89.2.2
+    # from network isolate2 to isolate4
+    expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 10.89.3.2
+
+    # from network isolate3 to isolate1
+    expected_rc=1 run_in_container_netns 2 ping -w 1 -c 1 10.89.0.2
+    # from network isolate3 to isolate2
+    expected_rc=1 run_in_container_netns 2 ping -w 1 -c 1 10.89.1.2
+    # from network isolate3 to isolate4
+    expected_rc=1 run_in_container_netns 2 ping -w 1 -c 1 10.89.3.2
+
+    # from network isolate4 to isolate1
+    expected_rc=1 run_in_container_netns 3 ping -w 1 -c 1 10.89.0.2
+    # from network isolate4 to isolate2
+    expected_rc=1 run_in_container_netns 3 ping -w 1 -c 1 10.89.1.2
+    # from network isolate4 to isolate3
+    expected_rc=1 run_in_container_netns 3 ping -w 1 -c 1 10.89.2.2
 
     # now the same with ipv6
+
     run_in_container_netns ping -w 1 -c 1 fd90::2
     run_in_container_netns 1 ping -w 1 -c 1 fd99::2
+    run_in_container_netns 2 ping -w 1 -c 1 fd92::2
+    run_in_container_netns 3 ping -w 1 -c 1 fd93::2
 
+    # from network isolate1 to isolate2
     expected_rc=1 run_in_container_netns ping -w 1 -c 1 fd99::2
+    # from network isolate1 to isolate3
+    expected_rc=1 run_in_container_netns ping -w 1 -c 1 fd92::2
+    # from network isolate1 to isolate4
+    expected_rc=1 run_in_container_netns ping -w 1 -c 1 fd93::2
+
+    # from network isolate2 to isolate1
     expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 fd90::2
+    # from network isolate2 to isolate3
+    expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 fd92::2
+    # from network isolate2 to isolate4
+    expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 fd93::2
 
-    # create container/network without isolation, this should be able to ping isolated containers
+    # from network isolate3 to isolate1
+    expected_rc=1 run_in_container_netns 2 ping -w 1 -c 1 fd90::2
+    # from network isolate3 to isolate2
+    expected_rc=1 run_in_container_netns 2 ping -w 1 -c 1 fd99::2
+    # from network isolate3 to isolate4
+    expected_rc=1 run_in_container_netns 2 ping -w 1 -c 1 fd93::2
 
+    # from network isolate4 to isolate1
+    expected_rc=1 run_in_container_netns 3 ping -w 1 -c 1 fd90::2
+    # from network isolate4 to isolate2
+    expected_rc=1 run_in_container_netns 3 ping -w 1 -c 1 fd99::2
+    # from network isolate4 to isolate3
+    expected_rc=1 run_in_container_netns 3 ping -w 1 -c 1 fd92::2
+
+    # create container/network without isolation
+
+    # podman: 10.88.0.2/16
     create_container_ns
-    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path 2)
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path 4)
 
-    run_in_container_netns 2 ping -w 1 -c 1 10.88.0.2
+    # check iptables NETAVARK_ISOLATION_3 chain
+    run_in_host_netns iptables -S NETAVARK_ISOLATION_3
+    assert "${lines[1]}" == "-A NETAVARK_ISOLATION_3 -o podman0 -j DROP"
+    assert "${lines[2]}" == "-A NETAVARK_ISOLATION_3 -j NETAVARK_ISOLATION_2"
 
+    # this should be able to ping non-strict isolated containers
+    # from network podman to isolate1
+    run_in_container_netns 4 ping -w 1 -c 1 10.89.0.2
+    # from network podman to isolate2
+    run_in_container_netns 4 ping -w 1 -c 1 10.89.1.2
+
+    # and should NOT be able to ping strict isolated containers
+    # from network podman to isolate3
+    expected_rc=1 run_in_container_netns 4 ping -w 1 -c 1 10.89.2.2
+    # from network podman to isolate4
+    expected_rc=1 run_in_container_netns 4 ping -w 1 -c 1 10.89.3.2
+
+    # teardown all networks
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path 4)
+    run_netavark --file ${TESTSDIR}/testfiles/isolate4.json teardown $(get_container_netns_path 3)
+    run_netavark --file ${TESTSDIR}/testfiles/isolate3.json teardown $(get_container_netns_path 2)
     run_netavark --file ${TESTSDIR}/testfiles/isolate2.json teardown $(get_container_netns_path 1)
     run_netavark --file ${TESTSDIR}/testfiles/isolate1.json teardown $(get_container_netns_path)
 
@@ -678,6 +774,8 @@ EOF
     assert "${lines[2]}" == "" "NETAVARK_ISOLATION_1 chain should be empty"
     run_in_host_netns iptables -nvL NETAVARK_ISOLATION_2
     assert "${lines[2]}" == "" "NETAVARK_ISOLATION_2 chain should be empty"
+    run_in_host_netns iptables -S NETAVARK_ISOLATION_3
+    assert "${lines[1]}" == "-A NETAVARK_ISOLATION_3 -j NETAVARK_ISOLATION_2"
 }
 
 @test "$fw_driver - test read only /proc" {

@@ -3,7 +3,7 @@ use crate::firewall::varktables::helpers::{
     add_chain_unique, append_unique, remove_if_rule_exists,
 };
 use crate::firewall::varktables::types::TeardownPolicy::{Never, OnComplete};
-use crate::network::internal_types::PortForwardConfig;
+use crate::network::internal_types::{IsolateOption, PortForwardConfig};
 use ipnet::IpNet;
 use iptables::IPTables;
 use log::debug;
@@ -26,6 +26,7 @@ const MARK: &str = "MARK";
 const DNAT: &str = "DNAT";
 const NETAVARK_ISOLATION_1: &str = "NETAVARK_ISOLATION_1";
 const NETAVARK_ISOLATION_2: &str = "NETAVARK_ISOLATION_2";
+const NETAVARK_ISOLATION_3: &str = "NETAVARK_ISOLATION_3";
 
 const CONTAINER_DN_CHAIN: &str = "NETAVARK-DN-";
 
@@ -194,7 +195,7 @@ pub fn get_network_chains<'a>(
     network_hash_name: &'a str,
     is_ipv6: bool,
     interface_name: String,
-    isolation: bool,
+    isolation: IsolateOption,
 ) -> Vec<VarkChain<'a>> {
     let mut chains = Vec::new();
     let prefixed_network_hash_name = format!("{}-{}", "NETAVARK", network_hash_name);
@@ -238,7 +239,31 @@ pub fn get_network_chains<'a>(
     // used to prepend specific rules
     let mut ind = 1;
 
-    if isolation {
+    // NETAVARK_ISOLATION_2
+    // NETAVARK_ISOLATION_2 chain must always exist,
+    // because non-isolation creates DROP rule in NETAVARK_ISOLATION_3
+    // and NETAVARK_ISOLATION_3 references this as a jump target.
+    let mut netavark_isolation_chain_2 = VarkChain::new(
+        conn,
+        FILTER.to_string(),
+        NETAVARK_ISOLATION_2.to_string(),
+        None,
+    );
+    netavark_isolation_chain_2.create = true;
+
+    // NETAVARK_ISOLATION_3
+    // NETAVARK_ISOLATION_3 chain must exist when IsolateOption is Never or Strict.
+    // bacause non-isolation creates DROP rule in NETAVARK_ISOLATION_3.
+    // and strict isolation references NETAVARK_ISOLATION_3 as a jump target.
+    let mut netavark_isolation_chain_3 = VarkChain::new(
+        conn,
+        FILTER.to_string(),
+        NETAVARK_ISOLATION_3.to_string(),
+        None,
+    );
+    netavark_isolation_chain_3.create = true;
+
+    if let IsolateOption::Nomal | IsolateOption::Strict = isolation {
         debug!("Add extra isolate rules");
         // NETAVARK_ISOLATION_1
         let mut netavark_isolation_chain_1 = VarkChain::new(
@@ -249,15 +274,6 @@ pub fn get_network_chains<'a>(
         );
         netavark_isolation_chain_1.create = true;
 
-        // NETAVARK_ISOLATION_2
-        let mut netavark_isolation_chain_2 = VarkChain::new(
-            conn,
-            FILTER.to_string(),
-            NETAVARK_ISOLATION_2.to_string(),
-            None,
-        );
-        netavark_isolation_chain_2.create = true;
-
         // -A FORWARD -j NETAVARK_ISOLATION_1
         forward_chain.build_rule(VarkRule {
             rule: format!("-j {}", NETAVARK_ISOLATION_1),
@@ -265,11 +281,17 @@ pub fn get_network_chains<'a>(
             td_policy: Some(TeardownPolicy::OnComplete),
         });
 
-        // NETAVARK_ISOLATION_1 -i bridge_name ! -o bridge_name -j DROP
+        let netavark_isolation_1_target = if let IsolateOption::Strict = isolation {
+            // NETAVARK_ISOLATION_1 -i bridge_name ! -o bridge_name -j NETAVARK_ISOLATION_3
+            NETAVARK_ISOLATION_3
+        } else {
+            // NETAVARK_ISOLATION_1 -i bridge_name ! -o bridge_name -j NETAVARK_ISOLATION_2
+            NETAVARK_ISOLATION_2
+        };
         netavark_isolation_chain_1.build_rule(VarkRule {
             rule: format!(
                 "-i {} ! -o {} -j {}",
-                interface_name, interface_name, NETAVARK_ISOLATION_2
+                interface_name, interface_name, netavark_isolation_1_target
             ),
             position: Some(ind),
             td_policy: Some(TeardownPolicy::OnComplete),
@@ -282,12 +304,39 @@ pub fn get_network_chains<'a>(
             td_policy: Some(TeardownPolicy::OnComplete),
         });
 
+        // NETAVARK_ISOLATION_3 -j NETAVARK_ISOLATION_2
+        netavark_isolation_chain_3.build_rule(VarkRule {
+            rule: format!("-j {}", NETAVARK_ISOLATION_2),
+            position: Some(ind),
+            td_policy: Some(TeardownPolicy::Never),
+        });
+
         ind += 1;
 
         // PUSH CHAIN
         chains.push(netavark_isolation_chain_1);
-        chains.push(netavark_isolation_chain_2)
+    } else {
+        // create DROP rule for non-isolations to enforce strict isolation rules.
+
+        // NETAVARK_ISOLATION_3 -o bridge_name -j DROP
+        netavark_isolation_chain_3.build_rule(VarkRule {
+            rule: format!("-o {} -j {}", interface_name, "DROP"),
+            position: Some(ind),
+            td_policy: Some(TeardownPolicy::OnComplete),
+        });
+
+        // NETAVARK_ISOLATION_3 -j NETAVARK_ISOLATION_2
+        netavark_isolation_chain_3.build_rule(VarkRule {
+            rule: format!("-j {}", NETAVARK_ISOLATION_2),
+            // position +1 to place this rule under all of NETAVARK_ISOLATION_3 DROP rules.
+            position: Some(ind + 1),
+            td_policy: Some(TeardownPolicy::Never),
+        });
     }
+
+    // PUSH CHAIN
+    chains.push(netavark_isolation_chain_2);
+    chains.push(netavark_isolation_chain_3);
 
     forward_chain.build_rule(VarkRule {
         rule: format!(

@@ -13,6 +13,9 @@ pub const DRIVER_IPVLAN: &str = "ipvlan";
 pub const DRIVER_MACVLAN: &str = "macvlan";
 
 pub const OPTION_ISOLATE: &str = "isolate";
+pub const ISOLATE_OPTION_TRUE: &str = "true";
+pub const ISOLATE_OPTION_FALSE: &str = "false";
+pub const ISOLATE_OPTION_STRICT: &str = "strict";
 pub const OPTION_MTU: &str = "mtu";
 pub const OPTION_MODE: &str = "mode";
 pub const OPTION_METRIC: &str = "metric";

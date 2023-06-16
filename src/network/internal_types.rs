@@ -18,7 +18,7 @@ pub struct SetupNetwork {
     /// hash id for the network
     pub network_hash_name: String,
     /// isolation determines whether the network can communicate with others outside of its interface
-    pub isolation: bool,
+    pub isolation: IsolateOption,
 }
 
 #[derive(Debug)]
@@ -72,4 +72,12 @@ pub struct IPAMAddresses {
     // result for podman
     pub net_addresses: Vec<types::NetAddress>,
     pub nameservers: Vec<IpAddr>,
+}
+
+// IsolateOption is used to select isolate option value
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum IsolateOption {
+    Strict,
+    Nomal,
+    Never,
 }
