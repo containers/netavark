@@ -32,7 +32,7 @@ impl Setup {
     pub fn exec(
         &self,
         input_file: Option<String>,
-        config_dir: &str,
+        config_dir: Option<String>,
         aardvark_bin: String,
         plugin_directories: Option<Vec<String>>,
         rootless: bool,
@@ -128,7 +128,14 @@ impl Setup {
 
         if !aardvark_entries.is_empty() {
             if Path::new(&aardvark_bin).exists() {
-                let path = Path::new(&config_dir).join("aardvark-dns");
+                let path = match config_dir {
+                    Some(dir) => Path::new(&dir).join("aardvark-dns"),
+                    None => {
+                        return Err(NetavarkError::msg(
+                            "dns is requested but --config not specified",
+                        ))
+                    }
+                };
 
                 match fs::create_dir(path.as_path()) {
                     Ok(_) => {}

@@ -1,5 +1,6 @@
-use crate::dns::aardvark::Aardvark;
+use crate::dns::aardvark::{Aardvark, AardvarkEntry};
 use crate::error::{NetavarkError, NetavarkErrorList, NetavarkResult};
+use crate::network::constants::DRIVER_BRIDGE;
 use crate::network::core_utils;
 use crate::network::driver::{get_network_driver, DriverInfo};
 
@@ -27,7 +28,7 @@ impl Teardown {
     pub fn exec(
         &self,
         input_file: Option<String>,
-        config_dir: &str,
+        config_dir: Option<String>,
         aardvark_bin: String,
         plugin_directories: Option<Vec<String>>,
         rootless: bool,
@@ -39,13 +40,36 @@ impl Teardown {
 
         let dns_port = core_utils::get_netavark_dns_port()?;
 
-        if Path::new(&aardvark_bin).exists() {
+        let mut aardvark_entries = Vec::new();
+        for (key, network) in &network_options.network_info {
+            if network.dns_enabled && network.driver == DRIVER_BRIDGE {
+                aardvark_entries.push(AardvarkEntry {
+                    network_name: key,
+                    network_gateways: Vec::new(),
+                    network_dns_servers: &None,
+                    container_id: &network_options.container_id,
+                    container_ips_v4: Vec::new(),
+                    container_ips_v6: Vec::new(),
+                    container_names: Vec::new(),
+                    container_dns_servers: &None,
+                });
+            }
+        }
+
+        if !aardvark_entries.is_empty() {
             // stop dns server first before netavark clears the interface
-            let path = Path::new(&config_dir).join("aardvark-dns");
+            let path = match config_dir {
+                Some(dir) => Path::new(&dir).join("aardvark-dns"),
+                None => {
+                    return Err(NetavarkError::msg(
+                        "dns is requested but --config not specified",
+                    ))
+                }
+            };
             if let Ok(path_string) = path.into_os_string().into_string() {
                 let aardvark_interface =
                     Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
-                if let Err(err) = aardvark_interface.delete_from_netavark_entries(&network_options)
+                if let Err(err) = aardvark_interface.delete_from_netavark_entries(aardvark_entries)
                 {
                     error_list.push(NetavarkError::wrap("remove aardvark entries", err));
                 }

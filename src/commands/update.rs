@@ -28,14 +28,21 @@ impl Update {
 
     pub fn exec(
         &mut self,
-        config_dir: &str,
+        config_dir: Option<String>,
         aardvark_bin: String,
         rootless: bool,
     ) -> NetavarkResult<()> {
         let dns_port = core_utils::get_netavark_dns_port()?;
 
         if Path::new(&aardvark_bin).exists() {
-            let path = Path::new(&config_dir).join("aardvark-dns");
+            let path = match config_dir {
+                Some(dir) => Path::new(&dir).join("aardvark-dns"),
+                None => {
+                    return Err(NetavarkError::msg(
+                        "dns is requested but --config not specified",
+                    ))
+                }
+            };
             if let Ok(path_string) = path.into_os_string().into_string() {
                 let aardvark_interface =
                     Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
