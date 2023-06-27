@@ -1,6 +1,4 @@
 use crate::error::{NetavarkError, NetavarkResult};
-use crate::network::constants::DRIVER_BRIDGE;
-use crate::network::types;
 
 use fs2::FileExt;
 use libc::pid_t;
@@ -403,20 +401,10 @@ impl Aardvark {
         Ok(())
     }
 
-    pub fn delete_from_netavark_entries(
-        &self,
-        network_options: &types::NetworkOptions,
-    ) -> NetavarkResult<()> {
-        let mut modified = false;
-        for (key, network) in &network_options.network_info {
-            if network.dns_enabled && network.driver == DRIVER_BRIDGE {
-                modified = true;
-                self.delete_entry(&network_options.container_id, key)?;
-            }
+    pub fn delete_from_netavark_entries(&self, entries: Vec<AardvarkEntry>) -> NetavarkResult<()> {
+        for entry in &entries {
+            self.delete_entry(entry.container_id, entry.network_name)?;
         }
-        if modified {
-            self.notify(false)?;
-        }
-        Ok(())
+        self.notify(false)
     }
 }

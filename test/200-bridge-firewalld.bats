@@ -198,20 +198,8 @@ function teardown() {
     # get a random port directly to avoid low ports e.g. 53 would not create iptables
     dns_port=$((RANDOM+10000))
 
-    # hack to make aardvark-dns run when really root or when running as user with
-    # podman unshare --rootless-netns; since netavark runs aardvark with systemd-run
-    # it needs to know if it should use systemd user instance or not.
-    # iptables are still setup identically.
-    rootless=false
-    if [[ ! -e "/run/dbus/system_bus_socket" ]]; then
-        rootless=true
-    fi
-
-    mkdir -p "$NETAVARK_TMPDIR/config"
-
     NETAVARK_FW=firewalld NETAVARK_DNS_PORT="$dns_port" \
         run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
-        --rootless "$rootless" --config "$NETAVARK_TMPDIR/config" \
         setup $(get_container_netns_path)
 
     # check iptables
@@ -242,7 +230,6 @@ function teardown() {
 
     NETAVARK_FW=firewalld NETAVARK_DNS_PORT="$dns_port" \
         run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
-        --rootless "$rootless" --config "$NETAVARK_TMPDIR/config" \
         teardown $(get_container_netns_path)
 
     # check iptables got removed

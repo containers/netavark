@@ -32,6 +32,17 @@ function basic_setup() {
 
     NETAVARK_TMPDIR=$(mktemp -d --tmpdir=${BATS_TMPDIR:-/tmp} netavark_bats.XXXXXX)
 
+    # hack to make aardvark-dns run when really root or when running as user with
+    # podman unshare --rootless-netns; since netavark runs aardvark with systemd-run
+    # it needs to know if it should use systemd user instance or not.
+    # iptables are still setup identically.
+    rootless=false
+    if [[ ! -e "/run/dbus/system_bus_socket" ]]; then
+        rootless=true
+    fi
+
+    mkdir -p "$NETAVARK_TMPDIR/config"
+
     run_in_host_netns ip link set lo up
 }
 
@@ -75,7 +86,8 @@ function get_container_netns_path() {
 # it joins the test network namespace before it invokes $NETAVARK,
 # which may be 'netavark' or '/some/path/netavark'.
 function run_netavark() {
-    run_in_host_netns $NETAVARK "$@"
+    run_in_host_netns $NETAVARK --rootless "$rootless" \
+    --config "$NETAVARK_TMPDIR/config" "$@"
 }
 
 ################
@@ -448,7 +460,7 @@ function test_port_fw() {
       ],
       "ipv6_enabled": true,
       "internal": false,
-      "dns_enabled": true,
+      "dns_enabled": false,
       "ipam_options": {
         "driver": "host-local"
       }
