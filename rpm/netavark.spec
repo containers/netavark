@@ -19,15 +19,9 @@
 %global debug_package %{nil}
 %endif
 
-# copr_username is only set on copr environments owned by rhcontainerbot,
-# not on other coprs or environments like koji.
-%if %{defined copr_username} && "%{?copr_username}" == "rhcontainerbot"
-%bcond_without copr
-%endif
-
 Name: netavark
 # Set a different Epoch for copr builds
-%if %{with copr}
+%if %{defined copr_username}
 Epoch: 102
 %endif
 Version: 0
@@ -44,7 +38,7 @@ URL: https://github.com/containers/%{name}
 Source0: %{url}/archive/v%{version}.tar.gz
 Source1: %{url}/releases/download/v%{version}/%{name}-v%{version}-vendor.tar.gz
 BuildRequires: cargo
-BuildRequires: go-md2man
+BuildRequires: %{_bindir}/go-md2man
 # aardvark-dns and %%{name} are usually released in sync
 Recommends: aardvark-dns >= %{version}-1
 Requires: (aardvark-dns >= %{version}-1 if fedora-release-identity-server)
@@ -53,6 +47,7 @@ BuildRequires: make
 BuildRequires: protobuf-c
 BuildRequires: protobuf-compiler
 %if %{defined rhel}
+# rust-toolset requires the `local` repo enabled on non-koji ELN build environments
 BuildRequires: rust-toolset
 %else
 BuildRequires: rust-packaging
@@ -89,7 +84,7 @@ Its features include:
 # Following steps are only required on environments like koji which have no
 # network access and thus depend on the vendored tarball. Copr pulls
 # dependencies directly from the network.
-%if %{without copr}
+%if !%{defined copr_username}
 tar fx %{SOURCE1}
 mkdir -p .cargo
 
