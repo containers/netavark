@@ -26,11 +26,11 @@ pub fn new() -> NetavarkResult<Box<dyn firewall::FirewallDriver>> {
     // create an iptables connection
     let ipt = match iptables::new(false) {
         Ok(i) => i,
-        Err(e) => return Err(NetavarkError::Message(e.to_string())),
+        Err(e) => return Err(NetavarkError::Message(format!("iptables: {}", e))),
     };
     let ipt6 = match iptables::new(true) {
         Ok(i) => i,
-        Err(e) => return Err(NetavarkError::Message(e.to_string())),
+        Err(e) => return Err(NetavarkError::Message(format!("ip6tables: {}", e))),
     };
     let driver = IptablesDriver {
         conn: ipt,
