@@ -483,7 +483,7 @@ fn create_interfaces(
         Ok(bridge) => check_link_is_bridge(bridge, &data.bridge_interface_name)?,
         Err(err) => match err.unwrap() {
             NetavarkError::Netlink(e) => {
-                if -e.code != libc::ENODEV {
+                if -e.raw_code() != libc::ENODEV {
                     // if bridge does not exists we will create it below,
                     // for all other errors we want to return the error
                     return Err(err).wrap("get bridge interface");
@@ -563,7 +563,7 @@ fn create_veth_pair(
     host_veth.info_data = Some(InfoData::Veth(VethInfo::Peer(peer)));
 
     host.create_link(host_veth).map_err(|err| match err {
-        NetavarkError::Netlink(ref e) if -e.code == libc::EEXIST => NetavarkError::wrap(
+        NetavarkError::Netlink(ref e) if -e.raw_code() == libc::EEXIST => NetavarkError::wrap(
             format!(
                 "create veth pair: interface {} already exists on container namespace",
                 data.container_interface_name

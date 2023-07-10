@@ -314,7 +314,7 @@ fn setup(
             Ok(_) => break,
 
             Err(err) => match err {
-                NetavarkError::Netlink(ref e) if -e.code == libc::EEXIST => {
+                NetavarkError::Netlink(ref e) if -e.raw_code() == libc::EEXIST => {
                     let random = Alphanumeric.sample_string(&mut rand::thread_rng(), 10);
                     let tmp_name = "mv-".to_string() + &random;
                     let mut opts = opts.clone();

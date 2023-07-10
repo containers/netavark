@@ -606,7 +606,7 @@ dependencies = [
  "futures",
  "genetlink",
  "log",
- "netlink-packet-core",
+ "netlink-packet-core 0.5.0",
  "netlink-packet-generic",
  "netlink-packet-utils",
  "netlink-proto",
@@ -783,7 +783,7 @@ checksum = "a1bc23d478336747f4317fb34e4f1a6c3d0030caf756e057708e2677afceafad"
 dependencies = [
  "futures",
  "log",
- "netlink-packet-core",
+ "netlink-packet-core 0.5.0",
  "netlink-packet-generic",
  "netlink-packet-utils",
  "netlink-proto",
@@ -1179,7 +1179,7 @@ dependencies = [
  "futures",
  "genetlink",
  "log",
- "netlink-packet-core",
+ "netlink-packet-core 0.5.0",
  "netlink-packet-generic",
  "netlink-packet-utils",
  "netlink-proto",
@@ -1212,8 +1212,8 @@ dependencies = [
  "libc",
  "log",
  "mozim",
- "netlink-packet-core",
- "netlink-packet-route",
+ "netlink-packet-core 0.7.0",
+ "netlink-packet-route 0.17.0",
  "netlink-packet-utils",
  "netlink-sys",
  "nispor",
@@ -1248,6 +1248,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "netlink-packet-core"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72724faf704479d67b388da142b186f916188505e7e0b26719019c525882eda4"
+dependencies = [
+ "anyhow",
+ "byteorder",
+ "netlink-packet-utils",
+]
+
+[[package]]
 name = "netlink-packet-generic"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1256,7 +1267,7 @@ dependencies = [
  "anyhow",
  "byteorder",
  "libc",
- "netlink-packet-core",
+ "netlink-packet-core 0.5.0",
  "netlink-packet-utils",
 ]
 
@@ -1270,7 +1281,21 @@ dependencies = [
  "bitflags",
  "byteorder",
  "libc",
- "netlink-packet-core",
+ "netlink-packet-core 0.5.0",
+ "netlink-packet-utils",
+]
+
+[[package]]
+name = "netlink-packet-route"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6de2fe935f44cbdfcab77dce2150d68eda75be715cd42d4d6f52b0bd4dcc5b1"
+dependencies = [
+ "anyhow",
+ "bitflags",
+ "byteorder",
+ "libc",
+ "netlink-packet-core 0.7.0",
  "netlink-packet-utils",
 ]
 
@@ -1295,7 +1320,7 @@ dependencies = [
  "bytes",
  "futures",
  "log",
- "netlink-packet-core",
+ "netlink-packet-core 0.5.0",
  "netlink-sys",
  "thiserror",
  "tokio",
@@ -1325,7 +1350,7 @@ dependencies = [
  "libc",
  "log",
  "mptcp-pm",
- "netlink-packet-route",
+ "netlink-packet-route 0.15.0",
  "netlink-packet-utils",
  "netlink-sys",
  "rtnetlink",
@@ -1652,8 +1677,8 @@ checksum = "ed7d42da676fdf7e470e2502717587dd1089d8b48d9d1b846dcc3c01072858cb"
 dependencies = [
  "futures",
  "log",
- "netlink-packet-core",
- "netlink-packet-route",
+ "netlink-packet-core 0.5.0",
+ "netlink-packet-route 0.15.0",
  "netlink-packet-utils",
  "netlink-proto",
  "netlink-sys",
