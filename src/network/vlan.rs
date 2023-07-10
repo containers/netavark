@@ -2,7 +2,6 @@ use log::{debug, error};
 use std::{collections::HashMap, net::IpAddr, os::unix::prelude::RawFd};
 
 use netlink_packet_route::nlas::link::{InfoData, InfoIpVlan, InfoKind, InfoMacVlan, Nla};
-use netlink_packet_utils::nla::DefaultNla;
 use rand::distributions::{Alphanumeric, DistString};
 
 use crate::network::macvlan_dhcp::{get_dhcp_lease, release_dhcp_lease};
@@ -290,13 +289,7 @@ fn setup(
             let mut mv_opts = vec![InfoMacVlan::Mode(*mode)];
             if let Some(bclim) = bclim {
                 debug!("setting macvlan bclim to {bclim}");
-                // TODO: change this to use the upstream const when available
-                // https://github.com/rust-netlink/netlink-packet-route/pull/32
-                // IFLA_MACVLAN_BC_CUTOFF const in the kernel is 9
-                mv_opts.push(InfoMacVlan::Other(DefaultNla::new(
-                    9,
-                    bclim.to_ne_bytes().to_vec(),
-                )))
+                mv_opts.push(InfoMacVlan::BcCutoff(*bclim))
             }
 
             opts.info_data = Some(InfoData::MacVlan(mv_opts));
@@ -314,7 +307,7 @@ fn setup(
             Ok(_) => break,
 
             Err(err) => match err {
-                NetavarkError::Netlink(ref e) if -e.code == libc::EEXIST => {
+                NetavarkError::Netlink(ref e) if -e.raw_code() == libc::EEXIST => {
                     let random = Alphanumeric.sample_string(&mut rand::thread_rng(), 10);
                     let tmp_name = "mv-".to_string() + &random;
                     let mut opts = opts.clone();

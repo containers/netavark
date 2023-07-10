@@ -217,7 +217,7 @@ impl Socket {
             Ok(result) => result,
             Err(err) => match err {
                 // kernel returns EACCES when we try to add an ipv6 but ipv6 is disabled in the kernel
-                NetavarkError::Netlink(ref e) if -e.code == libc::EACCES => match addr {
+                NetavarkError::Netlink(ref e) if -e.raw_code() == libc::EACCES => match addr {
                     ipnet::IpNet::V6(_) => {
                         return Err(NetavarkError::wrap(
                             "failed to add ipv6 address, is ipv6 enabled in the kernel?",
@@ -449,9 +449,9 @@ impl Socket {
                 }
 
                 match rx_packet.payload {
-                    NetlinkPayload::Done => return Ok(result),
-                    NetlinkPayload::Error(e) | NetlinkPayload::Ack(e) => {
-                        if e.code != 0 {
+                    NetlinkPayload::Done(_) => return Ok(result),
+                    NetlinkPayload::Error(e) => {
+                        if e.code.is_some() {
                             return Err(e.into());
                         }
                         return Ok(result);

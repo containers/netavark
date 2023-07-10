@@ -190,7 +190,7 @@ fn update_lease_ip(
                     Ok(_) => {}
                     Err(err) => match err.unwrap() {
                         // special case do not error if route does not exists
-                        NetavarkError::Netlink(e) if -e.code == libc::ESRCH => {}
+                        NetavarkError::Netlink(e) if -e.raw_code() == libc::ESRCH => {}
                         _ => return Err(err).wrap("delete old default route"),
                     },
                 };
