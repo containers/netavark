@@ -56,8 +56,6 @@ BuildRequires: rust-srpm-macros
 BuildRequires: git-core
 BuildRequires: systemd
 BuildRequires: systemd-devel
-# DO NOT DELETE BELOW LINE - used for updating downstream imports
-# vendored libraries
 
 %description
 %{summary}
