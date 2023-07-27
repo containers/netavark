@@ -3,7 +3,6 @@ use crate::network::internal_types::{
     PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
 };
 use log::{debug, info};
-use std::env;
 use zbus::blocking::Connection;
 
 pub mod firewalld;
@@ -45,13 +44,9 @@ enum FirewallImpl {
 /// What firewall implementations does this system support?
 fn get_firewall_impl(driver_name: Option<String>) -> NetavarkResult<FirewallImpl> {
     // It respects "firewalld", "iptables", "nftables", "none".
-
-    // If not requested lookup in NETAVARK_FW env var as well.
-    let driver = driver_name.or_else(|| env::var("NETAVARK_FW").ok());
-
-    if let Some(var) = driver {
-        debug!("Forcibly using firewall driver {}", var);
-        match var.to_lowercase().as_str() {
+    if let Some(driver) = driver_name {
+        debug!("Forcibly using firewall driver {driver}");
+        match driver.to_lowercase().as_str() {
             FIREWALLD => {
                 let conn = match Connection::system() {
                     Ok(c) => c,

@@ -15,6 +15,10 @@ struct Opts {
     /// Instead of reading from STDIN, read the configuration to be applied from the given file.
     #[clap(short, long)]
     file: Option<OsString>,
+    /// Select netavark's firewall driver
+    // There is no suitable short argument like -F, so there is no short argument.
+    #[clap(long, env = "NETAVARK_FW")]
+    firewall_driver: Option<String>,
     /// config directory for aardvark, usually path to a tmpfs.
     #[clap(short, long)]
     config: Option<OsString>,
@@ -63,6 +67,7 @@ fn main() {
         SubCommand::Setup(setup) => setup.exec(
             opts.file,
             config,
+            opts.firewall_driver,
             aardvark_bin,
             opts.plugin_directories,
             rootless,
@@ -70,6 +75,7 @@ fn main() {
         SubCommand::Teardown(teardown) => teardown.exec(
             opts.file,
             config,
+            opts.firewall_driver,
             aardvark_bin,
             opts.plugin_directories,
             rootless,
