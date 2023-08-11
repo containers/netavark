@@ -353,6 +353,14 @@ pub fn get_network_chains<'a>(
         VarkChain::new(conn, FILTER.to_string(), NETAVARK_FORWARD.to_string(), None);
     netavark_forward_chain.create = true;
 
+    // Drop all invalid packages, due a race the container source ip could be leaked on the local
+    // network and we should avoid that, https://bugzilla.redhat.com/show_bug.cgi?id=2230144
+    // This should't harm anything so just add one global rule instead of filtering per subnet.
+    netavark_forward_chain.build_rule(VarkRule::new(
+        "-m conntrack --ctstate INVALID -j DROP".to_string(),
+        Some(TeardownPolicy::Never),
+    ));
+
     // Create incoming traffic rule
     // CNI did this by IP address, this is implemented per subnet
     netavark_forward_chain.build_rule(VarkRule::new(
