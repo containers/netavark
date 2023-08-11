@@ -99,7 +99,7 @@ EOF
 %{__make} CARGO="%{__cargo}" build
 
 cd docs
-go-md2man -in %{name}.1.md -out %{name}.1
+%{__make}
 
 %install
 %{__make} DESTDIR=%{buildroot} PREFIX=%{_prefix} install
