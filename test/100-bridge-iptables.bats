@@ -81,9 +81,10 @@ fw_driver=iptables
     assert "${#lines[@]}" = 2 "too many FORWARD rules"
 
     run_in_host_netns iptables -S NETAVARK_FORWARD
-    assert "${lines[1]}" == "-A NETAVARK_FORWARD -d 10.88.0.0/16 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT" "NETAVARK_FORWARD rule 1"
-    assert "${lines[2]}" == "-A NETAVARK_FORWARD -s 10.88.0.0/16 -j ACCEPT" "NETAVARK_FORWARD rule 2"
-    assert "${#lines[@]}" = 3 "too many NETAVARK_FORWARD rules"
+    assert "${lines[1]}" == "-A NETAVARK_FORWARD -m conntrack --ctstate INVALID -j DROP" "NETAVARK_FORWARD rule 1"
+    assert "${lines[2]}" == "-A NETAVARK_FORWARD -d 10.88.0.0/16 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT" "NETAVARK_FORWARD rule 2"
+    assert "${lines[3]}" == "-A NETAVARK_FORWARD -s 10.88.0.0/16 -j ACCEPT" "NETAVARK_FORWARD rule 3"
+    assert "${#lines[@]}" = 4 "too many NETAVARK_FORWARD rules"
 
     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
 
@@ -97,7 +98,8 @@ fw_driver=iptables
 
     # rule 1 should be DROP for any existing networks
     run_in_host_netns iptables -S NETAVARK_FORWARD
-    assert "${#lines[@]}" = 1 "too many NETAVARK_FORWARD rules after teardown"
+    assert "${lines[1]}" == "-A NETAVARK_FORWARD -m conntrack --ctstate INVALID -j DROP" "NETAVARK_FORWARD rule 1"
+    assert "${#lines[@]}" = 2 "too many NETAVARK_FORWARD rules after teardown"
 
     # check POSTROUTING nat rules
     run_in_host_netns iptables -S POSTROUTING -t nat
@@ -833,13 +835,18 @@ EOF
     run_in_host_netns ip link show podman1
 
     run_in_host_netns iptables -S NETAVARK_FORWARD
-    assert "${lines[1]}" == "-A NETAVARK_FORWARD -d 10.88.0.0/16 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT" "NETAVARK_FORWARD rule 1"
-    assert "${lines[2]}" == "-A NETAVARK_FORWARD -s 10.88.0.0/16 -j ACCEPT" "NETAVARK_FORWARD rule 2"
-    assert "${#lines[@]}" = 3 "too many NETAVARK_FORWARD rules"
+    assert "${lines[1]}" == "-A NETAVARK_FORWARD -m conntrack --ctstate INVALID -j DROP" "NETAVARK_FORWARD rule 1"
+    assert "${lines[2]}" == "-A NETAVARK_FORWARD -d 10.88.0.0/16 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT" "NETAVARK_FORWARD rule 2"
+    assert "${lines[3]}" == "-A NETAVARK_FORWARD -s 10.88.0.0/16 -j ACCEPT" "NETAVARK_FORWARD rule 3"
+    assert "${#lines[@]}" = 4 "too many NETAVARK_FORWARD rules"
 
     run_netavark teardown $(get_container_netns_path 1) <<<"${configs[1]}"
     # bridge should be removed
     expected_rc=1 run_in_host_netns ip link show podman1
+
+    run_in_host_netns iptables -S NETAVARK_FORWARD
+    assert "${lines[1]}" == "-A NETAVARK_FORWARD -m conntrack --ctstate INVALID -j DROP" "NETAVARK_FORWARD rule 1"
+    assert "${#lines[@]}" = 2 "too many NETAVARK_FORWARD rules"
 
     run_in_host_netns ip -o link
     assert "${#lines[@]}" == 1 "only loopback adapter"
