@@ -26,7 +26,8 @@ Epoch: 102
 %endif
 Version: 0
 Release: %autorelease
-License: Apache-2.0 and BSD-2-Clause and BSD-3-Clause and MIT
+# The `AND` needs to be uppercase in the License for SPDX compatibility
+License: Apache-2.0 AND BSD-3-Clause AND MIT
 %if %{defined golang_arches_future}
 ExclusiveArch: %{golang_arches_future}
 %else
