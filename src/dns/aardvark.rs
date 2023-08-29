@@ -73,7 +73,7 @@ impl Aardvark {
     fn is_executable_in_path(program: &str) -> bool {
         if let Ok(path) = std::env::var("PATH") {
             for p in path.split(':') {
-                let p_str = format!("{}/{}", p, program);
+                let p_str = format!("{p}/{program}");
                 if fs::metadata(p_str).is_ok() {
                     return true;
                 }
@@ -132,8 +132,7 @@ impl Aardvark {
                         // start new sever below in that case and not error
                         if err != nix::errno::Errno::ESRCH {
                             return Err(NetavarkError::msg(format!(
-                                "failed to send SIGHUP to aardvark: {}",
-                                err
+                                "failed to send SIGHUP to aardvark: {err}"
                             )));
                         }
                     }
@@ -173,10 +172,7 @@ impl Aardvark {
         if let Err(er) = lockfile.lock_exclusive() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!(
-                    "Failed to acquire exclusive lock on {:?}: {}",
-                    lockfile_path, er
-                ),
+                format!("Failed to acquire exclusive lock on {lockfile_path:?}: {er}"),
             ));
         }
 
@@ -202,7 +198,7 @@ impl Aardvark {
                                     .map(|g| g.to_string())
                                     .collect::<Vec<String>>()
                                     .join(",");
-                                format!(" {}", dns_server_collected)
+                                format!(" {dns_server_collected}")
                             } else {
                                 "".to_string()
                             }
@@ -210,7 +206,7 @@ impl Aardvark {
                             "".to_string()
                         };
 
-                    let data = format!("{}{}\n", gws, network_dns_servers);
+                    let data = format!("{gws}{network_dns_servers}\n");
                     f.write_all(data.as_bytes())?; // return error if write fails
                     f
                 }
@@ -227,15 +223,12 @@ impl Aardvark {
                     if let Err(er) = lockfile.unlock() {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::Other,
-                            format!(
-                                "Failed to unlock exclusive lock on {:?}: {}",
-                                lockfile_path, er
-                            ),
+                            format!("Failed to unlock exclusive lock on {lockfile_path:?}: {er}"),
                         ));
                     }
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        format!("Failed to commit entry {:?}: {}", entry, er),
+                        format!("Failed to commit entry {entry:?}: {er}"),
                     ));
                 }
                 Ok(_) => continue,
@@ -246,10 +239,7 @@ impl Aardvark {
         if let Err(er) = lockfile.unlock() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!(
-                    "Failed to unlock exclusive lock on {:?}: {}",
-                    lockfile_path, er
-                ),
+                format!("Failed to unlock exclusive lock on {lockfile_path:?}: {er}"),
             ));
         }
         Ok(())
@@ -279,7 +269,7 @@ impl Aardvark {
                     .map(|g| g.to_string())
                     .collect::<Vec<String>>()
                     .join(",");
-                format!(" {}", dns_server_collected)
+                format!(" {dns_server_collected}")
             } else {
                 "".to_string()
             }
@@ -379,7 +369,7 @@ impl Aardvark {
                         .map(|g| g.to_string())
                         .collect::<Vec<String>>()
                         .join(",");
-                    format!(" {}", dns_server_collected)
+                    format!(" {dns_server_collected}")
                 } else {
                     "".to_string()
                 };

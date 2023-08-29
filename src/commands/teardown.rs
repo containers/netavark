@@ -93,8 +93,7 @@ impl Teardown {
                 Some(opts) => opts,
                 None => {
                     error_list.push(NetavarkError::Message(format!(
-                        "network options for network {} not found",
-                        net_name
+                        "network options for network {net_name} not found"
                     )));
                     continue;
                 }

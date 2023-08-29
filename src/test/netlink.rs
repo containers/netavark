@@ -91,7 +91,7 @@ mod tests {
 
         let out = run_command!("ip", "addr", "show", "test1");
         let stdout = String::from_utf8(out.stdout).unwrap();
-        eprintln!("{}", stdout);
+        eprintln!("{stdout}");
         assert!(out.status.success(), "failed to show addr via ip");
 
         assert!(!stdout.contains(net), "addr does exist");
@@ -134,7 +134,7 @@ mod tests {
 
         let out = run_command!("ip", "route", "show");
         let stdout = String::from_utf8(out.stdout).unwrap();
-        eprintln!("{}", stdout);
+        eprintln!("{stdout}");
         assert!(out.status.success(), "failed to show addr via ip");
 
         assert!(stdout.contains(net), "route should exist");
@@ -148,7 +148,7 @@ mod tests {
 
         let out = run_command!("ip", "route", "show");
         let stdout = String::from_utf8(out.stdout).unwrap();
-        eprintln!("{}", stdout);
+        eprintln!("{stdout}");
         assert!(out.status.success(), "failed to show addr via ip");
 
         assert!(!stdout.contains(net), "route should not exist");

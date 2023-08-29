@@ -76,7 +76,7 @@ impl<P: Plugin> PluginExec<P> {
                     error: err.to_string(),
                 };
                 serde_json::to_writer(io::stdout(), &e)
-                    .unwrap_or_else(|e| println!("failed to write json error: {}: {}", e, err));
+                    .unwrap_or_else(|e| println!("failed to write json error: {e}: {err}"));
                 std::process::exit(1);
             }
         };

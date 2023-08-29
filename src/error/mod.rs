@@ -139,23 +139,23 @@ impl NetavarkError {
 impl fmt::Display for NetavarkError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            NetavarkError::Message(s) => write!(f, "{}", s),
-            NetavarkError::ExitCode(s, _) => write!(f, "{}", s),
-            NetavarkError::Chain(s, e) => write!(f, "{}: {}", s, e),
-            NetavarkError::Io(e) => write!(f, "IO error: {}", e),
-            NetavarkError::Dbus(e) => write!(f, "DBus error: {}", e),
-            NetavarkError::DbusVariant(e) => write!(f, "DBus Variant Error: {}", e),
-            NetavarkError::Sysctl(e) => write!(f, "Sysctl error: {}", e),
-            NetavarkError::Serde(e) => write!(f, "JSON Decoding error: {}", e),
-            NetavarkError::Netlink(e) => write!(f, "Netlink error: {}", e),
-            NetavarkError::DHCPProxy(e) => write!(f, "dhcp proxy error: {}", e),
+            NetavarkError::Message(s) => write!(f, "{s}"),
+            NetavarkError::ExitCode(s, _) => write!(f, "{s}"),
+            NetavarkError::Chain(s, e) => write!(f, "{s}: {e}"),
+            NetavarkError::Io(e) => write!(f, "IO error: {e}"),
+            NetavarkError::Dbus(e) => write!(f, "DBus error: {e}"),
+            NetavarkError::DbusVariant(e) => write!(f, "DBus Variant Error: {e}"),
+            NetavarkError::Sysctl(e) => write!(f, "Sysctl error: {e}"),
+            NetavarkError::Serde(e) => write!(f, "JSON Decoding error: {e}"),
+            NetavarkError::Netlink(e) => write!(f, "Netlink error: {e}"),
+            NetavarkError::DHCPProxy(e) => write!(f, "dhcp proxy error: {e}"),
             NetavarkError::List(list) => {
                 if list.0.len() == 1 {
                     write!(f, "{}", list.0[0])
                 } else {
                     write!(f, "netavark encountered multiple errors:")?;
                     for e in &list.0 {
-                        write!(f, "\n\t- {}", e)?;
+                        write!(f, "\n\t- {e}")?;
                     }
                     Ok(())
                 }
@@ -198,7 +198,7 @@ impl From<serde_json::Error> for NetavarkError {
 
 impl From<ipnet::PrefixLenError> for NetavarkError {
     fn from(e: ipnet::PrefixLenError) -> Self {
-        NetavarkError::Message(format!("{}", e))
+        NetavarkError::Message(format!("{e}"))
     }
 }
 

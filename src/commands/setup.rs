@@ -66,10 +66,7 @@ impl Setup {
         // Perform per-network setup
         for (net_name, network) in network_options.network_info.iter() {
             let per_network_opts = network_options.networks.get(net_name).ok_or_else(|| {
-                NetavarkError::Message(format!(
-                    "network options for network {} not found",
-                    net_name
-                ))
+                NetavarkError::Message(format!("network options for network {net_name} not found"))
             })?;
 
             let mut driver = get_network_driver(
@@ -144,7 +141,7 @@ impl Setup {
                     Err(e) => {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::Other,
-                            format!("failed to create aardvark-dns directory: {}", e),
+                            format!("failed to create aardvark-dns directory: {e}"),
                         )
                         .into());
                     }
@@ -167,7 +164,7 @@ impl Setup {
                 if let Err(er) = aardvark_interface.commit_netavark_entries(aardvark_entries) {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        format!("Error while applying dns entries: {}", er),
+                        format!("Error while applying dns entries: {er}"),
                     )
                     .into());
                 }
@@ -180,7 +177,7 @@ impl Setup {
         }
         debug!("{:#?}", response);
         let response_json = serde_json::to_string(&response)?;
-        println!("{}", response_json);
+        println!("{response_json}");
         debug!("{:?}", "Setup complete");
         Ok(())
     }

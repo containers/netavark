@@ -57,8 +57,7 @@ fn get_firewall_impl() -> NetavarkResult<FirewallImpl> {
             "none" => return Ok(FirewallImpl::Fwnone),
             any => {
                 return Err(NetavarkError::Message(format!(
-                    "Must provide a valid firewall backend, got {}",
-                    any
+                    "Must provide a valid firewall backend, got {any}"
                 )))
             }
         }

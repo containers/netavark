@@ -71,7 +71,7 @@ impl std::fmt::Display for Route {
                 metric.unwrap_or(constants::DEFAULT_METRIC),
             ),
         };
-        write!(f, "(dest: {} ,gw: {}, metric {})", dest, gw, metric)
+        write!(f, "(dest: {dest} ,gw: {gw}, metric {metric})")
     }
 }
 
@@ -435,8 +435,7 @@ impl Socket {
                 let rx_packet: NetlinkMessage<RtnlMessage> = NetlinkMessage::deserialize(bytes)
                     .map_err(|e| {
                         NetavarkError::Message(format!(
-                            "failed to deserialize netlink message: {}",
-                            e,
+                            "failed to deserialize netlink message: {e}",
                         ))
                     })?;
                 trace!("read netlink packet: {:?}", rx_packet);

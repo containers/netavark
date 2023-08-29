@@ -131,12 +131,7 @@ impl driver::NetworkDriver for Vlan<'_> {
                         bclim,
                     }
                 }
-                other => {
-                    return Err(NetavarkError::msg(format!(
-                        "unsupported VLAN type {}",
-                        other
-                    )))
-                }
+                other => return Err(NetavarkError::msg(format!("unsupported VLAN type {other}"))),
             },
             no_default_route,
         });
@@ -317,8 +312,7 @@ fn setup(
                         // if last element return directly
                         if i == 2 {
                             return Err(NetavarkError::msg(format!(
-                                "create {} interface: {}",
-                                kind_data, e
+                                "create {kind_data} interface: {e}"
                             )));
                         }
                         // retry, error could EEXIST again because we pick a random name
@@ -327,10 +321,10 @@ fn setup(
 
                     let link = netns
                         .get_link(netlink::LinkID::Name(tmp_name.clone()))
-                        .wrap(format!("get tmp {} interface", kind_data))?;
+                        .wrap(format!("get tmp {kind_data} interface"))?;
                     netns
                         .set_link_name(link.header.index, if_name.to_string())
-                        .wrap(format!("rename tmp {} interface", kind_data))
+                        .wrap(format!("rename tmp {kind_data} interface"))
                         .map_err(|err| {
                             // If there is an error here most likely the name in the netns is already used,
                             // make sure to delete the tmp interface.
@@ -347,7 +341,7 @@ fn setup(
                     // successful run, break out of loop
                     break;
                 }
-                err => return Err(err).wrap(format!("create {} interface", kind_data))?,
+                err => return Err(err).wrap(format!("create {kind_data} interface"))?,
             },
         }
     }
@@ -357,17 +351,17 @@ fn setup(
 
     let dev = netns
         .get_link(netlink::LinkID::Name(if_name.to_string()))
-        .wrap(format!("get {} interface", kind_data))?;
+        .wrap(format!("get {kind_data} interface"))?;
 
     for addr in &data.ipam.container_addresses {
         netns
             .add_addr(dev.header.index, addr)
-            .wrap(format!("add ip addr to {}", kind_data))?;
+            .wrap(format!("add ip addr to {kind_data}"))?;
     }
 
     netns
         .set_up(netlink::LinkID::ID(dev.header.index))
-        .wrap(format!("set {} up", kind_data))?;
+        .wrap(format!("set {kind_data} up"))?;
 
     if !data.no_default_route {
         core_utils::add_default_routes(netns, &data.ipam.gateway_addresses, data.metric)?;

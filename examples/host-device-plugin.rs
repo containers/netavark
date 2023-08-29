@@ -86,7 +86,7 @@ impl Plugin for Exec {
         let mut interfaces: HashMap<String, types::NetInterface> = HashMap::new();
 
         let interface = types::NetInterface {
-            mac_address: mac_address,
+            mac_address,
             subnets: Option::from(subnets),
         };
         interfaces.insert(name, interface);

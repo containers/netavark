@@ -33,7 +33,7 @@ impl firewall::FirewallDriver for FirewallD {
             Ok(b) => b,
             Err(e) => {
                 return Err(NetavarkError::wrap(
-                    format!("Error creating zone {}", ZONENAME),
+                    format!("Error creating zone {ZONENAME}"),
                     e,
                 ))
             }
@@ -43,7 +43,7 @@ impl firewall::FirewallDriver for FirewallD {
                 Ok(b) => b,
                 Err(e) => {
                     return Err(NetavarkError::wrap(
-                        format!("Error creating policy {}", POLICYNAME),
+                        format!("Error creating policy {POLICYNAME}"),
                         e,
                     ))
                 }
@@ -53,7 +53,7 @@ impl firewall::FirewallDriver for FirewallD {
                 Ok(b) => b,
                 Err(e) => {
                     return Err(NetavarkError::wrap(
-                        format!("Error creating policy {}", POLICYNAME),
+                        format!("Error creating policy {POLICYNAME}"),
                         e,
                     ))
                 }
@@ -77,7 +77,7 @@ impl firewall::FirewallDriver for FirewallD {
                 Ok(_) => {}
                 Err(e) => {
                     return Err(NetavarkError::wrap(
-                        format!("Error adding source subnets to zone {}", ZONENAME),
+                        format!("Error adding source subnets to zone {ZONENAME}"),
                         e,
                     ))
                 }
@@ -129,8 +129,7 @@ impl firewall::FirewallDriver for FirewallD {
             Err(e) => {
                 return Err(NetavarkError::wrap(
                     format!(
-                        "Error decoding DBus message for policy {} configuration",
-                        PORTPOLICYNAME
+                        "Error decoding DBus message for policy {PORTPOLICYNAME} configuration"
                     ),
                     e.into(),
                 ))
@@ -279,8 +278,7 @@ impl firewall::FirewallDriver for FirewallD {
             Err(e) => {
                 return Err(NetavarkError::wrap(
                     format!(
-                        "Error decoding DBus message for policy {} configuration",
-                        PORTPOLICYNAME
+                        "Error decoding DBus message for policy {PORTPOLICYNAME} configuration"
                     ),
                     e.into(),
                 ))

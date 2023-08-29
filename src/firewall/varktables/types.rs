@@ -210,7 +210,7 @@ pub fn get_network_chains<'a>(
     hashed_network_chain.create = true;
 
     hashed_network_chain.build_rule(VarkRule::new(
-        format!("-d {} -j {}", network, ACCEPT),
+        format!("-d {network} -j {ACCEPT}"),
         Some(TeardownPolicy::OnComplete),
     ));
 
@@ -219,7 +219,7 @@ pub fn get_network_chains<'a>(
         multicast_dest = MULTICAST_NET_V6;
     }
     hashed_network_chain.build_rule(VarkRule::new(
-        format!("! -d {} -j {}", multicast_dest, MASQUERADE),
+        format!("! -d {multicast_dest} -j {MASQUERADE}"),
         Some(TeardownPolicy::OnComplete),
     ));
     chains.push(hashed_network_chain);
@@ -228,7 +228,7 @@ pub fn get_network_chains<'a>(
     let mut postrouting_chain =
         VarkChain::new(conn, NAT.to_string(), POSTROUTING.to_string(), None);
     postrouting_chain.build_rule(VarkRule::new(
-        format!("-s {} -j {}", network, prefixed_network_hash_name),
+        format!("-s {network} -j {prefixed_network_hash_name}"),
         Some(TeardownPolicy::OnComplete),
     ));
     chains.push(postrouting_chain);
@@ -276,7 +276,7 @@ pub fn get_network_chains<'a>(
 
         // -A FORWARD -j NETAVARK_ISOLATION_1
         forward_chain.build_rule(VarkRule {
-            rule: format!("-j {}", NETAVARK_ISOLATION_1),
+            rule: format!("-j {NETAVARK_ISOLATION_1}"),
             position: Some(ind),
             td_policy: Some(TeardownPolicy::OnComplete),
         });
@@ -290,8 +290,7 @@ pub fn get_network_chains<'a>(
         };
         netavark_isolation_chain_1.build_rule(VarkRule {
             rule: format!(
-                "-i {} ! -o {} -j {}",
-                interface_name, interface_name, netavark_isolation_1_target
+                "-i {interface_name} ! -o {interface_name} -j {netavark_isolation_1_target}"
             ),
             position: Some(ind),
             td_policy: Some(TeardownPolicy::OnComplete),
@@ -306,7 +305,7 @@ pub fn get_network_chains<'a>(
 
         // NETAVARK_ISOLATION_3 -j NETAVARK_ISOLATION_2
         netavark_isolation_chain_3.build_rule(VarkRule {
-            rule: format!("-j {}", NETAVARK_ISOLATION_2),
+            rule: format!("-j {NETAVARK_ISOLATION_2}"),
             position: Some(ind),
             td_policy: Some(TeardownPolicy::Never),
         });
@@ -327,7 +326,7 @@ pub fn get_network_chains<'a>(
 
         // NETAVARK_ISOLATION_3 -j NETAVARK_ISOLATION_2
         netavark_isolation_chain_3.build_rule(VarkRule {
-            rule: format!("-j {}", NETAVARK_ISOLATION_2),
+            rule: format!("-j {NETAVARK_ISOLATION_2}"),
             // position +1 to place this rule under all of NETAVARK_ISOLATION_3 DROP rules.
             position: Some(ind + 1),
             td_policy: Some(TeardownPolicy::Never),
@@ -340,8 +339,7 @@ pub fn get_network_chains<'a>(
 
     forward_chain.build_rule(VarkRule {
         rule: format!(
-            "-m comment --comment 'netavark firewall plugin rules' -j {}",
-            NETAVARK_FORWARD
+            "-m comment --comment 'netavark firewall plugin rules' -j {NETAVARK_FORWARD}"
         ),
         position: Some(ind),
         td_policy: Some(TeardownPolicy::Never),
@@ -364,17 +362,14 @@ pub fn get_network_chains<'a>(
     // Create incoming traffic rule
     // CNI did this by IP address, this is implemented per subnet
     netavark_forward_chain.build_rule(VarkRule::new(
-        format!(
-            "-d {} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
-            network
-        ),
+        format!("-d {network} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT"),
         Some(TeardownPolicy::OnComplete),
     ));
 
     // Create outgoing traffic rule
     // CNI did this by IP address, this is implemented per subnet
     netavark_forward_chain.build_rule(VarkRule::new(
-        format!("-s {} -j ACCEPT", network),
+        format!("-s {network} -j ACCEPT"),
         Some(TeardownPolicy::OnComplete),
     ));
     chains.push(netavark_forward_chain);
@@ -427,14 +422,14 @@ pub fn get_port_forwarding_chains<'a>(
     // PREROUTING
     let mut prerouting_chain = VarkChain::new(conn, NAT.to_string(), PREROUTING.to_string(), None);
     prerouting_chain.build_rule(VarkRule::new(
-        format!("-j {} -m addrtype --dst-type LOCAL", NETAVARK_HOSTPORT_DNAT),
+        format!("-j {NETAVARK_HOSTPORT_DNAT} -m addrtype --dst-type LOCAL"),
         Some(TeardownPolicy::Never),
     ));
 
     //  OUTPUT
     let mut output_chain = VarkChain::new(conn, NAT.to_string(), OUTPUT.to_string(), None);
     output_chain.build_rule(VarkRule::new(
-        format!("-j {} -m addrtype --dst-type LOCAL", NETAVARK_HOSTPORT_DNAT),
+        format!("-j {NETAVARK_HOSTPORT_DNAT} -m addrtype --dst-type LOCAL"),
         Some(TeardownPolicy::Never),
     ));
 
@@ -447,7 +442,7 @@ pub fn get_port_forwarding_chains<'a>(
     );
     netavark_hostport_setmark.create = true;
     netavark_hostport_setmark.build_rule(VarkRule::new(
-        format!("-j {}  --set-xmark {}/{}", MARK, HEXMARK, HEXMARK),
+        format!("-j {MARK}  --set-xmark {HEXMARK}/{HEXMARK}"),
         Some(TeardownPolicy::Never),
     ));
     chains.push(netavark_hostport_setmark);
@@ -462,8 +457,7 @@ pub fn get_port_forwarding_chains<'a>(
     netavark_hostport_masq_chain.create = true;
     netavark_hostport_masq_chain.build_rule(VarkRule::new(
         format!(
-            "-j {} -m comment --comment 'netavark portfw masq mark' -m mark --mark {}/{}",
-            MASQUERADE, HEXMARK, HEXMARK
+            "-j {MASQUERADE} -m comment --comment 'netavark portfw masq mark' -m mark --mark {HEXMARK}/{HEXMARK}"
         ),
         Some(TeardownPolicy::Never),
     ));
@@ -474,7 +468,7 @@ pub fn get_port_forwarding_chains<'a>(
     let mut postrouting = VarkChain::new(conn, NAT.to_string(), POSTROUTING.to_string(), None);
     // This rule must be in the first position
     postrouting.build_rule(VarkRule {
-        rule: format!("-j {} ", NETAVARK_HOSTPORT_MASK),
+        rule: format!("-j {NETAVARK_HOSTPORT_MASK} "),
         position: Some(1),
         td_policy: Some(Never),
     });
@@ -494,7 +488,7 @@ pub fn get_port_forwarding_chains<'a>(
             }
             let mut ip_value = dns_ip.to_string();
             if is_ipv6 {
-                ip_value = format!("[{}]", ip_value)
+                ip_value = format!("[{ip_value}]")
             }
             netavark_hostport_dn_chain.create = true;
             netavark_hostport_dn_chain.build_rule(VarkRule::new(
@@ -575,9 +569,8 @@ pub fn get_port_forwarding_chains<'a>(
                 // if a destination ip address is provided, we need to alter
                 // the rule a bit
                 if let Some(host_ip) = host_ip {
-                    dn_setmark_rule_localhost =
-                        format!("{} -d {}", dn_setmark_rule_localhost, host_ip);
-                    dn_setmark_rule_subnet = format!("{} -d {}", dn_setmark_rule_subnet, host_ip);
+                    dn_setmark_rule_localhost = format!("{dn_setmark_rule_localhost} -d {host_ip}");
+                    dn_setmark_rule_subnet = format!("{dn_setmark_rule_subnet} -d {host_ip}");
                 }
 
                 // dn container (the actual port usages)
@@ -587,7 +580,7 @@ pub fn get_port_forwarding_chains<'a>(
 
                 let mut container_ip_value = container_ip.to_string();
                 if is_ipv6 {
-                    container_ip_value = format!("[{}]", container_ip_value)
+                    container_ip_value = format!("[{container_ip_value}]")
                 }
                 let mut container_port = i.container_port.to_string();
                 if is_range {
@@ -606,7 +599,7 @@ pub fn get_port_forwarding_chains<'a>(
                 // if a destination ip address is provided, we need to alter
                 // the rule a bit
                 if let Some(host_ip) = host_ip {
-                    dnat_rule = format!("{} -d {}", dnat_rule, host_ip)
+                    dnat_rule = format!("{dnat_rule} -d {host_ip}")
                 }
                 netavark_hashed_dn_chain.build_rule(VarkRule::new(dnat_rule, None));
             }

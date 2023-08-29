@@ -23,7 +23,7 @@ impl Version {
         };
 
         let out = serde_json::to_string_pretty(&info)?;
-        println!("{}", out);
+        println!("{out}");
 
         Ok(())
     }
