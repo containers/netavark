@@ -49,7 +49,7 @@ fn main() {
                 Some(n) => n,
                 None => Utc::now().naive_utc(),
             };
-            let datetime: DateTime<Utc> = DateTime::from_utc(naive, Utc);
+            let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive, Utc);
             datetime
         }
         Err(_) => Utc::now(),
