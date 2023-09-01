@@ -618,8 +618,7 @@ fn create_veth_pair(
         for nla in host_veth.nlas.into_iter() {
             if let Nla::IfName(name) = nla {
                 //  Disable dad inside on the host too
-                let disable_dad_in_container =
-                    format!("/proc/sys/net/ipv6/conf/{}/accept_dad", name);
+                let disable_dad_in_container = format!("/proc/sys/net/ipv6/conf/{name}/accept_dad");
                 core_utils::CoreUtils::apply_sysctl_value(disable_dad_in_container, "0")?;
             }
         }
@@ -660,8 +659,7 @@ fn check_link_is_bridge(msg: LinkMessage, br_name: &str) -> NetavarkResult<LinkM
                         return Ok(msg);
                     } else {
                         return Err(NetavarkError::Message(format!(
-                            "bridge interface {} already exists but is a {:?} interface",
-                            br_name, kind
+                            "bridge interface {br_name} already exists but is a {kind:?} interface"
                         )));
                     }
                 }
@@ -669,8 +667,7 @@ fn check_link_is_bridge(msg: LinkMessage, br_name: &str) -> NetavarkResult<LinkM
         }
     }
     Err(NetavarkError::Message(format!(
-        "could not determine namespace link kind for bridge {}",
-        br_name
+        "could not determine namespace link kind for bridge {br_name}"
     )))
 }
 
@@ -683,8 +680,7 @@ fn remove_link(
     netns
         .del_link(netlink::LinkID::Name(container_veth_name.to_string()))
         .wrap(format!(
-            "failed to delete container veth {}",
-            container_veth_name
+            "failed to delete container veth {container_veth_name}"
         ))?;
 
     let br = host
@@ -698,7 +694,7 @@ fn remove_link(
     if links.is_empty() {
         log::info!("removing bridge {}", br_name);
         host.del_link(netlink::LinkID::ID(br.header.index))
-            .wrap(format!("failed to delete bridge {}", container_veth_name))?;
+            .wrap(format!("failed to delete bridge {container_veth_name}"))?;
         return Ok(true);
     }
     Ok(false)

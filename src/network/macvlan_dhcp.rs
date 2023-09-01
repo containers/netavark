@@ -50,7 +50,7 @@ pub fn get_dhcp_lease(
             {
                 Ok(r) => r,
                 Err(e) => {
-                    return Err(NetavarkError::msg(format!("unable to build thread: {}", e)));
+                    return Err(NetavarkError::msg(format!("unable to build thread: {e}")));
                 }
             },
             nvp_config.get_lease(DEFAULT_UDS_PATH),
@@ -58,7 +58,7 @@ pub fn get_dhcp_lease(
     } {
         Ok(l) => l,
         Err(e) => {
-            return Err(NetavarkError::msg(format!("unable to obtain lease: {}", e)));
+            return Err(NetavarkError::msg(format!("unable to obtain lease: {e}")));
         }
     };
 
@@ -67,7 +67,7 @@ pub fn get_dhcp_lease(
     let gw = match IpAddr::from_str(&lease.gateways[0]) {
         Ok(g) => g,
         Err(e) => {
-            return Err(NetavarkError::msg(format!("bad gateway address: {}", e)));
+            return Err(NetavarkError::msg(format!("bad gateway address: {e}")));
         }
     };
 
@@ -118,7 +118,7 @@ pub fn release_dhcp_lease(
             {
                 Ok(r) => r,
                 Err(e) => {
-                    return Err(NetavarkError::msg(format!("unable to build thread: {}", e)));
+                    return Err(NetavarkError::msg(format!("unable to build thread: {e}")));
                 }
             },
             nvp_config.drop_lease(DEFAULT_UDS_PATH),

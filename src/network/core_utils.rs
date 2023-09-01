@@ -36,8 +36,7 @@ pub fn get_netavark_dns_port() -> Result<u16, NetavarkError> {
         Ok(port_string) => match port_string.parse() {
             Ok(port) => Ok(port),
             Err(e) => Err(NetavarkError::Message(format!(
-                "Invalid NETAVARK_DNS_PORT {}: {}",
-                port_string, e
+                "Invalid NETAVARK_DNS_PORT {port_string}: {e}"
             ))),
         },
         Err(_) => Ok(53),
@@ -57,8 +56,7 @@ where
             Ok(mtu) => mtu,
             Err(err) => {
                 return Err(NetavarkError::Message(format!(
-                    "unable to parse \"{}\": {}",
-                    name, err
+                    "unable to parse \"{name}\": {err}"
                 )));
             }
         },
@@ -111,10 +109,7 @@ pub fn get_ipam_addresses<'a>(
                         Err(err) => {
                             return Err(std::io::Error::new(
                                 std::io::ErrorKind::Other,
-                                format!(
-                                    "failed to parse address {}/{}: {}",
-                                    gw, subnet_mask_cidr, err
-                                ),
+                                format!("failed to parse address {gw}/{subnet_mask_cidr}: {err}"),
                             ))
                         }
                     };
@@ -184,7 +179,7 @@ pub fn get_ipam_addresses<'a>(
         Some(driver) => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("unsupported ipam driver {}", driver),
+                format!("unsupported ipam driver {driver}"),
             ));
         }
     };
@@ -196,7 +191,7 @@ impl CoreUtils {
     pub fn encode_address_to_hex(bytes: &[u8]) -> String {
         let address: String = bytes
             .iter()
-            .map(|x| format!("{:02x}", x))
+            .map(|x| format!("{x:02x}"))
             .collect::<Vec<String>>()
             .join(":");
 
@@ -214,7 +209,7 @@ impl CoreUtils {
                 if bytes.len() != 6 {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        format!("invalid mac length for address: {}", input),
+                        format!("invalid mac length for address: {input}"),
                     ));
                 }
                 bytes
@@ -222,7 +217,7 @@ impl CoreUtils {
             Err(e) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("unable to parse mac address {}: {}", input, e),
+                    format!("unable to parse mac address {input}: {e}"),
                 ));
             }
         };
@@ -240,8 +235,7 @@ impl CoreUtils {
             Some("source") => Ok(MACVLAN_MODE_SOURCE),
             // default to bridge
             Some(name) => Err(NetavarkError::msg(format!(
-                "invalid macvlan mode \"{}\"",
-                name
+                "invalid macvlan mode \"{name}\""
             ))),
         }
     }
@@ -253,8 +247,7 @@ impl CoreUtils {
             Some("l3") => Ok(IPVLAN_MODE_L3),
             Some("l3s") => Ok(IPVLAN_MODE_L3S),
             Some(name) => Err(NetavarkError::msg(format!(
-                "invalid ipvlan mode \"{}\"",
-                name
+                "invalid ipvlan mode \"{name}\""
             ))),
         }
     }
@@ -263,7 +256,7 @@ impl CoreUtils {
         let mut hasher = Sha512::new();
         hasher.update(network_name.as_bytes());
         let result = hasher.finalize();
-        let hash_string = format!("{:X}", result);
+        let hash_string = format!("{result:X}");
         let response = &hash_string[0..length];
         response.to_string()
     }
@@ -351,7 +344,7 @@ pub fn open_netlink_sockets(
 }
 
 fn open_netlink_socket(netns_path: &str) -> NetavarkResult<(File, RawFd)> {
-    let ns = wrap!(File::open(netns_path), format!("open {}", netns_path))?;
+    let ns = wrap!(File::open(netns_path), format!("open {netns_path}"))?;
     let ns_fd = ns.as_raw_fd();
     Ok((ns, ns_fd))
 }
@@ -418,13 +411,11 @@ pub fn create_route_list(
                         metric: mtr,
                     }),
                     (IpAddr::V4(gw4), IpNet::V6(dst6)) => Err(NetavarkError::Message(format!(
-                        "Route with ipv6 destination and ipv4 gateway ({} via {})",
-                        dst6, gw4
+                        "Route with ipv6 destination and ipv4 gateway ({dst6} via {gw4})"
                     ))),
 
                     (IpAddr::V6(gw6), IpNet::V4(dst4)) => Err(NetavarkError::Message(format!(
-                        "Route with ipv4 destination and ipv6 gateway ({} via {})",
-                        dst4, gw6
+                        "Route with ipv4 destination and ipv6 gateway ({dst4} via {gw6})"
                     ))),
                 }
             })
@@ -436,7 +427,7 @@ pub fn create_route_list(
 pub fn disable_ipv6_autoconf(if_name: &str) -> NetavarkResult<()> {
     // make sure autoconf is off, we want manual config only
     if let Err(err) =
-        CoreUtils::apply_sysctl_value(format!("/proc/sys/net/ipv6/conf/{}/autoconf", if_name), "0")
+        CoreUtils::apply_sysctl_value(format!("/proc/sys/net/ipv6/conf/{if_name}/autoconf"), "0")
     {
         match err {
             SysctlError::NotFound(_) => {

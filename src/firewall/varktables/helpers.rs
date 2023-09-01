@@ -25,8 +25,7 @@ pub fn append_unique(
         .map(|_| debug_rule_create(table, chain, rule.to_string()))
     {
         return Err(NetavarkError::Message(format!(
-            "unable to append rule '{}' to table '{}': {}",
-            rule, table, e,
+            "unable to append rule '{rule}' to table '{table}': {e}",
         )));
     }
     Result::Ok(())
@@ -81,8 +80,7 @@ pub fn remove_if_rule_exists(
     }
     if let Err(e) = driver.delete(table, chain, rule) {
         return Err(NetavarkError::Message(format!(
-            "failed to remove rule '{}' from table '{}': {}",
-            rule, chain, e
+            "failed to remove rule '{rule}' from table '{chain}': {e}"
         )));
     }
     Result::Ok(())
