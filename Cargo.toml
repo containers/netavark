@@ -58,7 +58,7 @@ tokio = { version = "1.32", features = ["rt", "rt-multi-thread", "signal", "fs"]
 tokio-stream = { version = "0.1", features = ["net"] }
 tonic = "0.9"
 mozim = "0.2.2"
-prost = "0.11"
+prost = "0.12"
 futures-channel="0.3.28"
 futures-core = "0.3.28"
 futures-util = "0.3.28"
