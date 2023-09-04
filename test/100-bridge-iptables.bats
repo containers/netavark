@@ -77,7 +77,7 @@ fw_driver=iptables
 
     # check FORWARD rules
     run_in_host_netns iptables -S FORWARD
-    assert "${lines[1]}" == "-A FORWARD -m comment --comment \"netavark firewall plugin rules\" -j NETAVARK_FORWARD" "FORWARD rule"
+    assert "${lines[1]}" == "-A FORWARD -m comment --comment \"netavark firewall rules\" -j NETAVARK_FORWARD" "FORWARD rule"
     assert "${#lines[@]}" = 2 "too many FORWARD rules"
 
     run_in_host_netns iptables -S NETAVARK_FORWARD
@@ -93,7 +93,7 @@ fw_driver=iptables
 
     # check FORWARD rules
     run_in_host_netns iptables -S FORWARD
-    assert "${lines[1]}" == "-A FORWARD -m comment --comment \"netavark firewall plugin rules\" -j NETAVARK_FORWARD" "FORWARD rule"
+    assert "${lines[1]}" == "-A FORWARD -m comment --comment \"netavark firewall rules\" -j NETAVARK_FORWARD" "FORWARD rule"
     assert "${#lines[@]}" = 2 "too many FORWARD rules after teardown"
 
     # rule 1 should be DROP for any existing networks
@@ -338,6 +338,86 @@ fw_driver=iptables
     assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
     run_helper ps "$aardvark_pid"
     assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p $dns_port run" "aardvark not running or bad options"
+
+    # test redirection actually works
+    run_in_container_netns dig +short "somename.dns.podman" @10.89.3.1 A "somename.dns.podman" @10.89.3.1 AAAA
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv4 dns resolution works 1/2"
+    assert "${lines[1]}" =~ "fd10:88:a::2" "ipv6 dns resolution works 2/2"
+
+    run_in_container_netns dig +short "somename.dns.podman" @fd10:88:a::1
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv6 dns resolution works"
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
+        teardown $(get_container_netns_path)
+
+    # check iptables got removed
+    run_in_host_netns iptables -t nat -S NETAVARK-HOSTPORT-DNAT
+    assert "${#lines[@]}" = 1 "too many v4 NETAVARK_HOSTPORT-DNAT rules after teardown"
+    run_in_host_netns ip6tables -t nat -S NETAVARK-HOSTPORT-DNAT
+    assert "${#lines[@]}" = 1 "too many v6 NETAVARK_HOSTPORT-DNAT rules after teardown"
+
+    # check aardvark config got cleared, process killed
+    expected_rc=2 run_helper ls "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    expected_rc=1 run_helper ps "$aardvark_pid"
+}
+
+@test "$fw_driver - dns with default drop policy" {
+    run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
+        setup $(get_container_netns_path)
+
+    run_in_host_netns iptables -P INPUT DROP
+    run_in_host_netns iptables -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2 fd10:88:a::2 somename$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
+
+    # test redirection actually works
+    run_in_container_netns dig +short "somename.dns.podman" @10.89.3.1 A "somename.dns.podman" @10.89.3.1 AAAA
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv4 dns resolution works 1/2"
+    assert "${lines[1]}" =~ "fd10:88:a::2" "ipv6 dns resolution works 2/2"
+
+    run_in_container_netns dig +short "somename.dns.podman" @fd10:88:a::1
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv6 dns resolution works"
+
+    run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
+        teardown $(get_container_netns_path)
+
+    # check iptables got removed
+    run_in_host_netns iptables -t nat -S NETAVARK-HOSTPORT-DNAT
+    assert "${#lines[@]}" = 1 "too many v4 NETAVARK_HOSTPORT-DNAT rules after teardown"
+    run_in_host_netns ip6tables -t nat -S NETAVARK-HOSTPORT-DNAT
+    assert "${#lines[@]}" = 1 "too many v6 NETAVARK_HOSTPORT-DNAT rules after teardown"
+
+    # check aardvark config got cleared, process killed
+    expected_rc=2 run_helper ls "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    expected_rc=1 run_helper ps "$aardvark_pid"
+}
+
+@test "$fw_driver - dns with default drop policy with non-default dns port" {
+    # get a random port
+    dns_port=$((RANDOM+10000))
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
+        setup $(get_container_netns_path)
+
+    # check iptables
+    run_in_host_netns iptables -t filter -S NETAVARK_INPUT
+    assert "${lines[1]}" == "-A NETAVARK_INPUT -s 10.89.3.0/24 -p udp -m udp --dport $dns_port -j ACCEPT" "ipv4 dns forward rule"
+    run_in_host_netns ip6tables -t filter -S NETAVARK_INPUT
+    assert "${lines[1]}" == "-A NETAVARK_INPUT -s fd10:88:a::/64 -p udp -m udp --dport $dns_port -j ACCEPT" "ipv6 dns forward rule"
+
+
+    run_in_host_netns iptables -P INPUT DROP
+    run_in_host_netns iptables -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2 fd10:88:a::2 somename$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
 
     # test redirection actually works
     run_in_container_netns dig +short "somename.dns.podman" @10.89.3.1 A "somename.dns.podman" @10.89.3.1 AAAA

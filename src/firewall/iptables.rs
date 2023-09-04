@@ -40,7 +40,7 @@ pub fn new() -> NetavarkResult<Box<dyn firewall::FirewallDriver>> {
 }
 
 impl firewall::FirewallDriver for IptablesDriver {
-    fn setup_network(&self, network_setup: SetupNetwork) -> NetavarkResult<()> {
+    fn setup_network(&self, network_setup: SetupNetwork, dns_port: u16) -> NetavarkResult<()> {
         let interface = match network_setup.net.network_interface {
             Some(iface) => iface,
             None => {
@@ -67,6 +67,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                     is_ipv6,
                     interface.to_string(),
                     network_setup.isolation,
+                    dns_port,
                 );
 
                 create_network_chains(chains)?;
@@ -106,6 +107,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                     is_ipv6,
                     interface.to_string(),
                     tear.config.isolation,
+                    tear.dns_port,
                 );
 
                 for c in &chains {

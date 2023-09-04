@@ -15,7 +15,10 @@ const FILTER: &str = "filter";
 const POSTROUTING: &str = "POSTROUTING";
 const PREROUTING: &str = "PREROUTING";
 const NETAVARK_FORWARD: &str = "NETAVARK_FORWARD";
+const NETAVARK_FIREWALL_RULE_BUILDER: &str = "-m comment --comment 'netavark firewall rules' -j ";
+const NETAVARK_INPUT: &str = "NETAVARK_INPUT";
 const OUTPUT: &str = "OUTPUT";
+const INPUT: &str = "INPUT";
 const FORWARD: &str = "FORWARD";
 const ACCEPT: &str = "ACCEPT";
 const NETAVARK_HOSTPORT_DNAT: &str = "NETAVARK-HOSTPORT-DNAT";
@@ -196,6 +199,7 @@ pub fn get_network_chains<'a>(
     is_ipv6: bool,
     interface_name: String,
     isolation: IsolateOption,
+    dns_port: u16,
 ) -> Vec<VarkChain<'a>> {
     let mut chains = Vec::new();
     let prefixed_network_hash_name = format!("{}-{}", "NETAVARK", network_hash_name);
@@ -234,7 +238,12 @@ pub fn get_network_chains<'a>(
     chains.push(postrouting_chain);
 
     // FORWARD chain
-    let mut forward_chain = VarkChain::new(conn, FILTER.to_string(), FORWARD.to_string(), None);
+    let mut forward_chain: VarkChain<'_> =
+        VarkChain::new(conn, FILTER.to_string(), FORWARD.to_string(), None);
+
+    // INPUT chain
+    let mut input_chain: VarkChain<'_> =
+        VarkChain::new(conn, FILTER.to_string(), INPUT.to_string(), None);
 
     // used to prepend specific rules
     let mut ind = 1;
@@ -338,9 +347,7 @@ pub fn get_network_chains<'a>(
     chains.push(netavark_isolation_chain_3);
 
     forward_chain.build_rule(VarkRule {
-        rule: format!(
-            "-m comment --comment 'netavark firewall plugin rules' -j {NETAVARK_FORWARD}"
-        ),
+        rule: format!("{} {}", NETAVARK_FIREWALL_RULE_BUILDER, NETAVARK_FORWARD),
         position: Some(ind),
         td_policy: Some(TeardownPolicy::Never),
     });
@@ -350,6 +357,30 @@ pub fn get_network_chains<'a>(
     let mut netavark_forward_chain =
         VarkChain::new(conn, FILTER.to_string(), NETAVARK_FORWARD.to_string(), None);
     netavark_forward_chain.create = true;
+
+    // Add NETAVARK_INPUT chain to INPUT chain
+    input_chain.build_rule(VarkRule {
+        rule: format!("{} {}", NETAVARK_FIREWALL_RULE_BUILDER, NETAVARK_INPUT),
+        position: Some(1),
+        td_policy: Some(TeardownPolicy::Never),
+    });
+    chains.push(input_chain);
+
+    // NETAVARK_INPUT
+    let mut netavark_input_chain =
+        VarkChain::new(conn, FILTER.to_string(), NETAVARK_INPUT.to_string(), None);
+    netavark_input_chain.create = true;
+
+    // Always add ACCEPT rules in firewall for dns traffic from containers
+    // to gateway when using bridge network with internal dns.
+    netavark_input_chain.build_rule(VarkRule::new(
+        format!(
+            "-p {} -s {} --dport {} -j {}",
+            "udp", network, dns_port, ACCEPT
+        ),
+        Some(TeardownPolicy::OnComplete),
+    ));
+    chains.push(netavark_input_chain);
 
     // Drop all invalid packages, due a race the container source ip could be leaked on the local
     // network and we should avoid that, https://bugzilla.redhat.com/show_bug.cgi?id=2230144
