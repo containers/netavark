@@ -363,7 +363,7 @@ impl<'a> Bridge<'a> {
             data.isolate,
         )?;
 
-        self.info.firewall.setup_network(sn)?;
+        self.info.firewall.setup_network(sn, spf.dns_port)?;
 
         if spf.port_mappings.is_some() {
             // Need to enable sysctl localnet so that traffic can pass
@@ -414,6 +414,7 @@ impl<'a> Bridge<'a> {
 
         let tn = TearDownNetwork {
             config: sn,
+            dns_port: spf.dns_port,
             complete_teardown,
         };
 

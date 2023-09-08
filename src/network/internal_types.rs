@@ -24,6 +24,7 @@ pub struct SetupNetwork {
 #[derive(Debug)]
 pub struct TearDownNetwork {
     pub config: SetupNetwork,
+    pub dns_port: u16,
     pub complete_teardown: bool,
 }
 

@@ -26,7 +26,11 @@ pub fn new(conn: Connection) -> Result<Box<dyn firewall::FirewallDriver>, Netava
 }
 
 impl firewall::FirewallDriver for FirewallD {
-    fn setup_network(&self, network_setup: internal_types::SetupNetwork) -> NetavarkResult<()> {
+    fn setup_network(
+        &self,
+        network_setup: internal_types::SetupNetwork,
+        _dns_port: u16,
+    ) -> NetavarkResult<()> {
         let mut need_reload = false;
 
         need_reload |= match create_zone_if_not_exist(&self.conn, ZONENAME) {
