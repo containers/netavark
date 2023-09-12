@@ -283,7 +283,10 @@ impl CoreUtils {
 }
 
 pub fn join_netns(fd: RawFd) -> NetavarkResult<()> {
-    match sched::setns(fd, sched::CloneFlags::CLONE_NEWNET) {
+    match sched::setns(
+        unsafe { BorrowedFd::borrow_raw(fd) },
+        sched::CloneFlags::CLONE_NEWNET,
+    ) {
         Ok(_) => Ok(()),
         Err(e) => Err(NetavarkError::wrap(
             "setns",
