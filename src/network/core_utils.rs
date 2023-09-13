@@ -282,11 +282,8 @@ impl CoreUtils {
     }
 }
 
-pub fn join_netns(fd: RawFd) -> NetavarkResult<()> {
-    match sched::setns(
-        unsafe { BorrowedFd::borrow_raw(fd) },
-        sched::CloneFlags::CLONE_NEWNET,
-    ) {
+pub fn join_netns<Fd: AsFd>(fd: Fd) -> NetavarkResult<()> {
+    match sched::setns(fd, sched::CloneFlags::CLONE_NEWNET) {
         Ok(_) => Ok(()),
         Err(e) => Err(NetavarkError::wrap(
             "setns",
@@ -312,7 +309,6 @@ pub struct NamespaceOptions {
     /// Note we have to return the File object since the fd is only valid
     /// as long as the File object is valid
     pub file: File,
-    pub fd: RawFd,
     pub netlink: netlink::Socket,
 }
 
@@ -323,10 +319,9 @@ pub fn open_netlink_sockets(
     let hostns = open_netlink_socket("/proc/self/ns/net").wrap("open host netns")?;
 
     let host_socket = netlink::Socket::new().wrap("host netlink socket")?;
-
     exec_netns!(
-        hostns.1,
-        netns.1,
+        hostns.as_fd(),
+        netns.as_fd(),
         res,
         netlink::Socket::new().wrap("netns netlink socket")
     );
@@ -334,22 +329,18 @@ pub fn open_netlink_sockets(
     let netns_sock = res?;
     Ok((
         NamespaceOptions {
-            file: hostns.0,
-            fd: hostns.1,
+            file: hostns,
             netlink: host_socket,
         },
         NamespaceOptions {
-            file: netns.0,
-            fd: netns.1,
+            file: netns,
             netlink: netns_sock,
         },
     ))
 }
 
-fn open_netlink_socket(netns_path: &str) -> NetavarkResult<(File, RawFd)> {
-    let ns = wrap!(File::open(netns_path), format!("open {netns_path}"))?;
-    let ns_fd = ns.as_raw_fd();
-    Ok((ns, ns_fd))
+fn open_netlink_socket(netns_path: &str) -> NetavarkResult<File> {
+    wrap!(File::open(netns_path), format!("open {netns_path}"))
 }
 
 pub fn add_default_routes(

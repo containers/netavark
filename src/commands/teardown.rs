@@ -8,6 +8,7 @@ use crate::{firewall, network};
 use clap::builder::NonEmptyStringValueParser;
 use clap::Parser;
 use log::debug;
+use std::os::fd::AsFd;
 use std::path::Path;
 
 #[derive(Parser, Debug)]
@@ -105,8 +106,8 @@ impl Teardown {
                     container_id: &network_options.container_id,
                     container_name: &network_options.container_name,
                     container_dns_servers: &network_options.dns_servers,
-                    netns_host: hostns.fd,
-                    netns_container: netns.fd,
+                    netns_host: hostns.file.as_fd(),
+                    netns_container: netns.file.as_fd(),
                     netns_path: &self.network_namespace_path,
                     network,
                     per_network_opts,
