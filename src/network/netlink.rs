@@ -1,6 +1,6 @@
 use std::{
     net::{Ipv4Addr, Ipv6Addr},
-    os::unix::prelude::RawFd,
+    os::fd::{AsFd, AsRawFd, BorrowedFd},
 };
 
 use crate::{
@@ -28,7 +28,7 @@ pub struct Socket {
 }
 
 #[derive(Clone)]
-pub struct CreateLinkOptions {
+pub struct CreateLinkOptions<'fd> {
     pub name: String,
     kind: InfoKind,
     pub info_data: Option<InfoData>,
@@ -36,7 +36,7 @@ pub struct CreateLinkOptions {
     pub primary_index: u32,
     pub link: u32,
     pub mac: Vec<u8>,
-    pub netns: RawFd,
+    pub netns: Option<BorrowedFd<'fd>>,
 }
 
 pub enum LinkID {
@@ -174,10 +174,10 @@ impl Socket {
         Ok(())
     }
 
-    pub fn set_link_ns(&mut self, link_id: u32, netns_fd: i32) -> NetavarkResult<()> {
+    pub fn set_link_ns<Fd: AsFd>(&mut self, link_id: u32, netns: Fd) -> NetavarkResult<()> {
         let mut msg = LinkMessage::default();
         msg.header.index = link_id;
-        msg.nlas.push(Nla::NetNsFd(netns_fd));
+        msg.nlas.push(Nla::NetNsFd(netns.as_fd().as_raw_fd()));
 
         let result = self.make_netlink_request(RtnlMessage::SetLink(msg), NLM_F_ACK)?;
         expect_netlink_result!(result, 0);
@@ -484,7 +484,7 @@ impl Socket {
     }
 }
 
-impl CreateLinkOptions {
+impl CreateLinkOptions<'_> {
     pub fn new(name: String, kind: InfoKind) -> Self {
         CreateLinkOptions {
             name,
@@ -494,8 +494,7 @@ impl CreateLinkOptions {
             primary_index: 0,
             link: 0,
             mac: vec![],
-            // 0 is a valid fd, so use -1 by default
-            netns: -1,
+            netns: None,
         }
     }
 }
@@ -534,7 +533,7 @@ pub fn parse_create_link_options(msg: &mut LinkMessage, options: CreateLinkOptio
     }
 
     // add netnsfd
-    if options.netns > -1 {
-        msg.nlas.push(Nla::NetNsFd(options.netns));
+    if let Some(netns) = options.netns {
+        msg.nlas.push(Nla::NetNsFd(netns.as_raw_fd()));
     }
 }

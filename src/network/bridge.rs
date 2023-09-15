@@ -1,4 +1,4 @@
-use std::{collections::HashMap, net::IpAddr, os::unix::prelude::RawFd, sync::Once};
+use std::{collections::HashMap, net::IpAddr, os::fd::BorrowedFd, sync::Once};
 
 use ipnet::IpNet;
 use log::{debug, error};
@@ -475,8 +475,8 @@ fn create_interfaces(
     netns: &mut netlink::Socket,
     data: &InternalData,
     internal: bool,
-    hostns_fd: RawFd,
-    netns_fd: RawFd,
+    hostns_fd: BorrowedFd<'_>,
+    netns_fd: BorrowedFd<'_>,
 ) -> NetavarkResult<String> {
     let bridge = match host.get_link(netlink::LinkID::Name(
         data.bridge_interface_name.to_string(),
@@ -540,20 +540,20 @@ fn create_interfaces(
 }
 
 /// return the container veth mac address
-fn create_veth_pair(
+fn create_veth_pair<'fd>(
     host: &mut netlink::Socket,
     netns: &mut netlink::Socket,
     data: &InternalData,
     primary_index: u32,
     internal: bool,
-    hostns_fd: RawFd,
-    netns_fd: RawFd,
+    hostns_fd: BorrowedFd<'fd>,
+    netns_fd: BorrowedFd<'fd>,
 ) -> NetavarkResult<String> {
     let mut peer_opts =
         netlink::CreateLinkOptions::new(data.container_interface_name.to_string(), InfoKind::Veth);
     peer_opts.mac = data.mac_address.clone().unwrap_or_default();
     peer_opts.mtu = data.mtu;
-    peer_opts.netns = netns_fd;
+    peer_opts.netns = Some(netns_fd);
 
     let mut peer = LinkMessage::default();
     netlink::parse_create_link_options(&mut peer, peer_opts);

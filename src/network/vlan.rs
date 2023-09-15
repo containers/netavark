@@ -1,5 +1,6 @@
 use log::{debug, error};
-use std::{collections::HashMap, net::IpAddr, os::unix::prelude::RawFd};
+use std::os::fd::BorrowedFd;
+use std::{collections::HashMap, net::IpAddr};
 
 use netlink_packet_route::nlas::link::{InfoData, InfoIpVlan, InfoKind, InfoMacVlan, Nla};
 use rand::distributions::{Alphanumeric, DistString};
@@ -250,8 +251,8 @@ fn setup(
     netns: &mut netlink::Socket,
     if_name: &str,
     data: &InternalData,
-    hostns_fd: RawFd,
-    netns_fd: RawFd,
+    hostns_fd: BorrowedFd<'_>,
+    netns_fd: BorrowedFd<'_>,
     kind_data: &KindData,
 ) -> NetavarkResult<String> {
     let primary_ifname = match data.host_interface_name.as_ref() {
@@ -265,7 +266,7 @@ fn setup(
         KindData::IpVlan { mode } => {
             let mut opts = CreateLinkOptions::new(if_name.to_string(), InfoKind::IpVlan);
             opts.mtu = data.mtu;
-            opts.netns = netns_fd;
+            opts.netns = Some(netns_fd);
             opts.link = link.header.index;
             opts.info_data = Some(InfoData::IpVlan(vec![InfoIpVlan::Mode(*mode)]));
             opts
@@ -278,7 +279,7 @@ fn setup(
             let mut opts = CreateLinkOptions::new(if_name.to_string(), InfoKind::MacVlan);
             opts.mac = mac_address.clone().unwrap_or_default();
             opts.mtu = data.mtu;
-            opts.netns = netns_fd;
+            opts.netns = Some(netns_fd);
             opts.link = link.header.index;
 
             let mut mv_opts = vec![InfoMacVlan::Mode(*mode)];
