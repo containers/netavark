@@ -15,7 +15,7 @@ jobs:
     trigger: pull_request
     notifications:
       failure_comment:
-        message: "Ephemeral COPR build failed. @lsm5 please check."
+        message: "Ephemeral COPR build failed. @containers/packit-build please check."
     enable_net: true
     targets:
       - fedora-all-x86_64
@@ -32,7 +32,7 @@ jobs:
     trigger: commit
     notifications:
       failure_comment:
-        message: "podman-next COPR build failed. @lsm5 please check."
+        message: "podman-next COPR build failed. @containers/packit-build please check."
     branch: main
     owner: rhcontainerbot
     project: podman-next
