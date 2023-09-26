@@ -19,7 +19,7 @@ use super::{
     constants::{
         ISOLATE_OPTION_FALSE, ISOLATE_OPTION_STRICT, ISOLATE_OPTION_TRUE,
         NO_CONTAINER_INTERFACE_ERROR, OPTION_ISOLATE, OPTION_METRIC, OPTION_MTU,
-        OPTION_NO_DEFAULT_ROUTE,
+        OPTION_NO_DEFAULT_ROUTE, OPTION_VRF,
     },
     core_utils::{self, get_ipam_addresses, join_netns, parse_option, CoreUtils},
     driver::{self, DriverInfo},
@@ -50,6 +50,8 @@ struct InternalData {
     metric: Option<u32>,
     /// if set, no default gateway will be added
     no_default_route: bool,
+    /// sef vrf for bridge
+    vrf: Option<String>,
     // TODO: add vlan
 }
 
@@ -81,6 +83,7 @@ impl driver::NetworkDriver for Bridge<'_> {
         let metric: u32 = parse_option(&self.info.network.options, OPTION_METRIC)?.unwrap_or(100);
         let no_default_route: bool =
             parse_option(&self.info.network.options, OPTION_NO_DEFAULT_ROUTE)?.unwrap_or(false);
+        let vrf: Option<String> = parse_option(&self.info.network.options, OPTION_VRF)?;
 
         let static_mac = match &self.info.per_network_opts.static_mac {
             Some(mac) => Some(CoreUtils::decode_address_from_hex(mac)?),
@@ -96,6 +99,7 @@ impl driver::NetworkDriver for Bridge<'_> {
             isolate,
             metric: Some(metric),
             no_default_route,
+            vrf,
         });
         Ok(())
     }
@@ -494,6 +498,15 @@ fn create_interfaces(
                     InfoKind::Bridge,
                 );
                 create_link_opts.mtu = data.mtu;
+
+                if let Some(vrf_name) = &data.vrf {
+                    let vrf = match host.get_link(netlink::LinkID::Name(vrf_name.to_string())) {
+                        Ok(vrf) => check_link_is_vrf(vrf, vrf_name)?,
+                        Err(err) => return Err(err).wrap("get vrf to set up bridge interface"),
+                    };
+                    create_link_opts.primary_index = vrf.header.index;
+                }
+
                 host.create_link(create_link_opts).wrap("create bridge")?;
 
                 if data.ipam.ipv6_enabled {
@@ -669,6 +682,30 @@ fn check_link_is_bridge(msg: LinkMessage, br_name: &str) -> NetavarkResult<LinkM
     }
     Err(NetavarkError::Message(format!(
         "could not determine namespace link kind for bridge {br_name}"
+    )))
+}
+
+/// make sure the LinkMessage is the kind VRF
+fn check_link_is_vrf(msg: LinkMessage, vrf_name: &str) -> NetavarkResult<LinkMessage> {
+    for nla in msg.nlas.iter() {
+        if let Nla::Info(info) = nla {
+            for inf in info.iter() {
+                if let Info::Kind(kind) = inf {
+                    if *kind == InfoKind::Vrf {
+                        return Ok(msg);
+                    } else {
+                        return Err(NetavarkError::Message(format!(
+                            "vrf {} already exists but is a {:?} interface",
+                            vrf_name, kind
+                        )));
+                    }
+                }
+            }
+        }
+    }
+    Err(NetavarkError::Message(format!(
+        "could not determine namespace link kind for vrf {}",
+        vrf_name
     )))
 }
 
