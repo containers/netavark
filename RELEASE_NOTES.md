@@ -1,5 +1,13 @@
 # Release Notes
 
+## v1.8.0
+* iptables: improve error when ip6?tables commands are missing
+* docs: Convert markdown with go-md2man instead of mandown
+* iptables: drop invalid packages
+* bump rust edition to 2021
+* Add ACCEPT rules in firewall for bridge network with internal dns
+* Add vrf support for bridges
+
 ## v1.7.0
 * Fix misleading dns disabled log
 * Dependency updates
