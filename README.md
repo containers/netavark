@@ -36,7 +36,7 @@ Also see [./test](./test/README.md) for more information.
 ## Communications
 
 For general questions and discussion, please use Podman's
-[channels](https://podman.io/community/#slack-irc-matrix-and-discord).
+[channels](https://podman.io/community/).
 
 For discussions around issues/bugs and features, you can use the GitHub
 [issues](https://github.com/containers/netavark/issues)
