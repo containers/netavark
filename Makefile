@@ -120,7 +120,13 @@ unit: $(CARGO_TARGET_DIR)
 	$(CARGO) test
 
 .PHONY: integration
+# The NETAVARK envvar is used by bats to specify path to a netavark binary.
+#ifdef NETAVARK
+#$(info Skipping build as NETAVARK binary is specified)
+#integration: $(CARGO_TARGET_DIR)
+#else
 integration: $(CARGO_TARGET_DIR) examples
+#endif
 	# needs to be run as root or with podman unshare --rootless-netns
 	bats test/
 	bats test-dhcp/

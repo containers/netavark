@@ -17,13 +17,17 @@ jobs:
       failure_comment:
         message: "Ephemeral COPR build failed. @containers/packit-build please check."
     enable_net: true
-    targets:
-      - fedora-all-x86_64
-      - fedora-all-aarch64
-      - centos-stream+epel-next-8-x86_64
-      - centos-stream+epel-next-8-aarch64
-      - centos-stream+epel-next-9-x86_64
-      - centos-stream+epel-next-9-aarch64
+    targets: &copr_build_targets
+      - fedora-rawhide-x86_64
+      - fedora-rawhide-aarch64
+        # - fedora-latest-x86_64
+        #- fedora-latest-aarch64
+        #- fedora-latest-stable-x86_64
+        #- fedora-latest-stable-aarch64
+        #- centos-stream-9-x86_64
+        #- centos-stream-9-aarch64
+        #- centos-stream-8-x86_64
+        #- centos-stream-8-aarch64
     additional_repos:
       - "copr://rhcontainerbot/podman-next"
 
@@ -37,6 +41,42 @@ jobs:
     owner: rhcontainerbot
     project: podman-next
     enable_net: true
+
+  # Test on the same arches as copr_build_targets used for ephemeral copr build
+  #- job: tests
+  #  trigger: pull_request
+      # Disabling notifications until spam comments are figured out
+      #  notifications:
+      #failure_comment:
+      #  message: "TMT test failed. @containers/packit-build please check."
+      #targets: &copr_test_targets
+      #- fedora-rawhide-x86_64
+      #- fedora-rawhide-aarch64
+      #skip_build: true
+      #identifier: validate
+      #tmt_plan: "/plans/validate_test"
+
+      #- job: tests
+      #trigger: pull_request
+      #notifications:
+      #failure_comment:
+      #  message: "TMT tests failed. @containers/packit-build please check."
+      #targets: *copr_test_targets
+      #skip_build: true
+      #identifier: unit
+      #tmt_plan: "/plans/unit_test"
+
+  - job: tests
+    trigger: pull_request
+      #notifications:
+      #failure_comment:
+      #  message: "TMT tests failed. @containers/packit-build please check."
+    targets: &copr_test_targets
+      - fedora-rawhide-x86_64
+      - fedora-rawhide-aarch64
+    skip_build: true
+    identifier: integration
+    tmt_plan: "/plans/integration_test"
 
   - job: propose_downstream
     trigger: release

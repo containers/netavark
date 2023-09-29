@@ -1,0 +1,39 @@
+prepare:
+    name: Install dependencies
+    how: install
+    package:
+        - bats
+        - bind-utils
+        - cargo
+        - clippy
+        - dbus-daemon
+        - firewalld
+        - go-md2man
+        - jq
+        - kernel-modules-core
+        - make
+        - podman
+        - protobuf-c
+        - protobuf-compiler
+        - rustfmt
+
+#/validate_test:
+#    summary: Run validate test
+#    execute:
+#        how: tmt
+#        script: make validate
+
+#/unit_test:
+#    summary: Run unit tests
+#    execute:
+#        how: tmt
+#        script: make unit
+
+/integration_test:
+    summary: Run integration tests
+    execute:
+        how: tmt
+        script: |
+            sudo depmod
+            sudo modprobe sctp
+            sudo make integration
