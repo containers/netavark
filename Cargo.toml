@@ -13,11 +13,8 @@ exclude = ["/.cirrus.yml", "/.github/*", "/hack/*"]
 build = "build.rs"
 
 [package.metadata.vendor-filter]
-# This list is not exhaustive.
-platforms = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "powerpc64le-unknown-linux-gnu",
-             "s390x-unknown-linux-gnu", "riscv64gc-unknown-linux-gnu",
-             "x86_64-unknown-linux-musl", "aarch64-unknown-linux-musl",
-             ]
+platforms = ["*-unknown-linux-*"]
+tier = "2"
 
 [[bin]]
 name = "netavark"
