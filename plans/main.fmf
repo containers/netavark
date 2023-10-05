@@ -1,21 +1,28 @@
 prepare:
-    name: Install dependencies
-    how: install
-    package:
+    - name: Install dependencies
+      how: install
+      copr: rhcontainerbot/podman-next
+      package:
+        - aardvark-dns
         - bats
         - bind-utils
         - cargo
         - clippy
         - dbus-daemon
+        - dnsmasq
         - firewalld
         - go-md2man
         - jq
         - kernel-modules-core
         - make
+        - nmap-ncat
         - podman
         - protobuf-c
         - protobuf-compiler
         - rustfmt
+    - name: Start firewalld and dnsmasq
+      how: shell
+      script: systemctl start firewalld dnsmasq
 
 #/validate_test:
 #    summary: Run validate test
@@ -34,6 +41,4 @@ prepare:
     execute:
         how: tmt
         script: |
-            sudo depmod
-            sudo modprobe sctp
-            sudo make integration
+            sudo bats test
