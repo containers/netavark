@@ -16,7 +16,6 @@ env:
     CARGO_TARGET_DIR: "$CIRRUS_WORKING_DIR/targets"
     # Save a little typing (path relative to $CIRRUS_WORKING_DIR)
     SCRIPT_BASE: "./contrib/cirrus"
-    FEDORA_NAME: "fedora-38"
     IMAGE_SUFFIX: "c20231004t194547z-f39f38d13"
     FEDORA_NETAVARK_IMAGE: "fedora-netavark-${IMAGE_SUFFIX}"
     AARDVARK_DNS_BRANCH: "main"
