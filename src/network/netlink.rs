@@ -394,6 +394,22 @@ impl Socket {
         Ok(())
     }
 
+    pub fn set_mac_address(&mut self, id: LinkID, mac: Vec<u8>) -> NetavarkResult<()> {
+        let mut msg = LinkMessage::default();
+
+        match id {
+            LinkID::ID(id) => msg.header.index = id,
+            LinkID::Name(name) => msg.nlas.push(Nla::IfName(name)),
+        }
+
+        msg.nlas.push(Nla::Address(mac));
+
+        let result = self.make_netlink_request(RtnlMessage::SetLink(msg), NLM_F_ACK)?;
+        expect_netlink_result!(result, 0);
+
+        Ok(())
+    }
+
     fn make_netlink_request(
         &mut self,
         msg: RtnlMessage,
