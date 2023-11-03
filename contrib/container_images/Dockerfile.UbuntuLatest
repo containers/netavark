@@ -1,2 +1,2 @@
-FROM docker.io/library/ubuntu:latest
+FROM docker.io/library/ubuntu:rolling
 RUN apt-get update && apt-get -y install cargo protobuf-compiler libprotobuf-dev
