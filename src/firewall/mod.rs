@@ -15,7 +15,7 @@ mod varktables;
 /// and port mappings.
 pub trait FirewallDriver {
     /// Set up firewall rules for the given network,
-    fn setup_network(&self, network_setup: SetupNetwork, dns_port: u16) -> NetavarkResult<()>;
+    fn setup_network(&self, network_setup: SetupNetwork) -> NetavarkResult<()>;
     /// Tear down firewall rules for the given network.
     fn teardown_network(&self, tear: TearDownNetwork) -> NetavarkResult<()>;
 

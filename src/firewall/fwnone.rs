@@ -12,7 +12,7 @@ pub fn new() -> NetavarkResult<Box<dyn firewall::FirewallDriver>> {
 }
 
 impl firewall::FirewallDriver for Fwnone {
-    fn setup_network(&self, _network_setup: SetupNetwork, _dns_port: u16) -> NetavarkResult<()> {
+    fn setup_network(&self, _network_setup: SetupNetwork) -> NetavarkResult<()> {
         Ok(())
     }
 

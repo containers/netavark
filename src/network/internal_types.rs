@@ -19,12 +19,13 @@ pub struct SetupNetwork {
     pub network_hash_name: String,
     /// isolation determines whether the network can communicate with others outside of its interface
     pub isolation: IsolateOption,
+    /// port used for the dns server
+    pub dns_port: u16,
 }
 
 #[derive(Debug)]
 pub struct TearDownNetwork {
     pub config: SetupNetwork,
-    pub dns_port: u16,
     pub complete_teardown: bool,
 }
 
