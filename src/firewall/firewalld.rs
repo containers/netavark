@@ -469,7 +469,7 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> NetavarkResul
             ))
         }
     };
-    for (_, &zone) in zones.iter().enumerate() {
+    for &zone in zones.iter() {
         if zone == zone_name {
             debug!("Zone exists and is running");
             return Ok(false);
@@ -493,7 +493,7 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> NetavarkResul
             ))
         }
     };
-    for (_, &zone) in zones_perm.iter().enumerate() {
+    for &zone in zones_perm.iter() {
         if zone == zone_name {
             debug!("Zone exists and is not running");
             return Ok(true);
@@ -589,7 +589,7 @@ fn add_policy_if_not_exist(
             ))
         }
     };
-    for (_, &policy) in policies.iter().enumerate() {
+    for &policy in policies.iter() {
         if policy == policy_name {
             debug!("Policy exists and is running");
             return Ok(false);
@@ -613,7 +613,7 @@ fn add_policy_if_not_exist(
             ))
         }
     };
-    for (_, &policy) in perm_policies.iter().enumerate() {
+    for &policy in perm_policies.iter() {
         if policy == policy_name {
             debug!("Policy exists and is not running");
             return Ok(true);
