@@ -255,10 +255,12 @@ impl driver::NetworkDriver for Bridge<'_> {
                 .unwrap_or_else(|err| error_list.push(err))
         }
 
+        let bridge_name = get_interface_name(self.info.network.network_interface.clone())?;
+
         let complete_teardown = match remove_link(
             host_sock,
             netns_sock,
-            &get_interface_name(self.info.network.network_interface.clone())?,
+            &bridge_name,
             &self.info.per_network_opts.interface_name,
         ) {
             Ok(teardown) => teardown,
@@ -275,7 +277,7 @@ impl driver::NetworkDriver for Bridge<'_> {
             return Ok(());
         }
 
-        match self.teardown_firewall(complete_teardown) {
+        match self.teardown_firewall(complete_teardown, bridge_name) {
             Ok(_) => {}
             Err(err) => {
                 error_list.push(err);
@@ -309,11 +311,18 @@ impl<'a> Bridge<'a> {
         container_addresses: &Vec<IpNet>,
         nameservers: &'a Vec<IpAddr>,
         isolate: IsolateOption,
+        bridge_name: String,
     ) -> NetavarkResult<(SetupNetwork, PortForwardConfig)> {
         let id_network_hash =
             CoreUtils::create_network_hash(&self.info.network.name, MAX_HASH_SIZE);
         let sn = SetupNetwork {
-            net: self.info.network.clone(),
+            subnets: self
+                .info
+                .network
+                .subnets
+                .as_ref()
+                .map(|nets| nets.iter().map(|n| n.subnet).collect()),
+            bridge_name,
             network_hash_name: id_network_hash.clone(),
             isolation: isolate,
             dns_port: self.info.dns_port,
@@ -366,6 +375,7 @@ impl<'a> Bridge<'a> {
             &data.ipam.container_addresses,
             &data.ipam.nameservers,
             data.isolate,
+            data.bridge_interface_name.clone(),
         )?;
 
         self.info.firewall.setup_network(sn)?;
@@ -387,7 +397,11 @@ impl<'a> Bridge<'a> {
         Ok(())
     }
 
-    fn teardown_firewall(&self, complete_teardown: bool) -> NetavarkResult<()> {
+    fn teardown_firewall(
+        &self,
+        complete_teardown: bool,
+        bridge_name: String,
+    ) -> NetavarkResult<()> {
         // we have to allocate the vecoros here in the top level to avoid
         // "borrow later used" problems
         let (container_addresses, nameservers);
@@ -414,8 +428,12 @@ impl<'a> Bridge<'a> {
             }
         };
 
-        let (sn, spf) =
-            self.get_firewall_conf(container_addresses_ref, nameservers_ref, isolate)?;
+        let (sn, spf) = self.get_firewall_conf(
+            container_addresses_ref,
+            nameservers_ref,
+            isolate,
+            bridge_name,
+        )?;
 
         let tn = TearDownNetwork {
             config: sn,

@@ -13,8 +13,10 @@ pub struct TeardownPortForward<'a> {
 /// SetupNetwork contains options for setting up a container
 #[derive(Debug)]
 pub struct SetupNetwork {
-    /// network object
-    pub net: types::Network,
+    /// subnets used for this network
+    pub subnets: Option<Vec<ipnet::IpNet>>,
+    /// bridge interface name
+    pub bridge_name: String,
     /// hash id for the network
     pub network_hash_name: String,
     /// isolation determines whether the network can communicate with others outside of its interface

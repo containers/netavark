@@ -8,7 +8,6 @@ use crate::firewall::varktables::types::{
 use crate::network::internal_types::{
     PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
 };
-use crate::network::types;
 use iptables;
 use iptables::IPTables;
 use log::{debug, warn};
@@ -41,20 +40,9 @@ pub fn new() -> NetavarkResult<Box<dyn firewall::FirewallDriver>> {
 
 impl firewall::FirewallDriver for IptablesDriver {
     fn setup_network(&self, network_setup: SetupNetwork) -> NetavarkResult<()> {
-        let interface = match network_setup.net.network_interface {
-            Some(iface) => iface,
-            None => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "failed to get interface".to_string(),
-                )
-                .into())
-            }
-        };
-
-        if let Some(subnet) = network_setup.net.subnets {
+        if let Some(subnet) = network_setup.subnets {
             for network in subnet {
-                let is_ipv6 = network.subnet.network().is_ipv6();
+                let is_ipv6 = network.network().is_ipv6();
                 let mut conn = &self.conn;
                 if is_ipv6 {
                     conn = &self.conn6;
@@ -62,10 +50,10 @@ impl firewall::FirewallDriver for IptablesDriver {
 
                 let chains = get_network_chains(
                     conn,
-                    network.subnet,
+                    network,
                     &network_setup.network_hash_name,
                     is_ipv6,
-                    interface.to_string(),
+                    network_setup.bridge_name.clone(),
                     network_setup.isolation,
                     network_setup.dns_port,
                 );
@@ -81,31 +69,20 @@ impl firewall::FirewallDriver for IptablesDriver {
     // teardown_network should only be called in the case of
     // a complete teardown.
     fn teardown_network(&self, tear: TearDownNetwork) -> NetavarkResult<()> {
-        let interface = match tear.config.net.network_interface {
-            Some(iface) => iface,
-            None => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "failed to get interface".to_string(),
-                )
-                .into())
-            }
-        };
-
         // Remove network specific general NAT rules
-        if let Some(subnet) = tear.config.net.subnets {
+        if let Some(subnet) = tear.config.subnets {
             for network in subnet {
-                let is_ipv6 = network.subnet.network().is_ipv6();
+                let is_ipv6 = network.network().is_ipv6();
                 let mut conn = &self.conn;
                 if is_ipv6 {
                     conn = &self.conn6;
                 }
                 let chains = get_network_chains(
                     conn,
-                    network.subnet,
+                    network,
                     &tear.config.network_hash_name,
                     is_ipv6,
-                    interface.to_string(),
+                    tear.config.bridge_name.clone(),
                     tear.config.isolation,
                     tear.config.dns_port,
                 );
@@ -250,7 +227,7 @@ fn is_firewalld_running(conn: &Connection) -> bool {
 
 /// If possible, add a firewalld rule to allow traffic.
 /// Ignore all errors, beyond possibly logging them.
-fn add_firewalld_if_possible(net: &types::Subnet) {
+fn add_firewalld_if_possible(net: &ipnet::IpNet) {
     let conn = match Connection::system() {
         Ok(conn) => conn,
         Err(_) => return,
@@ -258,16 +235,13 @@ fn add_firewalld_if_possible(net: &types::Subnet) {
     if !is_firewalld_running(&conn) {
         return;
     }
-    debug!(
-        "Adding firewalld rules for network {}",
-        net.subnet.to_string()
-    );
+    debug!("Adding firewalld rules for network {}", net.to_string());
 
-    match firewalld::add_source_subnets_to_zone(&conn, "trusted", vec![net.clone()]) {
+    match firewalld::add_source_subnets_to_zone(&conn, "trusted", &[*net]) {
         Ok(_) => {}
         Err(e) => warn!(
             "Error adding subnet {} from firewalld trusted zone: {}",
-            net.subnet.to_string(),
+            net.to_string(),
             e
         ),
     }
@@ -275,7 +249,7 @@ fn add_firewalld_if_possible(net: &types::Subnet) {
 
 // If possible, remove a firewalld rule to allow traffic.
 // Ignore all errors, beyond possibly logging them.
-fn rm_firewalld_if_possible(net: &types::Subnet) {
+fn rm_firewalld_if_possible(net: &ipnet::IpNet) {
     let conn = match Connection::system() {
         Ok(conn) => conn,
         Err(_) => return,
@@ -283,21 +257,18 @@ fn rm_firewalld_if_possible(net: &types::Subnet) {
     if !is_firewalld_running(&conn) {
         return;
     }
-    debug!(
-        "Removing firewalld rules for IPs {}",
-        net.subnet.to_string()
-    );
+    debug!("Removing firewalld rules for IPs {}", net.to_string());
     match conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1",
         Some("org.fedoraproject.FirewallD1.zone"),
         "removeSource",
-        &("trusted", net.subnet.to_string()),
+        &("trusted", net.to_string()),
     ) {
         Ok(_) => {}
         Err(e) => warn!(
             "Error removing subnet {} from firewalld trusted zone: {}",
-            net.subnet.to_string(),
+            net.to_string(),
             e
         ),
     };
