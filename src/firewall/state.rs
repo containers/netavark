@@ -1,13 +1,13 @@
 use std::{
     fs::{self, File, OpenOptions},
-    io::{ErrorKind, Write},
+    io::{self, ErrorKind, Write},
     path::{Path, PathBuf},
 };
 
 use serde::de::DeserializeOwned;
 
 use crate::{
-    error::NetavarkResult,
+    error::{NetavarkError, NetavarkResult},
     network::internal_types::{PortForwardConfig, PortForwardConfigOwned, SetupNetwork},
 };
 
@@ -26,6 +26,25 @@ struct FilePaths {
     fw_driver_file: PathBuf,
     net_conf_file: PathBuf,
     port_conf_file: PathBuf,
+}
+
+/// macro to quickly wrap the IO error with useful context
+/// First argument is the function, second the path, third the extra error message.
+/// The full error is "$msg $path: $org_error"
+macro_rules! fs_err {
+    ($func:expr, $path:expr, $msg:expr) => {
+        $func($path).map_err(|err| {
+            NetavarkError::wrap(format!("{} {:?}", $msg, $path.display()), err.into())
+        })
+    };
+}
+
+fn remove_file_ignore_enoent<P: AsRef<Path>>(path: P) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Ok(ok) => Ok(ok),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 fn firewall_config_dir(config_dir: &str) -> PathBuf {
@@ -49,9 +68,17 @@ fn get_file_paths(
     let mut port_conf_file = path.join(PORT_CONF_DIR);
 
     if create_dirs {
-        fs::create_dir_all(path)?;
-        fs::create_dir_all(&net_conf_file)?;
-        fs::create_dir_all(&port_conf_file)?;
+        fs_err!(fs::create_dir_all, &path, "create firewall config dir")?;
+        fs_err!(
+            fs::create_dir_all,
+            &net_conf_file,
+            "create network config dir"
+        )?;
+        fs_err!(
+            fs::create_dir_all,
+            &port_conf_file,
+            "create port config dir"
+        )?;
     }
     if !network_id.is_empty() && !container_id.is_empty() {
         net_conf_file.push(network_id);
@@ -77,21 +104,31 @@ pub fn write_fw_config(
     port_conf: &PortForwardConfig,
 ) -> NetavarkResult<()> {
     let paths = get_file_paths(config_dir, network_id, container_id, true)?;
-    File::create(paths.fw_driver_file)?.write_all(fw_driver.as_bytes())?;
+    fs_err!(
+        File::create,
+        &paths.fw_driver_file,
+        "create firewall-driver file"
+    )?
+    .write_all(fw_driver.as_bytes())
+    .map_err(|err| NetavarkError::wrap("failed to write firewall-driver file", err.into()))?;
 
     match OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(paths.net_conf_file)
+        .open(&paths.net_conf_file)
     {
         Ok(f) => serde_json::to_writer(f, &net_conf)?,
+        // net config file already exists no need to write the same stuff again.
         Err(ref e) if e.kind() == ErrorKind::AlreadyExists => (),
         Err(e) => {
-            return Err(e.into());
+            return Err(NetavarkError::wrap(
+                format!("create network config {:?}", &paths.net_conf_file.display()),
+                e.into(),
+            ));
         }
     };
 
-    let ports_file = File::create(paths.port_conf_file)?;
+    let ports_file = fs_err!(File::create, &paths.port_conf_file, "create port config")?;
     serde_json::to_writer(ports_file, &port_conf)?;
 
     Ok(())
@@ -107,9 +144,17 @@ pub fn remove_fw_config(
     complete_teardown: bool,
 ) -> NetavarkResult<()> {
     let paths = get_file_paths(config_dir, network_id, container_id, false)?;
-    fs::remove_file(paths.port_conf_file)?;
+    fs_err!(
+        remove_file_ignore_enoent,
+        &paths.port_conf_file,
+        "remove port config"
+    )?;
     if complete_teardown {
-        fs::remove_file(paths.net_conf_file)?;
+        fs_err!(
+            remove_file_ignore_enoent,
+            &paths.net_conf_file,
+            "remove network config"
+        )?;
     }
     Ok(())
 }
@@ -127,7 +172,11 @@ pub struct FirewallConfig {
 pub fn read_fw_config(config_dir: &str) -> NetavarkResult<FirewallConfig> {
     let paths = get_file_paths(config_dir, "", "", false)?;
 
-    let driver = fs::read_to_string(paths.fw_driver_file)?;
+    let driver = fs_err!(
+        fs::read_to_string,
+        &paths.fw_driver_file,
+        "read firewall-driver"
+    )?;
 
     let net_confs = read_dir_conf(paths.net_conf_file)?;
     let port_confs = read_dir_conf(paths.port_conf_file)?;
@@ -141,9 +190,9 @@ pub fn read_fw_config(config_dir: &str) -> NetavarkResult<FirewallConfig> {
 
 fn read_dir_conf<T: DeserializeOwned>(dir: PathBuf) -> NetavarkResult<Vec<T>> {
     let mut confs = Vec::new();
-    for entry in fs::read_dir(dir)? {
+    for entry in fs_err!(fs::read_dir, &dir, "read dir")? {
         let entry = entry?;
-        let content = fs::read_to_string(entry.path())?;
+        let content = fs_err!(fs::read_to_string, entry.path(), "read config")?;
         // Note one might think we should use from_reader() instated of reading
         // into one string. However the files we act on are small enough that it
         // should't matter to have the content into memory at once and based on
@@ -211,10 +260,10 @@ mod tests {
         let res = fs::read_to_string(paths.fw_driver_file).unwrap();
         assert_eq!(res, "iptables", "read fw driver");
 
-        let res = fs::read_to_string(paths.net_conf_file).unwrap();
+        let res = fs::read_to_string(&paths.net_conf_file).unwrap();
         assert_eq!(res, net_conf_json, "read net conf");
 
-        let res = fs::read_to_string(paths.port_conf_file).unwrap();
+        let res = fs::read_to_string(&paths.port_conf_file).unwrap();
         assert_eq!(res, port_conf_json, "read port conf");
 
         let res = read_fw_config(config_dir).unwrap();
@@ -223,5 +272,23 @@ mod tests {
         let port_confs_ref: Vec<PortForwardConfig> =
             res.port_confs.iter().map(|f| f.into()).collect();
         assert_eq!(port_confs_ref, vec![port_conf], "same port configs");
+
+        let res = remove_fw_config(config_dir, network_id, container_id, true);
+        assert!(res.is_ok(), "remove_fw_config failed");
+
+        assert_eq!(
+            paths.net_conf_file.exists(),
+            false,
+            "net conf should not exists"
+        );
+        assert_eq!(
+            paths.port_conf_file.exists(),
+            false,
+            "port conf should not exists"
+        );
+
+        // now again since we ignore ENOENT it should still return no error
+        let res = remove_fw_config(config_dir, network_id, container_id, true);
+        assert!(res.is_ok(), "remove_fw_config failed second time");
     }
 }
