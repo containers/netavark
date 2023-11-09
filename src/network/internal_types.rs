@@ -11,7 +11,7 @@ pub struct TeardownPortForward<'a> {
 }
 
 /// SetupNetwork contains options for setting up a container
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct SetupNetwork {
     /// subnets used for this network
     pub subnets: Option<Vec<ipnet::IpNet>>,
@@ -31,12 +31,12 @@ pub struct TearDownNetwork {
     pub complete_teardown: bool,
 }
 
-#[derive(Debug)]
-pub struct PortForwardConfig<'a> {
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct PortForwardConfigGeneric<Ports, IpAddresses> {
     /// id of container
     pub container_id: String,
     /// port mappings
-    pub port_mappings: &'a Option<Vec<types::PortMapping>>,
+    pub port_mappings: Ports,
     /// name of network
     pub network_name: String,
     /// hash id for the network
@@ -61,7 +61,32 @@ pub struct PortForwardConfig<'a> {
     /// forwarding is not setup if this is 53.
     pub dns_port: u16,
     /// dns servers IPs where forwarding rule to port 53 from dns_port are necessary
-    pub dns_server_ips: &'a Vec<IpAddr>,
+    pub dns_server_ips: IpAddresses,
+}
+
+// Some trickery to define two struct one with references and one with owned data,
+// basically the reference version should be used everywhere and the owned version
+// is only needed to deserialize the json data.
+pub type PortForwardConfigOwned =
+    PortForwardConfigGeneric<Option<Vec<types::PortMapping>>, Vec<IpAddr>>;
+pub type PortForwardConfig<'a> =
+    PortForwardConfigGeneric<&'a Option<Vec<types::PortMapping>>, &'a Vec<IpAddr>>;
+
+impl<'a> From<&'a PortForwardConfigOwned> for PortForwardConfig<'a> {
+    fn from(p: &'a PortForwardConfigOwned) -> PortForwardConfig<'a> {
+        Self {
+            container_id: p.container_id.clone(),
+            port_mappings: &p.port_mappings,
+            network_name: p.network_name.clone(),
+            network_hash_name: p.network_hash_name.clone(),
+            container_ip_v4: p.container_ip_v4,
+            subnet_v4: p.subnet_v4,
+            container_ip_v6: p.container_ip_v6,
+            subnet_v6: p.subnet_v6,
+            dns_port: p.dns_port,
+            dns_server_ips: &p.dns_server_ips,
+        }
+    }
 }
 
 /// IPAMAddresses is used to pass ipam information around
@@ -79,7 +104,7 @@ pub struct IPAMAddresses {
 }
 
 // IsolateOption is used to select isolate option value
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum IsolateOption {
     Strict,
     Nomal,

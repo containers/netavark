@@ -9,6 +9,7 @@ use zbus::blocking::Connection;
 pub mod firewalld;
 pub mod fwnone;
 pub mod iptables;
+pub mod state;
 mod varktables;
 
 /// Firewall drivers have the ability to set up per-network firewall forwarding
