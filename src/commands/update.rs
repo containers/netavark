@@ -1,3 +1,4 @@
+use crate::commands::get_config_dir;
 use crate::dns::aardvark::Aardvark;
 use crate::error::{NetavarkError, NetavarkResult};
 use crate::network::core_utils;
@@ -33,16 +34,9 @@ impl Update {
         rootless: bool,
     ) -> NetavarkResult<()> {
         let dns_port = core_utils::get_netavark_dns_port()?;
-
+        let config_dir = get_config_dir(config_dir, "update")?;
         if Path::new(&aardvark_bin).exists() {
-            let path = match config_dir {
-                Some(dir) => Path::new(&dir).join("aardvark-dns"),
-                None => {
-                    return Err(NetavarkError::msg(
-                        "dns is requested but --config not specified",
-                    ))
-                }
-            };
+            let path = Path::new(&config_dir).join("aardvark-dns");
             if let Ok(path_string) = path.into_os_string().into_string() {
                 let aardvark_interface =
                     Aardvark::new(path_string, rootless, aardvark_bin, dns_port);

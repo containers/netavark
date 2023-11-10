@@ -11,7 +11,10 @@ use crate::{
     dns::aardvark::AardvarkEntry,
     error::{ErrorWrap, NetavarkError, NetavarkErrorList, NetavarkResult},
     exec_netns,
-    firewall::iptables::MAX_HASH_SIZE,
+    firewall::{
+        iptables::MAX_HASH_SIZE,
+        state::{remove_fw_config, write_fw_config},
+    },
     network::{constants, core_utils::disable_ipv6_autoconf, types},
 };
 
@@ -378,6 +381,17 @@ impl<'a> Bridge<'a> {
             data.bridge_interface_name.clone(),
         )?;
 
+        if !self.info.rootless {
+            write_fw_config(
+                self.info.config_dir,
+                &self.info.network.id,
+                self.info.container_id,
+                self.info.firewall.driver_name(),
+                &sn,
+                &spf,
+            )?;
+        }
+
         self.info.firewall.setup_network(sn)?;
 
         if spf.port_mappings.is_some() {
@@ -439,6 +453,15 @@ impl<'a> Bridge<'a> {
             config: sn,
             complete_teardown,
         };
+
+        if !self.info.rootless {
+            remove_fw_config(
+                self.info.config_dir,
+                &self.info.network.id,
+                self.info.container_id,
+                complete_teardown,
+            )?;
+        }
 
         if complete_teardown {
             // FIXME store error and continue

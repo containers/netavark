@@ -39,6 +39,10 @@ pub fn new() -> NetavarkResult<Box<dyn firewall::FirewallDriver>> {
 }
 
 impl firewall::FirewallDriver for IptablesDriver {
+    fn driver_name(&self) -> &str {
+        firewall::IPTABLES
+    }
+
     fn setup_network(&self, network_setup: SetupNetwork) -> NetavarkResult<()> {
         if let Some(subnet) = network_setup.subnets {
             for network in subnet {

@@ -26,6 +26,10 @@ pub fn new(conn: Connection) -> Result<Box<dyn firewall::FirewallDriver>, Netava
 }
 
 impl firewall::FirewallDriver for FirewallD {
+    fn driver_name(&self) -> &str {
+        firewall::FIREWALLD
+    }
+
     fn setup_network(&self, network_setup: internal_types::SetupNetwork) -> NetavarkResult<()> {
         let mut need_reload = false;
 

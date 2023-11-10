@@ -1,4 +1,5 @@
 //! Configures the given network namespace with provided specs
+use crate::commands::get_config_dir;
 use crate::dns::aardvark::Aardvark;
 use crate::error::{NetavarkError, NetavarkResult};
 use crate::firewall;
@@ -47,7 +48,7 @@ impl Setup {
         debug!("{:?}", "Setting up...");
         let network_options = network::types::NetworkOptions::load(input_file)?;
 
-        let firewall_driver = match firewall::get_supported_firewall_driver() {
+        let firewall_driver = match firewall::get_supported_firewall_driver(None) {
             Ok(driver) => driver,
             Err(e) => return Err(e),
         };
@@ -62,6 +63,7 @@ impl Setup {
         // setup loopback, it should be safe to assume that 1 is the loopback index
         netns.netlink.set_up(LinkID::ID(1))?;
 
+        let config_dir = get_config_dir(config_dir, "setup")?;
         let mut drivers = Vec::with_capacity(network_options.network_info.len());
 
         // Perform per-network setup
@@ -83,6 +85,8 @@ impl Setup {
                     per_network_opts,
                     port_mappings: &network_options.port_mappings,
                     dns_port,
+                    config_dir: &config_dir,
+                    rootless,
                 },
                 &plugin_directories,
             )?;
@@ -126,14 +130,7 @@ impl Setup {
 
         if !aardvark_entries.is_empty() {
             if Path::new(&aardvark_bin).exists() {
-                let path = match config_dir {
-                    Some(dir) => Path::new(&dir).join("aardvark-dns"),
-                    None => {
-                        return Err(NetavarkError::msg(
-                            "dns is requested but --config not specified",
-                        ))
-                    }
-                };
+                let path = Path::new(&config_dir).join("aardvark-dns");
 
                 match fs::create_dir(path.as_path()) {
                     Ok(_) => {}

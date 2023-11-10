@@ -27,6 +27,8 @@ pub struct DriverInfo<'a> {
     pub per_network_opts: &'a PerNetworkOptions,
     pub port_mappings: &'a Option<Vec<PortMapping>>,
     pub dns_port: u16,
+    pub config_dir: &'a str,
+    pub rootless: bool,
 }
 
 pub trait NetworkDriver {

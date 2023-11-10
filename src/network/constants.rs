@@ -28,4 +28,5 @@ pub const DEFAULT_METRIC: u32 = 100;
 
 pub const NO_CONTAINER_INTERFACE_ERROR: &str = "no container interface name given";
 
+/// make sure this is the same rootful default as used in podman.
 pub const DEFAULT_CONFIG_DIR: &str = "/run/containers/networks";
