@@ -9,46 +9,7 @@ fw_driver=firewalld
 
 function setup() {
     basic_setup
-
-    # first, create a new dbus session
-    DBUS_SYSTEM_BUS_ADDRESS=unix:path=$NETAVARK_TMPDIR/netavark-firewalld
-    run_in_host_netns dbus-daemon --address="$DBUS_SYSTEM_BUS_ADDRESS" --print-pid --config-file="${TESTSDIR}/testfiles/firewalld-dbus.conf"
-    DBUS_PID="$output"
-    # export DBUS_SYSTEM_BUS_ADDRESS so firewalld and netavark will use the correct socket
-    export DBUS_SYSTEM_BUS_ADDRESS
-
-    # second, start firewalld in the netns with the dbus socket
-    # do not use run_in_host_netns because we want to run this in background
-    # use --nopid (we cannot change the pid file location), --nofork do not run as daemon so we can kill it by pid
-    # change --system-config to make sure that we do not write any config files to the host location
-    nsenter -n -t $HOST_NS_PID firewalld --nopid --nofork --system-config "$NETAVARK_TMPDIR" &>"$NETAVARK_TMPDIR/firewalld.log" &
-    FIREWALLD_PID=$!
-    echo "firewalld pid: $FIREWALLD_PID"
-
-    # wait for firewalld to become ready
-    timeout=5
-    while [ $timeout -gt 0 ]; do
-        # query firewalld with firewall-cmd
-        expected_rc="?" run_in_host_netns firewall-cmd --state
-        if [ "$status" -eq 0 ]; then
-            break
-        fi
-        sleep 1
-        timeout=$(($timeout - 1))
-        if [ $timeout -eq 0 ]; then
-            cat "$NETAVARK_TMPDIR/firewalld.log"
-            die "failed to start firewalld - timeout"
-        fi
-    done
-}
-
-function teardown() {
-    kill -9 $FIREWALLD_PID
-    kill -9 $DBUS_PID
-
-    unset DBUS_SYSTEM_BUS_ADDRESS
-
-    basic_teardown
+    setup_firewalld
 }
 
 @test "check firewalld driver is in use" {
