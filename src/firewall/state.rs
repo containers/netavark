@@ -9,6 +9,7 @@ use serde::de::DeserializeOwned;
 use crate::{
     error::{NetavarkError, NetavarkResult},
     network::internal_types::{PortForwardConfig, PortForwardConfigOwned, SetupNetwork},
+    wrap,
 };
 
 /// File layout looks like this
@@ -36,6 +37,16 @@ macro_rules! fs_err {
         $func($path).map_err(|err| {
             NetavarkError::wrap(format!("{} {:?}", $msg, $path.display()), err.into())
         })
+    };
+}
+
+macro_rules! ignore_enoent {
+    ($call:expr, $action:expr) => {
+        match $call {
+            Ok(ok) => Ok(ok),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => $action,
+            Err(e) => Err(e),
+        }
     };
 }
 
@@ -169,31 +180,36 @@ pub struct FirewallConfig {
 }
 
 /// Read all firewall configs files from the dir.
-pub fn read_fw_config(config_dir: &str) -> NetavarkResult<FirewallConfig> {
+pub fn read_fw_config(config_dir: &str) -> NetavarkResult<Option<FirewallConfig>> {
     let paths = get_file_paths(config_dir, "", "", false)?;
 
-    let driver = fs_err!(
-        fs::read_to_string,
-        &paths.fw_driver_file,
-        "read firewall-driver"
+    // now it is possible the firewall-reload is started before any containers were started so we just
+    // return None in this case.
+    let driver = wrap!(
+        ignore_enoent!(fs::read_to_string(&paths.fw_driver_file), return Ok(None)),
+        format!("read firewall-driver {:?}", &paths.fw_driver_file.display())
     )?;
 
     let net_confs = read_dir_conf(paths.net_conf_file)?;
     let port_confs = read_dir_conf(paths.port_conf_file)?;
 
-    Ok(FirewallConfig {
+    Ok(Some(FirewallConfig {
         driver,
         net_confs,
         port_confs,
-    })
+    }))
 }
 
 fn read_dir_conf<T: DeserializeOwned>(dir: PathBuf) -> NetavarkResult<Vec<T>> {
     let mut confs = Vec::new();
     for entry in fs_err!(fs::read_dir, &dir, "read dir")? {
-        let entry = entry?;
-        let content = fs_err!(fs::read_to_string, entry.path(), "read config")?;
-        // Note one might think we should use from_reader() instated of reading
+        let path = ignore_enoent!(entry, continue)?.path();
+
+        let content = wrap!(
+            ignore_enoent!(fs::read_to_string(&path), continue),
+            format!("read config {:?}", path.display())
+        )?;
+        // Note one might think we should use from_reader() instead of reading
         // into one string. However the files we act on are small enough that it
         // should't matter to have the content into memory at once and based on
         // https://github.com/serde-rs/json/issues/160 this here is much faster.
@@ -266,7 +282,9 @@ mod tests {
         let res = fs::read_to_string(&paths.port_conf_file).unwrap();
         assert_eq!(res, port_conf_json, "read port conf");
 
-        let res = read_fw_config(config_dir).unwrap();
+        let res = read_fw_config(config_dir)
+            .unwrap()
+            .expect("no fw config files");
         assert_eq!(res.driver, driver, "correct fw driver");
         assert_eq!(res.net_confs, vec![net_conf], "same net configs");
         let port_confs_ref: Vec<PortForwardConfig> =
@@ -290,5 +308,14 @@ mod tests {
         // now again since we ignore ENOENT it should still return no error
         let res = remove_fw_config(config_dir, network_id, container_id, true);
         assert!(res.is_ok(), "remove_fw_config failed second time");
+    }
+
+    #[test]
+    fn test_read_fw_config_empty() {
+        let tmpdir = Builder::new().prefix("netavark-tests").tempdir().unwrap();
+        let config_dir = tmpdir.path().to_str().unwrap();
+
+        let res = read_fw_config(config_dir).expect("no read_fw_config error");
+        assert!(res.is_none(), "no firewall config should be given");
     }
 }

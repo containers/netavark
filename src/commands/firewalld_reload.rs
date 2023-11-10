@@ -49,13 +49,17 @@ fn reload_rules(config_dir: &str) {
 
 fn reload_rules_inner(config_dir: &str) -> NetavarkResult<()> {
     let conf = read_fw_config(config_dir).wrap("read firewall config")?;
-    let fw_driver = get_supported_firewall_driver(Some(conf.driver))?;
+    // If we got no conf there are no containers so nothing to do.
+    if let Some(conf) = conf {
+        let fw_driver = get_supported_firewall_driver(Some(conf.driver))?;
 
-    for net in conf.net_confs {
-        fw_driver.setup_network(net)?;
-    }
-    for port in &conf.port_confs {
-        fw_driver.setup_port_forward(port.into())?;
+        for net in conf.net_confs {
+            fw_driver.setup_network(net)?;
+        }
+        for port in &conf.port_confs {
+            fw_driver.setup_port_forward(port.into())?;
+        }
+        log::info!("Successfully reloaded firewall rules");
     }
 
     Ok(())
