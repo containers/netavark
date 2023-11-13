@@ -107,9 +107,11 @@ cd docs
 
 %preun
 %systemd_preun %{name}-dhcp-proxy.service
+%systemd_preun %{name}-firewalld-reload.service
 
 %postun
 %systemd_postun %{name}-dhcp-proxy.service
+%systemd_postun %{name}-firewalld-reload.service
 
 %files
 %license LICENSE
@@ -118,6 +120,7 @@ cd docs
 %{_mandir}/man1/%{name}.1*
 %{_unitdir}/%{name}-dhcp-proxy.service
 %{_unitdir}/%{name}-dhcp-proxy.socket
+%{_unitdir}/%{name}-firewalld-reload.service
 
 %changelog
 %if %{defined autochangelog}
