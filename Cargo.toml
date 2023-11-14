@@ -60,7 +60,7 @@ futures-channel="0.3.29"
 futures-core = "0.3.29"
 futures-util = "0.3.29"
 nispor = "1.2.14"
-http = "0.2.10"
+http = "0.2.11"
 tower = { version = "0.4" }
 
 [build-dependencies]
