@@ -51,6 +51,11 @@ fw_driver=iptables
     link_info="$output"
     assert_json "$link_info" '.[].flags[] | select(.=="UP")' == "UP" "Host bridge interface is up"
     assert_json "$link_info" ".[].linkinfo.info_kind" == "bridge" "The bridge interface is actually a bridge"
+    bridge_mac=$(jq -r '.[].address' <<<"$link_info")
+
+    run_in_host_netns ip -j link show veth0
+    veth_info="$output"
+    assert_json "$veth_info" ".[].address" != "$bridge_mac" "Bridge and Veth must have different mac address"
 
     ipaddr="10.88.0.1"
     run_in_host_netns ip addr show podman0
@@ -608,6 +613,7 @@ EOF
 
     # when the sysctl value is already set correctly we should not error
     run_in_host_netns sh -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
+    run_in_container_netns sh -c "echo 1 > /proc/sys/net/ipv4/conf/default/arp_notify"
     run_in_host_netns mount -t proc -o ro,nosuid,nodev,noexec proc /proc
 
     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
