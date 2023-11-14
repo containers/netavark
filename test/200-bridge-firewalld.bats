@@ -195,6 +195,7 @@ function teardown() {
 }
 
 @test "$fw_driver - dual stack dns with alt port" {
+    skip "FIXME (#846): firewalld 2.0 broken port redirect"
     # get a random port directly to avoid low ports e.g. 53 would not create iptables
     dns_port=$((RANDOM+10000))
 
