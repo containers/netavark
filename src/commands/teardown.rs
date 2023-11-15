@@ -1,3 +1,4 @@
+use crate::commands::get_config_dir;
 use crate::dns::aardvark::{Aardvark, AardvarkEntry};
 use crate::error::{NetavarkError, NetavarkErrorList, NetavarkResult};
 use crate::network::constants::DRIVER_BRIDGE;
@@ -40,6 +41,7 @@ impl Teardown {
         let mut error_list = NetavarkErrorList::new();
 
         let dns_port = core_utils::get_netavark_dns_port()?;
+        let config_dir = get_config_dir(config_dir, "teardown")?;
 
         let mut aardvark_entries = Vec::new();
         for (key, network) in &network_options.network_info {
@@ -59,14 +61,7 @@ impl Teardown {
 
         if !aardvark_entries.is_empty() {
             // stop dns server first before netavark clears the interface
-            let path = match config_dir {
-                Some(dir) => Path::new(&dir).join("aardvark-dns"),
-                None => {
-                    return Err(NetavarkError::msg(
-                        "dns is requested but --config not specified",
-                    ))
-                }
-            };
+            let path = Path::new(&config_dir).join("aardvark-dns");
             if let Ok(path_string) = path.into_os_string().into_string() {
                 let aardvark_interface =
                     Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
@@ -81,7 +76,7 @@ impl Teardown {
             }
         }
 
-        let firewall_driver = match firewall::get_supported_firewall_driver() {
+        let firewall_driver = match firewall::get_supported_firewall_driver(None) {
             Ok(driver) => driver,
             Err(e) => return Err(e),
         };
@@ -113,6 +108,8 @@ impl Teardown {
                     per_network_opts,
                     port_mappings: &network_options.port_mappings,
                     dns_port,
+                    config_dir: &config_dir,
+                    rootless,
                 },
                 &plugin_directories,
             ) {

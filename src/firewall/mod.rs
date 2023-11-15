@@ -9,13 +9,19 @@ use zbus::blocking::Connection;
 pub mod firewalld;
 pub mod fwnone;
 pub mod iptables;
+pub mod state;
 mod varktables;
+
+const IPTABLES: &str = "iptables";
+const FIREWALLD: &str = "firewalld";
+const NFTABLES: &str = "nftables";
+const NONE: &str = "none";
 
 /// Firewall drivers have the ability to set up per-network firewall forwarding
 /// and port mappings.
 pub trait FirewallDriver {
     /// Set up firewall rules for the given network,
-    fn setup_network(&self, network_setup: SetupNetwork, dns_port: u16) -> NetavarkResult<()>;
+    fn setup_network(&self, network_setup: SetupNetwork) -> NetavarkResult<()>;
     /// Tear down firewall rules for the given network.
     fn teardown_network(&self, tear: TearDownNetwork) -> NetavarkResult<()>;
 
@@ -23,6 +29,9 @@ pub trait FirewallDriver {
     fn setup_port_forward(&self, setup_pw: PortForwardConfig) -> NetavarkResult<()>;
     /// Tear down port-forwarding firewall rules for a single container.
     fn teardown_port_forward(&self, teardown_pf: TeardownPortForward) -> NetavarkResult<()>;
+
+    /// Return the name of the driver.
+    fn driver_name(&self) -> &str;
 }
 
 /// Types of firewall backend
@@ -34,13 +43,16 @@ enum FirewallImpl {
 }
 
 /// What firewall implementations does this system support?
-fn get_firewall_impl() -> NetavarkResult<FirewallImpl> {
-    // First, check the NETAVARK_FW env var.
+fn get_firewall_impl(driver_name: Option<String>) -> NetavarkResult<FirewallImpl> {
     // It respects "firewalld", "iptables", "nftables", "none".
-    if let Ok(var) = env::var("NETAVARK_FW") {
+
+    // If not requested lookup in NETAVARK_FW env var as well.
+    let driver = driver_name.or_else(|| env::var("NETAVARK_FW").ok());
+
+    if let Some(var) = driver {
         debug!("Forcibly using firewall driver {}", var);
         match var.to_lowercase().as_str() {
-            "firewalld" => {
+            FIREWALLD => {
                 let conn = match Connection::system() {
                     Ok(c) => c,
                     Err(e) => {
@@ -52,9 +64,9 @@ fn get_firewall_impl() -> NetavarkResult<FirewallImpl> {
                 };
                 return Ok(FirewallImpl::Firewalld(conn));
             }
-            "iptables" => return Ok(FirewallImpl::Iptables),
-            "nftables" => return Ok(FirewallImpl::Nftables),
-            "none" => return Ok(FirewallImpl::Fwnone),
+            IPTABLES => return Ok(FirewallImpl::Iptables),
+            NFTABLES => return Ok(FirewallImpl::Nftables),
+            NONE => return Ok(FirewallImpl::Fwnone),
             any => {
                 return Err(NetavarkError::Message(format!(
                     "Must provide a valid firewall backend, got {any}"
@@ -86,8 +98,10 @@ fn get_firewall_impl() -> NetavarkResult<FirewallImpl> {
 
 /// Get the preferred firewall implementation for the current system
 /// configuration.
-pub fn get_supported_firewall_driver() -> NetavarkResult<Box<dyn FirewallDriver>> {
-    match get_firewall_impl() {
+pub fn get_supported_firewall_driver(
+    driver_name: Option<String>,
+) -> NetavarkResult<Box<dyn FirewallDriver>> {
+    match get_firewall_impl(driver_name) {
         Ok(fw) => match fw {
             FirewallImpl::Iptables => {
                 info!("Using iptables firewall driver");

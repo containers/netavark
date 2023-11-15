@@ -68,28 +68,7 @@ fw_driver=iptables
 
     run_in_host_netns ping -c 1 10.88.0.2
 
-    # check iptables POSTROUTING chain
-    run_in_host_netns iptables -S POSTROUTING -t nat
-    assert "${lines[1]}" =~ "-A POSTROUTING -j NETAVARK-HOSTPORT-MASQ" "POSTROUTING HOSTPORT-MASQ rule"
-    assert "${lines[2]}" =~ "-A POSTROUTING -s 10.88.0.0/16 -j NETAVARK-1D8721804F16F" "POSTROUTING container rule"
-    assert "${#lines[@]}" = 3 "too many POSTROUTING rules"
-
-    # check iptables NETAVARK-1D8721804F16F chain
-    run_in_host_netns iptables -S NETAVARK-1D8721804F16F -t nat
-    assert "${lines[1]}" =~ "-A NETAVARK-1D8721804F16F -d 10.88.0.0/16 -j ACCEPT" "NETAVARK-1D8721804F16F ACCEPT rule"
-    assert "${lines[2]}" == "-A NETAVARK-1D8721804F16F ! -d 224.0.0.0/4 -j MASQUERADE" "NETAVARK-1D8721804F16F MASQUERADE rule"
-    assert "${#lines[@]}" = 3 "too many NETAVARK-1D8721804F16F rules"
-
-    # check FORWARD rules
-    run_in_host_netns iptables -S FORWARD
-    assert "${lines[1]}" == "-A FORWARD -m comment --comment \"netavark firewall rules\" -j NETAVARK_FORWARD" "FORWARD rule"
-    assert "${#lines[@]}" = 2 "too many FORWARD rules"
-
-    run_in_host_netns iptables -S NETAVARK_FORWARD
-    assert "${lines[1]}" == "-A NETAVARK_FORWARD -m conntrack --ctstate INVALID -j DROP" "NETAVARK_FORWARD rule 1"
-    assert "${lines[2]}" == "-A NETAVARK_FORWARD -d 10.88.0.0/16 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT" "NETAVARK_FORWARD rule 2"
-    assert "${lines[3]}" == "-A NETAVARK_FORWARD -s 10.88.0.0/16 -j ACCEPT" "NETAVARK_FORWARD rule 3"
-    assert "${#lines[@]}" = 4 "too many NETAVARK_FORWARD rules"
+    check_simple_bridge_iptables
 
     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
 
@@ -1002,4 +981,58 @@ EOF
 @test "netavark error - invalid host_ip in port mappings" {
     expected_rc=1 run_netavark -f ${TESTSDIR}/testfiles/invalid-port.json setup $(get_container_netns_path)
     assert_json ".error" "invalid host ip \"abcd\" provided for port 8080" "host ip error"
+}
+
+@test "$fw_driver - test firewalld reload" {
+    setup_firewalld
+
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+
+    check_simple_bridge_iptables
+    assert "$(<$NETAVARK_TMPDIR/config/firewall/firewall-driver)" "==" "iptables" "firewall-driver file content"
+
+    run_in_host_netns firewall-cmd --reload
+
+    # After a firewalld reload we expect rules to be deleted
+    expected_rc=1 run_in_host_netns iptables -S NETAVARK_FORWARD
+
+    # start reload service on start it should restore the rules
+    run_netavark_firewalld_reload
+
+    # this run in the background so give it some time to add the rules
+    sleep 1
+    check_simple_bridge_iptables
+
+    run_in_host_netns firewall-cmd --reload
+    sleep 1
+    check_simple_bridge_iptables
+}
+
+@test "$fw_driver - port forwarding ipv4 - tcp with firewalld reload" {
+    test_port_fw firewalld_reload=true
+}
+
+function check_simple_bridge_iptables() {
+    # check iptables POSTROUTING chain
+    run_in_host_netns iptables -S POSTROUTING -t nat
+    assert "${lines[1]}" =~ "-A POSTROUTING -j NETAVARK-HOSTPORT-MASQ" "POSTROUTING HOSTPORT-MASQ rule"
+    assert "${lines[2]}" =~ "-A POSTROUTING -s 10.88.0.0/16 -j NETAVARK-1D8721804F16F" "POSTROUTING container rule"
+    assert "${#lines[@]}" = 3 "too many POSTROUTING rules"
+
+    # check iptables NETAVARK-1D8721804F16F chain
+    run_in_host_netns iptables -S NETAVARK-1D8721804F16F -t nat
+    assert "${lines[1]}" =~ "-A NETAVARK-1D8721804F16F -d 10.88.0.0/16 -j ACCEPT" "NETAVARK-1D8721804F16F ACCEPT rule"
+    assert "${lines[2]}" == "-A NETAVARK-1D8721804F16F ! -d 224.0.0.0/4 -j MASQUERADE" "NETAVARK-1D8721804F16F MASQUERADE rule"
+    assert "${#lines[@]}" = 3 "too many NETAVARK-1D8721804F16F rules"
+
+    # check FORWARD rules
+    run_in_host_netns iptables -S FORWARD
+    assert "${lines[1]}" == "-A FORWARD -m comment --comment \"netavark firewall rules\" -j NETAVARK_FORWARD" "FORWARD rule"
+    assert "${#lines[@]}" = 2 "too many FORWARD rules"
+
+    run_in_host_netns iptables -S NETAVARK_FORWARD
+    assert "${lines[1]}" == "-A NETAVARK_FORWARD -m conntrack --ctstate INVALID -j DROP" "NETAVARK_FORWARD rule 1"
+    assert "${lines[2]}" == "-A NETAVARK_FORWARD -d 10.88.0.0/16 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT" "NETAVARK_FORWARD rule 2"
+    assert "${lines[3]}" == "-A NETAVARK_FORWARD -s 10.88.0.0/16 -j ACCEPT" "NETAVARK_FORWARD rule 3"
+    assert "${#lines[@]}" = 4 "too many NETAVARK_FORWARD rules"
 }

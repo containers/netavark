@@ -115,7 +115,7 @@ pub struct PerNetworkOptions {
 }
 
 /// PortMapping is one or more ports that will be mapped into the container.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PortMapping {
     /// ContainerPort is the port number that will be exposed from the
     /// container.

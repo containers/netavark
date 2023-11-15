@@ -1,0 +1,12 @@
+[Unit]
+Description=Listen for the firewalld reload event and reapply all netavark firewall rules.
+# This causes systemd to stop this unit when firewalld is stopped.
+PartOf=firewalld.service
+After=firewalld.service
+
+[Service]
+ExecStart=@@NETAVARK@@ firewalld-reload
+
+[Install]
+# If the unit is enabled add a wants to firewalld so it is only started when firewalld is started.
+WantedBy=firewalld.service
