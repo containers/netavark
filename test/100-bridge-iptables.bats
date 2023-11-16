@@ -994,7 +994,11 @@ EOF
     run_in_host_netns firewall-cmd --reload
 
     # After a firewalld reload we expect rules to be deleted
-    expected_rc=1 run_in_host_netns iptables -S NETAVARK_FORWARD
+    # expected_rc=1 run_in_host_netns iptables -S NETAVARK_FORWARD
+    # There was a firewalld change in 3.0 that it no longer flushes all rules, howver we can still check if
+    # we are added to trusted.
+    run_in_host_netns firewall-cmd --zone=trusted --list-sources
+    assert "$output" == "" "no trusted sources"
 
     # start reload service on start it should restore the rules
     run_netavark_firewalld_reload
@@ -1002,10 +1006,14 @@ EOF
     # this run in the background so give it some time to add the rules
     sleep 1
     check_simple_bridge_iptables
+    run_in_host_netns firewall-cmd --zone=trusted --list-sources
+    assert "$output" == "10.88.0.0/16" "container subnet is trusted after start"
 
     run_in_host_netns firewall-cmd --reload
     sleep 1
     check_simple_bridge_iptables
+    run_in_host_netns firewall-cmd --zone=trusted --list-sources
+    assert "$output" == "10.88.0.0/16" "container subnet is trusted after reload"
 }
 
 @test "$fw_driver - port forwarding ipv4 - tcp with firewalld reload" {
