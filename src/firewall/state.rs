@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use fs2::FileExt;
 use serde::de::DeserializeOwned;
 
 use crate::{
@@ -20,6 +21,7 @@ use crate::{
 
 const FIREWALL_DIR: &str = "firewall";
 const FIREWALL_DRIVER_FILE: &str = "firewall-driver";
+const FIREWALL_LOCK_FILE: &str = "firewall-reload.lock";
 const NETWORK_CONF_DIR: &str = "networks";
 const PORT_CONF_DIR: &str = "ports";
 
@@ -27,6 +29,14 @@ struct FilePaths {
     fw_driver_file: PathBuf,
     net_conf_file: PathBuf,
     port_conf_file: PathBuf,
+    /// The file is returned locked, it does not need
+    /// to be unlocked as rust does it automatically on drop.
+    /// This file is required to ensure that remove_fw_config is not racing against
+    /// the firewall reload service, i.e. without it would be possible that we read
+    /// the config files and then during re-adding the rules the file got removed.
+    /// This leaves a chance that the service will add rules that should not be added
+    /// anymore.
+    lock_file: File,
 }
 
 /// macro to quickly wrap the IO error with useful context
@@ -78,8 +88,9 @@ fn get_file_paths(
     let mut net_conf_file = path.join(NETWORK_CONF_DIR);
     let mut port_conf_file = path.join(PORT_CONF_DIR);
 
+    // we need to always create this for the lockfile
+    fs_err!(fs::create_dir_all, &path, "create firewall config dir")?;
     if create_dirs {
-        fs_err!(fs::create_dir_all, &path, "create firewall config dir")?;
         fs_err!(
             fs::create_dir_all,
             &net_conf_file,
@@ -96,10 +107,18 @@ fn get_file_paths(
         port_conf_file.push(network_id.to_string() + "_" + container_id);
     }
 
+    let lock_file = fs_err!(
+        File::create,
+        &path.join(FIREWALL_LOCK_FILE),
+        "create firewall lock file"
+    )?;
+    wrap!(lock_file.lock_exclusive(), "lock firewall lock file")?;
+
     Ok(FilePaths {
         fw_driver_file,
         net_conf_file,
         port_conf_file,
+        lock_file,
     })
 }
 
@@ -177,6 +196,13 @@ pub struct FirewallConfig {
     pub net_confs: Vec<SetupNetwork>,
     /// All port forwarding configs
     pub port_confs: Vec<PortForwardConfigOwned>,
+
+    /// Lock file for the firewall code to prevent us from adding rules while the state files
+    /// have been removed in the meantime.
+    /// We never do anything with it but we need to keep it open as closing it closes the lock
+    /// So once this struct is dropped the lock is closed automatically.
+    #[allow(dead_code)]
+    lock_file: File,
 }
 
 /// Read all firewall configs files from the dir.
@@ -197,6 +223,7 @@ pub fn read_fw_config(config_dir: &str) -> NetavarkResult<Option<FirewallConfig>
         driver,
         net_confs,
         port_confs,
+        lock_file: paths.lock_file,
     }))
 }
 
@@ -272,6 +299,7 @@ mod tests {
         assert!(res.is_ok(), "write_fw_config failed");
 
         let paths = get_file_paths(config_dir, network_id, container_id, false).unwrap();
+        drop(paths.lock_file); // unlock to prevent deadlock with other calls
 
         let res = fs::read_to_string(paths.fw_driver_file).unwrap();
         assert_eq!(res, "iptables", "read fw driver");
@@ -290,6 +318,8 @@ mod tests {
         let port_confs_ref: Vec<PortForwardConfig> =
             res.port_confs.iter().map(|f| f.into()).collect();
         assert_eq!(port_confs_ref, vec![port_conf], "same port configs");
+        // unlock lock file
+        drop(res);
 
         let res = remove_fw_config(config_dir, network_id, container_id, true);
         assert!(res.is_ok(), "remove_fw_config failed");
