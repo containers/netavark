@@ -455,6 +455,7 @@ impl<'a> Bridge<'a> {
         };
 
         if !self.info.rootless {
+            // IMPORTANT: This must happen before we actually teardown rules.
             remove_fw_config(
                 self.info.config_dir,
                 &self.info.network.id,
