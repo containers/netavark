@@ -12,6 +12,7 @@ use clap::builder::NonEmptyStringValueParser;
 use clap::Parser;
 use log::{debug, error, info};
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::fs::{self};
 use std::os::fd::AsFd;
 use std::path::Path;
@@ -33,10 +34,10 @@ impl Setup {
 
     pub fn exec(
         &self,
-        input_file: Option<String>,
-        config_dir: Option<String>,
-        aardvark_bin: String,
-        plugin_directories: Option<Vec<String>>,
+        input_file: Option<OsString>,
+        config_dir: Option<OsString>,
+        aardvark_bin: OsString,
+        plugin_directories: Option<Vec<OsString>>,
         rootless: bool,
     ) -> NetavarkResult<()> {
         match network::validation::ns_checks(&self.network_namespace_path) {
@@ -85,7 +86,7 @@ impl Setup {
                     per_network_opts,
                     port_mappings: &network_options.port_mappings,
                     dns_port,
-                    config_dir: &config_dir,
+                    config_dir: Path::new(&config_dir),
                     rootless,
                 },
                 &plugin_directories,
@@ -145,19 +146,7 @@ impl Setup {
                     }
                 }
 
-                let path_string = match path.into_os_string().into_string() {
-                    Ok(path) => path,
-                    Err(_) => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            "failed to convert path to String",
-                        )
-                        .into());
-                    }
-                };
-
-                let aardvark_interface =
-                    Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
+                let aardvark_interface = Aardvark::new(path, rootless, aardvark_bin, dns_port);
 
                 if let Err(er) = aardvark_interface.commit_netavark_entries(aardvark_entries) {
                     return Err(std::io::Error::new(

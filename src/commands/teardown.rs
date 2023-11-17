@@ -9,6 +9,7 @@ use crate::{firewall, network};
 use clap::builder::NonEmptyStringValueParser;
 use clap::Parser;
 use log::debug;
+use std::ffi::OsString;
 use std::os::fd::AsFd;
 use std::path::Path;
 
@@ -29,10 +30,10 @@ impl Teardown {
 
     pub fn exec(
         &self,
-        input_file: Option<String>,
-        config_dir: Option<String>,
-        aardvark_bin: String,
-        plugin_directories: Option<Vec<String>>,
+        input_file: Option<OsString>,
+        config_dir: Option<OsString>,
+        aardvark_bin: OsString,
+        plugin_directories: Option<Vec<OsString>>,
         rootless: bool,
     ) -> NetavarkResult<()> {
         debug!("{:?}", "Tearing down..");
@@ -62,17 +63,10 @@ impl Teardown {
         if !aardvark_entries.is_empty() {
             // stop dns server first before netavark clears the interface
             let path = Path::new(&config_dir).join("aardvark-dns");
-            if let Ok(path_string) = path.into_os_string().into_string() {
-                let aardvark_interface =
-                    Aardvark::new(path_string, rootless, aardvark_bin, dns_port);
-                if let Err(err) = aardvark_interface.delete_from_netavark_entries(aardvark_entries)
-                {
-                    error_list.push(NetavarkError::wrap("remove aardvark entries", err));
-                }
-            } else {
-                error_list.push(NetavarkError::msg(
-                    "Unable to parse aardvark config directory",
-                ));
+
+            let aardvark_interface = Aardvark::new(path, rootless, aardvark_bin, dns_port);
+            if let Err(err) = aardvark_interface.delete_from_netavark_entries(aardvark_entries) {
+                error_list.push(NetavarkError::wrap("remove aardvark entries", err));
             }
         }
 
@@ -108,7 +102,7 @@ impl Teardown {
                     per_network_opts,
                     port_mappings: &network_options.port_mappings,
                     dns_port,
-                    config_dir: &config_dir,
+                    config_dir: Path::new(&config_dir),
                     rootless,
                 },
                 &plugin_directories,

@@ -68,7 +68,7 @@ fn remove_file_ignore_enoent<P: AsRef<Path>>(path: P) -> io::Result<()> {
     }
 }
 
-fn firewall_config_dir(config_dir: &str) -> PathBuf {
+fn firewall_config_dir(config_dir: &Path) -> PathBuf {
     Path::new(config_dir).join(FIREWALL_DIR)
 }
 
@@ -78,7 +78,7 @@ fn firewall_config_dir(config_dir: &str) -> PathBuf {
 /// As a special case when network_id and container_id is empty it will return
 /// the paths for the directories instead which are used to walk the dir for all configs.
 fn get_file_paths(
-    config_dir: &str,
+    config_dir: &Path,
     network_id: &str,
     container_id: &str,
     create_dirs: bool,
@@ -126,7 +126,7 @@ fn get_file_paths(
 /// This should be caller after firewall setup to allow the firewalld reload
 /// service to read the configs later and readd the rules.
 pub fn write_fw_config(
-    config_dir: &str,
+    config_dir: &Path,
     network_id: &str,
     container_id: &str,
     fw_driver: &str,
@@ -168,7 +168,7 @@ pub fn write_fw_config(
 /// On firewall teardown remove the specific config files again so the
 /// firewalld reload service does not keep using them.
 pub fn remove_fw_config(
-    config_dir: &str,
+    config_dir: &Path,
     network_id: &str,
     container_id: &str,
     complete_teardown: bool,
@@ -206,7 +206,7 @@ pub struct FirewallConfig {
 }
 
 /// Read all firewall configs files from the dir.
-pub fn read_fw_config(config_dir: &str) -> NetavarkResult<Option<FirewallConfig>> {
+pub fn read_fw_config(config_dir: &Path) -> NetavarkResult<Option<FirewallConfig>> {
     let paths = get_file_paths(config_dir, "", "", false)?;
 
     // now it is possible the firewall-reload is started before any containers were started so we just
@@ -262,7 +262,7 @@ mod tests {
         let driver = "iptables";
 
         let tmpdir = Builder::new().prefix("netavark-tests").tempdir().unwrap();
-        let config_dir = tmpdir.path().to_str().unwrap();
+        let config_dir = tmpdir.path();
 
         let net_conf = SetupNetwork {
             subnets: Some(vec!["10.0.0.0/24".parse().unwrap()]),
@@ -343,7 +343,7 @@ mod tests {
     #[test]
     fn test_read_fw_config_empty() {
         let tmpdir = Builder::new().prefix("netavark-tests").tempdir().unwrap();
-        let config_dir = tmpdir.path().to_str().unwrap();
+        let config_dir = tmpdir.path();
 
         let res = read_fw_config(config_dir).expect("no read_fw_config error");
         assert!(res.is_none(), "no firewall config should be given");

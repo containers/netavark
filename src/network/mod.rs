@@ -1,6 +1,7 @@
 pub mod types;
 pub mod validation;
 use std::{
+    ffi::OsString,
     fs::File,
     io::{self, BufReader},
 };
@@ -20,11 +21,11 @@ pub mod plugin;
 pub mod vlan;
 
 impl types::NetworkOptions {
-    pub fn load(path: Option<String>) -> NetavarkResult<types::NetworkOptions> {
+    pub fn load(path: Option<OsString>) -> NetavarkResult<types::NetworkOptions> {
         wrap!(Self::load_inner(path), "failed to load network options")
     }
 
-    fn load_inner(path: Option<String>) -> Result<types::NetworkOptions, io::Error> {
+    fn load_inner(path: Option<OsString>) -> Result<types::NetworkOptions, io::Error> {
         let opts = match path {
             Some(path) => serde_json::from_reader(BufReader::new(File::open(path)?)),
             None => serde_json::from_reader(io::stdin()),
