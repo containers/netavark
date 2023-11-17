@@ -1,3 +1,8 @@
+use std::{
+    ffi::{OsStr, OsString},
+    path::Path,
+};
+
 use zbus::{blocking::Connection, dbus_proxy, CacheProperties};
 
 use crate::{
@@ -15,11 +20,13 @@ trait FirewallDDbus {}
 
 const SIGNAL_NAME: &str = "Reloaded";
 
-pub fn listen(config_dir: Option<String>) -> NetavarkResult<()> {
-    let config_dir = config_dir
-        .as_deref()
-        .unwrap_or(constants::DEFAULT_CONFIG_DIR);
-    log::debug!("looking for firewall configs in {}", config_dir);
+pub fn listen(config_dir: Option<OsString>) -> NetavarkResult<()> {
+    let config_dir = Path::new(
+        config_dir
+            .as_deref()
+            .unwrap_or(OsStr::new(constants::DEFAULT_CONFIG_DIR)),
+    );
+    log::debug!("looking for firewall configs in {:?}", config_dir);
 
     let conn = Connection::system()?;
     let proxy = FirewallDDbusProxyBlocking::builder(&conn)
@@ -41,13 +48,13 @@ pub fn listen(config_dir: Option<String>) -> NetavarkResult<()> {
     Ok(())
 }
 
-fn reload_rules(config_dir: &str) {
+fn reload_rules(config_dir: &Path) {
     if let Err(e) = reload_rules_inner(config_dir) {
         log::error!("failed to reload firewall rules: {e}");
     }
 }
 
-fn reload_rules_inner(config_dir: &str) -> NetavarkResult<()> {
+fn reload_rules_inner(config_dir: &Path) -> NetavarkResult<()> {
     let conf = read_fw_config(config_dir).wrap("read firewall config")?;
     // If we got no conf there are no containers so nothing to do.
     if let Some(conf) = conf {

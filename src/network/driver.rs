@@ -4,7 +4,7 @@ use crate::{
     firewall::FirewallDriver,
 };
 
-use std::{net::IpAddr, os::fd::BorrowedFd, path::Path};
+use std::{ffi::OsString, net::IpAddr, os::fd::BorrowedFd, path::Path};
 
 use super::{
     bridge::Bridge,
@@ -27,7 +27,7 @@ pub struct DriverInfo<'a> {
     pub per_network_opts: &'a PerNetworkOptions,
     pub port_mappings: &'a Option<Vec<PortMapping>>,
     pub dns_port: u16,
-    pub config_dir: &'a str,
+    pub config_dir: &'a Path,
     pub rootless: bool,
 }
 
@@ -51,7 +51,7 @@ pub trait NetworkDriver {
 
 pub fn get_network_driver<'a>(
     info: DriverInfo<'a>,
-    plugins_directories: &Option<Vec<String>>,
+    plugins_directories: &Option<Vec<OsString>>,
 ) -> NetavarkResult<Box<dyn NetworkDriver + 'a>> {
     match info.network.driver.as_str() {
         constants::DRIVER_BRIDGE => Ok(Box::new(Bridge::new(info))),

@@ -1,3 +1,5 @@
+use std::ffi::OsString;
+
 use clap::{Parser, Subcommand};
 
 use netavark::commands::dhcp_proxy;
@@ -12,19 +14,19 @@ use netavark::commands::version;
 struct Opts {
     /// Instead of reading from STDIN, read the configuration to be applied from the given file.
     #[clap(short, long)]
-    file: Option<String>,
+    file: Option<OsString>,
     /// config directory for aardvark, usually path to a tmpfs.
     #[clap(short, long)]
-    config: Option<String>,
+    config: Option<OsString>,
     /// Tells if current netavark invocation is for rootless container.
     #[clap(short, long)]
     rootless: Option<bool>,
     #[clap(short, long)]
     /// Path to the aardvark-dns binary.
-    aardvark_binary: Option<String>,
+    aardvark_binary: Option<OsString>,
     /// Path to netavark plugin directories, can be set multiple times to specify more than one directory.
     #[clap(long, long = "plugin-directory")]
-    plugin_directories: Option<Vec<String>>,
+    plugin_directories: Option<Vec<OsString>>,
     /// Netavark trig command
     #[clap(subcommand)]
     subcmd: SubCommand,
@@ -56,7 +58,7 @@ fn main() {
     let rootless = opts.rootless.unwrap_or(false);
     let aardvark_bin = opts
         .aardvark_binary
-        .unwrap_or_else(|| String::from("/usr/libexec/podman/aardvark-dns"));
+        .unwrap_or_else(|| OsString::from("/usr/libexec/podman/aardvark-dns"));
     let result = match opts.subcmd {
         SubCommand::Setup(setup) => setup.exec(
             opts.file,

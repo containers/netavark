@@ -4,6 +4,7 @@ use fs2::FileExt;
 use libc::pid_t;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -11,7 +12,7 @@ use std::io::Result;
 use std::io::{prelude::*, ErrorKind};
 use std::net::Ipv4Addr;
 use std::net::{IpAddr, Ipv6Addr};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 const SYSTEMD_CHECK_PATH: &str = "/run/systemd/system";
@@ -33,22 +34,22 @@ pub struct AardvarkEntry<'a> {
 #[derive(Debug, Clone)]
 pub struct Aardvark {
     /// aardvark's config directory
-    pub config: String,
+    pub config: PathBuf,
     /// tells if container is rootfull or rootless
     pub rootless: bool,
     /// path to the aardvark-dns binary
-    pub aardvark_bin: String,
+    pub aardvark_bin: OsString,
     /// port to bind to
-    pub port: String,
+    pub port: OsString,
 }
 
 impl Aardvark {
-    pub fn new(config: String, rootless: bool, aardvark_bin: String, port: u16) -> Self {
+    pub fn new(config: PathBuf, rootless: bool, aardvark_bin: OsString, port: u16) -> Self {
         Aardvark {
             config,
             rootless,
             aardvark_bin,
-            port: port.to_string(),
+            port: port.to_string().into(),
         }
     }
 
@@ -89,20 +90,24 @@ impl Aardvark {
         // only use systemd when it is booted, see sd_booted(3)
         if Path::new(SYSTEMD_CHECK_PATH).exists() && Aardvark::is_executable_in_path(SYSTEMD_RUN) {
             // TODO: This could be replaced by systemd-api.
-            aardvark_args = vec![SYSTEMD_RUN, "-q", "--scope"];
+            aardvark_args = vec![
+                OsStr::new(SYSTEMD_RUN),
+                OsStr::new("-q"),
+                OsStr::new("--scope"),
+            ];
 
             if self.rootless {
-                aardvark_args.push("--user");
+                aardvark_args.push(OsStr::new("--user"));
             }
         }
 
         aardvark_args.extend(vec![
-            self.aardvark_bin.as_str(),
-            "--config",
-            &self.config,
-            "-p",
-            &self.port,
-            "run",
+            self.aardvark_bin.as_os_str(),
+            OsStr::new("--config"),
+            self.config.as_os_str(),
+            OsStr::new("-p"),
+            self.port.as_os_str(),
+            OsStr::new("run"),
         ]);
 
         log::debug!("start aardvark-dns: {:?}", aardvark_args);

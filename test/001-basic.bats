@@ -26,3 +26,10 @@ load helpers
     expected_rc=1 run_netavark -f /test/1 setup $(get_container_netns_path)
     assert_json ".error" "failed to load network options: IO error: No such file or directory (os error 2)" "Config file does not exists"
 }
+
+@test "netavark - check non utf-8 paths" {
+    # do not use run_netavark here as it sets --config
+    run_helper $NETAVARK --config $'/tmp/\xff.test' version
+    json="$output"
+    assert_json "$json" ".version" =~ "^1\.[0-9]+\.[0-9]+(-rc[0-9]|-dev)?" "correct version"
+}
