@@ -407,6 +407,7 @@ function test_port_fw() {
     local container_port=""
     local range=1
     local connect_ip=""
+    local firewalld_reload=false
 
     # parse arguments
     while [[ "$#" -gt 0 ]]; do
