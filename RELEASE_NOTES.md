@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.9.0
+* add firewalld-reload subcommand
+* bridge: force static mac on bridge interface
+* dependency updates
+* numerous fixes to test suite
+
 ## v1.8.0
 * iptables: improve error when ip6?tables commands are missing
 * docs: Convert markdown with go-md2man instead of mandown
