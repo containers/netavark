@@ -41,7 +41,7 @@ serde = { version = "1.0.190", features = ["derive"], optional = true }
 serde-value = "0.7.0"
 serde_json = "1.0.108"
 sysctl = "0.5.5"
-url = "2.4.1"
+url = "2.5.0"
 zbus = { version = "3.14.1" }
 nix = { version = "0.27.1", features = ["sched", "signal", "user"] }
 rand = "0.8.5"
