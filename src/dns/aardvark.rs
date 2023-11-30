@@ -224,13 +224,6 @@ impl Aardvark {
             };
             match Aardvark::commit_entry(entry, file) {
                 Err(er) => {
-                    // drop lockfile when commit is completed
-                    if let Err(er) = lockfile.unlock() {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("Failed to unlock exclusive lock on {lockfile_path:?}: {er}"),
-                        ));
-                    }
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         format!("Failed to commit entry {entry:?}: {er}"),
@@ -240,13 +233,6 @@ impl Aardvark {
             }
         }
 
-        // drop lockfile when commit is completed
-        if let Err(er) = lockfile.unlock() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to unlock exclusive lock on {lockfile_path:?}: {er}"),
-            ));
-        }
         Ok(())
     }
 
