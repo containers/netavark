@@ -127,11 +127,42 @@ impl Aardvark {
         Ok(())
     }
 
+    fn check_netns(&self, pid: pid_t) -> Result<()> {
+        let cur_ns = fs::read_link("/proc/self/ns/net")?;
+        let aardvark_ns = fs::read_link(format!("/proc/{pid}/ns/net"))?;
+
+        if aardvark_ns != cur_ns {
+            // netns does not match, this means dns will not work.
+            // see https://github.com/containers/podman/issues/20396 for how that might happen
+            // We do not not really what the problem in the aardvark-dns config files so we
+            // cannot really self heal here and must ask the user to fix it.
+            // I am not sure if this should be a hard error??
+            log::error!(
+                "aardvark-dns runs in a different netns, dns will not work for this container. To resolve please stop all containers, kill the aardvark-dns process, remove the {} directory and then start the containers again",
+                self.config.display()
+            );
+        }
+
+        Ok(())
+    }
+
     pub fn notify(&self, start: bool) -> NetavarkResult<()> {
         match self.get_aardvark_pid() {
             Ok(pid) => {
                 match signal::kill(Pid::from_raw(pid), Signal::SIGHUP) {
-                    Ok(_) => return Ok(()),
+                    Ok(_) => match self.check_netns(pid) {
+                        Ok(_) => return Ok(()),
+                        Err(e) => {
+                            // If the error is ENOENT it means the process must have died in
+                            // the meantime so drop down below to start a new server process.
+                            if e.kind() != std::io::ErrorKind::NotFound {
+                                return Err(NetavarkError::wrap(
+                                    "check aardvark-dns netns",
+                                    e.into(),
+                                ));
+                            }
+                        }
+                    },
                     Err(err) => {
                         // ESRCH == process does not exists
                         // start new sever below in that case and not error
@@ -224,13 +255,6 @@ impl Aardvark {
             };
             match Aardvark::commit_entry(entry, file) {
                 Err(er) => {
-                    // drop lockfile when commit is completed
-                    if let Err(er) = lockfile.unlock() {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            format!("Failed to unlock exclusive lock on {lockfile_path:?}: {er}"),
-                        ));
-                    }
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
                         format!("Failed to commit entry {entry:?}: {er}"),
@@ -240,13 +264,6 @@ impl Aardvark {
             }
         }
 
-        // drop lockfile when commit is completed
-        if let Err(er) = lockfile.unlock() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to unlock exclusive lock on {lockfile_path:?}: {er}"),
-            ));
-        }
         Ok(())
     }
 
