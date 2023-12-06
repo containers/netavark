@@ -1353,7 +1353,7 @@ dependencies = [
  "log",
  "mozim",
  "netlink-packet-core",
- "netlink-packet-route",
+ "netlink-packet-route 0.17.1",
  "netlink-packet-utils",
  "netlink-sys",
  "nispor",
@@ -1414,6 +1414,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "netlink-packet-route"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd9ccdfabb457e05c7c61e66eb39262a204fbb376c53968b5e52dce15b423fc5"
+dependencies = [
+ "anyhow",
+ "byteorder",
+ "libc",
+ "log",
+ "netlink-packet-core",
+ "netlink-packet-utils",
+]
+
+[[package]]
 name = "netlink-packet-utils"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1455,16 +1469,16 @@ dependencies = [
 
 [[package]]
 name = "nispor"
-version = "1.2.14"
+version = "1.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d219cea7e1b66a2de5d4dd3e29fb561e91568377e57544912cce3e870b29542"
+checksum = "1b7611344f5b567ae02ddb7e8c9029f9ca5c049cc5d227613ab8b72b876379c7"
 dependencies = [
  "ethtool",
  "futures",
  "libc",
  "log",
  "mptcp-pm",
- "netlink-packet-route",
+ "netlink-packet-route 0.18.1",
  "netlink-packet-utils",
  "netlink-sys",
  "rtnetlink",
@@ -1819,18 +1833,18 @@ checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
 
 [[package]]
 name = "rtnetlink"
-version = "0.13.1"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a552eb82d19f38c3beed3f786bd23aa434ceb9ac43ab44419ca6d67a7e186c0"
+checksum = "bb5bbb61e037711ff30a3657ec537285b2e1ecb5427e4365d275164f0928c884"
 dependencies = [
  "futures",
  "log",
  "netlink-packet-core",
- "netlink-packet-route",
+ "netlink-packet-route 0.18.1",
  "netlink-packet-utils",
  "netlink-proto",
  "netlink-sys",
- "nix 0.26.4",
+ "nix 0.27.1",
  "thiserror",
  "tokio",
 ]
