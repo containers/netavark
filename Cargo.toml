@@ -59,7 +59,7 @@ prost = "0.12"
 futures-channel="0.3.29"
 futures-core = "0.3.29"
 futures-util = "0.3.29"
-nispor = "1.2.14"
+nispor = "1.2.15"
 http = "0.2.11"
 tower = { version = "0.4" }
 
