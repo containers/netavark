@@ -68,19 +68,38 @@ impl DhcpV4Service {
     /// returns: Result<Lease, DhcpSearchError>. Either finds a lease successfully, finds no lease, or fails
     ///
     pub async fn get_lease(&mut self) -> Result<NetavarkLease, DhcpServiceError> {
-        if let Some(Ok(lease)) = self.client.next().await {
-            let mut netavark_lease = <NetavarkLease as From<MozimV4Lease>>::from(lease.clone());
-            netavark_lease.add_domain_name(&self.network_config.domain_name);
-            netavark_lease.add_mac_address(&self.network_config.container_mac_addr);
-
-            debug!(
-                "found a lease for {:?}, {:?}",
-                &self.network_config.container_mac_addr, &netavark_lease
-            );
-            self.previous_lease = Some(lease);
-
-            return Ok(netavark_lease);
+        if let Some(lease_result) = self.client.next().await {
+            match lease_result {
+                Ok(lease) => {
+                    let mut netavark_lease =
+                        <NetavarkLease as From<MozimV4Lease>>::from(lease.clone());
+                    netavark_lease.add_domain_name(&self.network_config.domain_name);
+                    netavark_lease.add_mac_address(&self.network_config.container_mac_addr);
+                    debug!(
+                        "found a lease for {:?}, {:?}",
+                        &self.network_config.container_mac_addr, &netavark_lease
+                    );
+                    self.previous_lease = Some(lease);
+                    return Ok(netavark_lease);
+                }
+                Err(err) => {
+                    return Err(match err.kind() {
+                        mozim::ErrorKind::Timeout => {
+                            DhcpServiceError::new(Timeout, err.to_string())
+                        }
+                        mozim::ErrorKind::InvalidArgument => {
+                            DhcpServiceError::new(InvalidArgument, err.to_string())
+                        }
+                        mozim::ErrorKind::NoLease => {
+                            DhcpServiceError::new(NoLease, err.to_string())
+                        }
+                        mozim::ErrorKind::Bug => DhcpServiceError::new(Bug, err.to_string()),
+                        _ => DhcpServiceError::new(Bug, err.to_string()),
+                    })
+                }
+            }
         }
+
         Err(DhcpServiceError::new(
             Timeout,
             "Could not find a lease within the timeout limit".to_string(),
