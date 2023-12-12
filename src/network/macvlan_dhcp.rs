@@ -62,13 +62,17 @@ pub fn get_dhcp_lease(
         }
     };
 
-    //  Note: technically DHCP can return multiple gateways but
-    // we are just plucking the one.
-    let gw = match IpAddr::from_str(&lease.gateways[0]) {
-        Ok(g) => g,
-        Err(e) => {
-            return Err(NetavarkError::msg(format!("bad gateway address: {e}")));
+    // Note: technically DHCP can return multiple gateways but
+    // we are just plucking the one. gw may also not exist.
+    let gw = if !lease.gateways.is_empty() {
+        match IpAddr::from_str(&lease.gateways[0]) {
+            Ok(g) => Some(g),
+            Err(e) => {
+                return Err(NetavarkError::msg(format!("bad gateway address: {e}")));
+            }
         }
+    } else {
+        None
     };
 
     let ip_addr = match IpAddr::from_str(&lease.yiaddr) {
@@ -86,7 +90,7 @@ pub fn get_dhcp_lease(
         Err(e) => return Err(NetavarkError::msg(e.to_string())),
     };
     let ns = NetAddress {
-        gateway: Some(gw),
+        gateway: gw,
         ipnet: ip,
     };
 
