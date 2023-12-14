@@ -2,7 +2,7 @@ use log::{debug, error};
 use std::os::fd::BorrowedFd;
 use std::{collections::HashMap, net::IpAddr};
 
-use netlink_packet_route::nlas::link::{InfoData, InfoIpVlan, InfoKind, InfoMacVlan, Nla};
+use netlink_packet_route::link::{InfoData, InfoIpVlan, InfoKind, InfoMacVlan, LinkAttribute};
 use rand::distributions::{Alphanumeric, DistString};
 
 use crate::network::macvlan_dhcp::{get_dhcp_lease, release_dhcp_lease};
@@ -220,7 +220,7 @@ impl driver::NetworkDriver for Vlan<'_> {
                     &self.info.per_network_opts.interface_name
                 ))?;
 
-            let container_mac_address = get_mac_address(dev.nlas)?;
+            let container_mac_address = get_mac_address(dev.attributes)?;
             release_dhcp_lease(
                 &self
                     .info
@@ -373,12 +373,12 @@ fn setup(
         netns.add_route(route)?
     }
 
-    get_mac_address(dev.nlas)
+    get_mac_address(dev.attributes)
 }
 
-fn get_mac_address(v: Vec<Nla>) -> NetavarkResult<String> {
+fn get_mac_address(v: Vec<LinkAttribute>) -> NetavarkResult<String> {
     for nla in v.into_iter() {
-        if let Nla::Address(ref addr) = nla {
+        if let LinkAttribute::Address(ref addr) = nla {
             return Ok(CoreUtils::encode_address_to_hex(addr));
         }
     }
@@ -393,11 +393,11 @@ fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult<Str
     for route in routes {
         let mut dest = false;
         let mut out_if = 0;
-        for nla in route.nlas {
-            if let netlink_packet_route::route::Nla::Destination(_) = nla {
+        for nla in route.attributes {
+            if let netlink_packet_route::route::RouteAttribute::Destination(_) = nla {
                 dest = true;
             }
-            if let netlink_packet_route::route::Nla::Oif(oif) = nla {
+            if let netlink_packet_route::route::RouteAttribute::Oif(oif) = nla {
                 out_if = oif;
             }
         }
@@ -406,8 +406,8 @@ fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult<Str
         // return the output interface for this route
         if !dest && out_if > 0 {
             let link = host.get_link(netlink::LinkID::ID(out_if))?;
-            let name = link.nlas.iter().find_map(|nla| {
-                if let Nla::IfName(name) = nla {
+            let name = link.attributes.iter().find_map(|nla| {
+                if let LinkAttribute::IfName(name) = nla {
                     Some(name)
                 } else {
                     None

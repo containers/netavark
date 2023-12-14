@@ -3,10 +3,6 @@ use crate::network::{constants, internal_types, types};
 use crate::wrap;
 use ipnet::IpNet;
 use log::debug;
-use netlink_packet_route::{
-    MACVLAN_MODE_BRIDGE, MACVLAN_MODE_PASSTHRU, MACVLAN_MODE_PRIVATE, MACVLAN_MODE_SOURCE,
-    MACVLAN_MODE_VEPA,
-};
 use nix::sched;
 use sha2::{Digest, Sha512};
 use std::collections::HashMap;
@@ -26,6 +22,14 @@ use super::netlink;
 pub const IPVLAN_MODE_L2: u16 = 0;
 pub const IPVLAN_MODE_L3: u16 = 1;
 pub const IPVLAN_MODE_L3S: u16 = 2;
+
+// const were removed upstream:
+// https://github.com/rust-netlink/netlink-packet-route/issues/88
+pub const MACVLAN_MODE_PRIVATE: u32 = 1;
+pub const MACVLAN_MODE_VEPA: u32 = 2;
+pub const MACVLAN_MODE_BRIDGE: u32 = 4;
+pub const MACVLAN_MODE_PASSTHRU: u32 = 8;
+pub const MACVLAN_MODE_SOURCE: u32 = 16;
 
 pub struct CoreUtils {
     pub networkns: String,

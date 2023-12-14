@@ -2,9 +2,8 @@ use std::{collections::HashMap, net::IpAddr, os::fd::BorrowedFd, sync::Once};
 
 use ipnet::IpNet;
 use log::{debug, error};
-use netlink_packet_route::{
-    nlas::link::{Info, InfoData, InfoKind, Nla, VethInfo},
-    LinkMessage,
+use netlink_packet_route::link::{
+    InfoData, InfoKind, InfoVeth, LinkAttribute, LinkInfo, LinkMessage,
 };
 
 use crate::{
@@ -576,8 +575,8 @@ fn create_interfaces(
                     .wrap("get bridge interface")?;
 
                 let mut mac = None;
-                for nla in link.nlas.into_iter() {
-                    if let Nla::Address(addr) = nla {
+                for nla in link.attributes.into_iter() {
+                    if let LinkAttribute::Address(addr) = nla {
                         mac = Some(addr);
                     }
                 }
@@ -637,7 +636,7 @@ fn create_veth_pair<'fd>(
     let mut host_veth = netlink::CreateLinkOptions::new(String::from(""), InfoKind::Veth);
     host_veth.mtu = data.mtu;
     host_veth.primary_index = primary_index;
-    host_veth.info_data = Some(InfoData::Veth(VethInfo::Peer(peer)));
+    host_veth.info_data = Some(InfoData::Veth(InfoVeth::Peer(peer)));
 
     host.create_link(host_veth).map_err(|err| match err {
         NetavarkError::Netlink(ref e) if -e.raw_code() == libc::EEXIST => NetavarkError::wrap(
@@ -659,11 +658,11 @@ fn create_veth_pair<'fd>(
     let mut mac = String::from("");
     let mut host_link = 0;
 
-    for nla in veth.nlas.into_iter() {
-        if let Nla::Address(ref addr) = nla {
+    for nla in veth.attributes.into_iter() {
+        if let LinkAttribute::Address(ref addr) = nla {
             mac = CoreUtils::encode_address_to_hex(addr);
         }
-        if let Nla::Link(link) = nla {
+        if let LinkAttribute::Link(link) = nla {
             host_link = link;
         }
     }
@@ -697,8 +696,8 @@ fn create_veth_pair<'fd>(
     if data.ipam.ipv6_enabled {
         let host_veth = host.get_link(netlink::LinkID::ID(host_link))?;
 
-        for nla in host_veth.nlas.into_iter() {
-            if let Nla::IfName(name) = nla {
+        for nla in host_veth.attributes.into_iter() {
+            if let LinkAttribute::IfName(name) = nla {
                 //  Disable dad inside on the host too
                 let disable_dad_in_container = format!("/proc/sys/net/ipv6/conf/{name}/accept_dad");
                 core_utils::CoreUtils::apply_sysctl_value(disable_dad_in_container, "0")?;
@@ -747,10 +746,10 @@ fn create_veth_pair<'fd>(
 
 /// make sure the LinkMessage has the kind bridge
 fn check_link_is_bridge(msg: LinkMessage, br_name: &str) -> NetavarkResult<LinkMessage> {
-    for nla in msg.nlas.iter() {
-        if let Nla::Info(info) = nla {
+    for nla in msg.attributes.iter() {
+        if let LinkAttribute::LinkInfo(info) = nla {
             for inf in info.iter() {
-                if let Info::Kind(kind) = inf {
+                if let LinkInfo::Kind(kind) = inf {
                     if *kind == InfoKind::Bridge {
                         return Ok(msg);
                     } else {
@@ -769,10 +768,10 @@ fn check_link_is_bridge(msg: LinkMessage, br_name: &str) -> NetavarkResult<LinkM
 
 /// make sure the LinkMessage is the kind VRF
 fn check_link_is_vrf(msg: LinkMessage, vrf_name: &str) -> NetavarkResult<LinkMessage> {
-    for nla in msg.nlas.iter() {
-        if let Nla::Info(info) = nla {
+    for nla in msg.attributes.iter() {
+        if let LinkAttribute::LinkInfo(info) = nla {
             for inf in info.iter() {
-                if let Info::Kind(kind) = inf {
+                if let LinkInfo::Kind(kind) = inf {
                     if *kind == InfoKind::Vrf {
                         return Ok(msg);
                     } else {
@@ -808,7 +807,7 @@ fn remove_link(
         .wrap("failed to get bridge interface")?;
 
     let links = host
-        .dump_links(&mut vec![Nla::Master(br.header.index)])
+        .dump_links(&mut vec![LinkAttribute::Controller(br.header.index)])
         .wrap("failed to get connected bridge interfaces")?;
     // no connected interfaces on that bridge we can remove it
     if links.is_empty() {
