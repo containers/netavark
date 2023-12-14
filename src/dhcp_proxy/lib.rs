@@ -6,14 +6,13 @@ use std::convert::TryFrom;
 use std::error::Error;
 
 use g_rpc::netavark_proxy_client::NetavarkProxyClient;
-use http::Uri;
 use log::debug;
 use std::fs::File;
 use std::net::AddrParseError;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use tokio::net::UnixStream;
-use tonic::transport::{Channel, Endpoint};
+use tonic::transport::{Channel, Endpoint, Uri};
 use tonic::Request;
 use tower::service_fn;
 
