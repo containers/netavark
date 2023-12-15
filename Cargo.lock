@@ -1346,7 +1346,6 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-util",
- "http",
  "ipnet",
  "iptables",
  "libc",
