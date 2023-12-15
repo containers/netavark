@@ -6,6 +6,9 @@ use std::str::FromStr;
 
 use crate::dhcp_proxy::lib::g_rpc::NetworkConfig;
 use crate::dhcp_proxy::proxy_conf::DEFAULT_UDS_PATH;
+
+pub type DhcpLeaseInfo = (Vec<NetAddress>, Option<Vec<IpAddr>>, Option<Vec<String>>);
+
 /// dhcp performs the connection to the nv-proxy over grpc where it
 /// requests it to perform a lease via the host's network interface
 /// but passes it the network interface from the container netns.:w
@@ -30,7 +33,7 @@ pub fn get_dhcp_lease(
     container_network_interface: &str,
     ns_path: &str,
     container_macvlan_mac: &str,
-) -> NetavarkResult<Vec<NetAddress>> {
+) -> NetavarkResult<DhcpLeaseInfo> {
     let nvp_config = NetworkConfig {
         host_iface: host_network_interface.to_string(),
         // TODO add in domain name support
@@ -73,6 +76,25 @@ pub fn get_dhcp_lease(
         None
     };
 
+    let dns_servers = if !lease.dns_servers.is_empty() {
+        let servers = lease
+            .dns_servers
+            .into_iter()
+            .map(|d| match IpAddr::from_str(&d) {
+                Ok(d) => Ok(d),
+                Err(e) => Err(NetavarkError::msg(format!("bad dns address: {e}"))),
+            })
+            .collect::<Result<Vec<IpAddr>, NetavarkError>>()?;
+        Some(servers)
+    } else {
+        None
+    };
+    let domain_name = if !lease.domain_name.is_empty() {
+        Some(vec![lease.domain_name])
+    } else {
+        None
+    };
+
     let ip_addr = match IpAddr::from_str(&lease.yiaddr) {
         Ok(i) => i,
         Err(e) => return Err(NetavarkError::Message(e.to_string())),
@@ -92,7 +114,7 @@ pub fn get_dhcp_lease(
         ipnet: ip,
     };
 
-    Ok(vec![ns])
+    Ok((vec![ns], dns_servers, domain_name))
 }
 
 pub fn release_dhcp_lease(

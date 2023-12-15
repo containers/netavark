@@ -183,12 +183,20 @@ impl driver::NetworkDriver for Vlan<'_> {
         // a dhcp lease.  it will also perform the IP address assignment
         // to the macvlan interface.
         let subnets = if data.ipam.dhcp_enabled {
-            get_dhcp_lease(
+            let (subnets, dns_servers, domain_name) = get_dhcp_lease(
                 &data.host_interface_name,
                 &data.container_interface_name,
                 self.info.netns_path,
                 &container_vlan_mac,
-            )?
+            )?;
+            // do not overwrite dns servers set by dns podman flag
+            if !self.info.container_dns_servers.is_some() {
+                response.dns_server_ips = dns_servers;
+            }
+            if domain_name.is_some() {
+                response.dns_search_domains = domain_name;
+            }
+            subnets
         } else {
             data.ipam.net_addresses.clone()
         };
