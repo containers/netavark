@@ -1,4 +1,5 @@
 use crate::error::{ErrorWrap, NetavarkError, NetavarkResult};
+use crate::network::macvlan_dhcp::release_dhcp_lease;
 use crate::network::{constants, internal_types, types};
 use crate::wrap;
 use ipnet::IpNet;
@@ -18,7 +19,9 @@ use std::os::unix::prelude::*;
 use std::str::FromStr;
 use sysctl::{Sysctl, SysctlError};
 
-use super::netlink;
+use super::{driver::DriverInfo, netlink};
+
+use netlink_packet_route::link::LinkAttribute;
 
 pub struct CoreUtils {
     pub networkns: String,
@@ -433,5 +436,39 @@ pub fn disable_ipv6_autoconf(if_name: &str) -> NetavarkResult<()> {
             }
         }
     };
+    Ok(())
+}
+
+pub fn get_mac_address(v: Vec<LinkAttribute>) -> NetavarkResult<String> {
+    for nla in v.into_iter() {
+        if let LinkAttribute::Address(ref addr) = nla {
+            return Ok(CoreUtils::encode_address_to_hex(addr));
+        }
+    }
+    Err(NetavarkError::msg(
+        "failed to get the the container mac address",
+    ))
+}
+
+pub fn dhcp_teardown(info: &DriverInfo, sock: &mut netlink::Socket) -> NetavarkResult<()> {
+    let ipam = get_ipam_addresses(info.per_network_opts, info.network)?;
+    let if_name = info.per_network_opts.interface_name.clone();
+
+    // If we are using DHCP, we need to at least call to the proxy so that
+    // the proxy's cache can get updated and the current lease can be released.
+    if ipam.dhcp_enabled {
+        let dev = sock.get_link(netlink::LinkID::Name(if_name)).wrap(format!(
+            "get container interface {}",
+            &info.per_network_opts.interface_name
+        ))?;
+
+        let container_mac_address = get_mac_address(dev.attributes)?;
+        release_dhcp_lease(
+            &info.network.network_interface.clone().unwrap_or_default(),
+            &info.per_network_opts.interface_name,
+            info.netns_path,
+            &container_mac_address,
+        )?
+    }
     Ok(())
 }
