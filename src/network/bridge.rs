@@ -7,6 +7,7 @@ use netlink_packet_route::link::{
     LinkMessage,
 };
 
+use crate::network::macvlan_dhcp::get_dhcp_lease;
 use crate::{
     dns::aardvark::AardvarkEntry,
     error::{ErrorWrap, NetavarkError, NetavarkErrorList, NetavarkResult},
@@ -178,9 +179,33 @@ impl driver::NetworkDriver for Bridge<'_> {
         // interfaces map, but we only ever expect one, for response
         let mut interfaces: HashMap<String, types::NetInterface> = HashMap::new();
 
+        // if dhcp is enabled, we need to call the dhcp proxy to perform
+        // a dhcp lease.  it will also perform the IP address assignment
+        // to the container interface.
+        let subnets = if data.ipam.dhcp_enabled {
+            let (subnets, dns_servers, domain_name) = get_dhcp_lease(
+                &data.bridge_interface_name,
+                &data.container_interface_name,
+                self.info.netns_path,
+                &container_veth_mac,
+                self.info.container_hostname.as_deref().unwrap_or(""),
+                self.info.container_id,
+            )?;
+            // do not overwrite dns servers set by dns podman flag
+            if !self.info.container_dns_servers.is_some() {
+                response.dns_server_ips = dns_servers;
+            }
+            if domain_name.is_some() {
+                response.dns_search_domains = domain_name;
+            }
+            subnets
+        } else {
+            data.ipam.net_addresses.clone()
+        };
+
         let interface = types::NetInterface {
             mac_address: container_veth_mac,
-            subnets: Option::from(data.ipam.net_addresses.clone()),
+            subnets: Option::from(subnets),
         };
         // Add interface to interfaces (part of StatusBlock)
         interfaces.insert(data.container_interface_name.clone(), interface);
@@ -277,6 +302,8 @@ impl driver::NetworkDriver for Bridge<'_> {
         let (host_sock, netns_sock) = netlink_sockets;
 
         let mut error_list = NetavarkErrorList::new();
+
+        core_utils::dhcp_teardown(&self.info, netns_sock)?;
 
         let routes = core_utils::create_route_list(&self.info.network.routes)?;
         for route in routes.iter() {
