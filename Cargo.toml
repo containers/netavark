@@ -69,4 +69,4 @@ tonic-build = "0.10"
 [dev-dependencies]
 once_cell = "1.19.0"
 rand = "0.8.5"
-tempfile = "3.8.1"
+tempfile = "3.9.0"
