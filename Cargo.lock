@@ -1454,9 +1454,9 @@ dependencies = [
 
 [[package]]
 name = "nispor"
-version = "1.2.15"
+version = "1.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b7611344f5b567ae02ddb7e8c9029f9ca5c049cc5d227613ab8b72b876379c7"
+checksum = "0c9f198b82210da3f72354fb061ca8b683f274ae137cd6d862758bd9b176d047"
 dependencies = [
  "ethtool",
  "futures",
