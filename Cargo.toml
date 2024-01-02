@@ -56,9 +56,9 @@ tokio-stream = { version = "0.1", features = ["net"] }
 tonic = "0.10"
 mozim = "0.2.2"
 prost = "0.12"
-futures-channel="0.3.29"
-futures-core = "0.3.29"
-futures-util = "0.3.29"
+futures-channel="0.3.30"
+futures-core = "0.3.30"
+futures-util = "0.3.30"
 nispor = "1.2.16"
 tower = { version = "0.4" }
 
