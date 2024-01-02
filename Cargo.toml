@@ -59,7 +59,7 @@ prost = "0.12"
 futures-channel="0.3.29"
 futures-core = "0.3.29"
 futures-util = "0.3.29"
-nispor = "1.2.15"
+nispor = "1.2.16"
 tower = { version = "0.4" }
 
 [build-dependencies]
