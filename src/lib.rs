@@ -7,5 +7,6 @@ pub mod dhcp_proxy;
 pub mod dns;
 pub mod error;
 pub mod firewall;
+pub mod ipam;
 pub mod network;
 pub mod plugin;
