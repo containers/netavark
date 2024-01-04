@@ -31,7 +31,7 @@ deps-serde = ["chrono/serde", "url/serde"]
 
 [dependencies]
 anyhow = "1.0"
-clap = { version = "~4.4.12", features = ["derive"] }
+clap = { version = "~4.4.12", features = ["derive", "env"] }
 env_logger = "0.10.1"
 ipnet = { version = "2", features = ["serde"] }
 iptables = "0.5"

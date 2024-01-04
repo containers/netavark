@@ -36,6 +36,7 @@ impl Setup {
         &self,
         input_file: Option<OsString>,
         config_dir: Option<OsString>,
+        firewall_driver: Option<String>,
         aardvark_bin: OsString,
         plugin_directories: Option<Vec<OsString>>,
         rootless: bool,
@@ -49,7 +50,7 @@ impl Setup {
         debug!("{:?}", "Setting up...");
         let network_options = network::types::NetworkOptions::load(input_file)?;
 
-        let firewall_driver = match firewall::get_supported_firewall_driver(None) {
+        let firewall_driver = match firewall::get_supported_firewall_driver(firewall_driver) {
             Ok(driver) => driver,
             Err(e) => return Err(e),
         };
