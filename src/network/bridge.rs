@@ -325,6 +325,7 @@ impl<'a> Bridge<'a> {
                 .as_ref()
                 .map(|nets| nets.iter().map(|n| n.subnet).collect()),
             bridge_name,
+            network_id: self.info.network.id.clone(),
             network_hash_name: id_network_hash.clone(),
             isolation: isolate,
             dns_port: self.info.dns_port,
@@ -359,6 +360,7 @@ impl<'a> Bridge<'a> {
         }
         let spf = PortForwardConfig {
             container_id: self.info.container_id.clone(),
+            network_id: self.info.network.id.clone(),
             port_mappings: self.info.port_mappings,
             network_name: self.info.network.name.clone(),
             network_hash_name: id_network_hash,

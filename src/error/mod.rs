@@ -81,6 +81,11 @@ pub enum NetavarkError {
     DHCPProxy(tonic::Status),
 
     List(NetavarkErrorList),
+
+    Nftables(nftables::helper::NftablesError),
+
+    SubnetParse(ipnet::AddrParseError),
+    AddrParse(std::net::AddrParseError),
 }
 
 /// Internal struct for JSON output
@@ -160,6 +165,9 @@ impl fmt::Display for NetavarkError {
                     Ok(())
                 }
             }
+            NetavarkError::Nftables(e) => write!(f, "nftables error: {e}"),
+            NetavarkError::SubnetParse(e) => write!(f, "parsing IP subnet error: {e}"),
+            NetavarkError::AddrParse(e) => write!(f, "parsing IP address error: {e}"),
         }
     }
 }
@@ -211,5 +219,23 @@ impl From<netlink_packet_core::error::ErrorMessage> for NetavarkError {
 impl From<tonic::Status> for NetavarkError {
     fn from(err: tonic::Status) -> Self {
         NetavarkError::DHCPProxy(err)
+    }
+}
+
+impl From<nftables::helper::NftablesError> for NetavarkError {
+    fn from(err: nftables::helper::NftablesError) -> Self {
+        NetavarkError::Nftables(err)
+    }
+}
+
+impl From<ipnet::AddrParseError> for NetavarkError {
+    fn from(err: ipnet::AddrParseError) -> Self {
+        NetavarkError::SubnetParse(err)
+    }
+}
+
+impl From<std::net::AddrParseError> for NetavarkError {
+    fn from(err: std::net::AddrParseError) -> Self {
+        NetavarkError::AddrParse(err)
     }
 }
