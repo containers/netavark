@@ -8,6 +8,7 @@ use zbus::blocking::Connection;
 pub mod firewalld;
 pub mod fwnone;
 pub mod iptables;
+pub mod nft;
 pub mod state;
 mod varktables;
 
@@ -108,9 +109,7 @@ pub fn get_supported_firewall_driver(
             }
             FirewallImpl::Nftables => {
                 info!("Using nftables firewall driver");
-                Err(NetavarkError::msg(
-                    "nftables support presently not available",
-                ))
+                nft::new()
             }
             FirewallImpl::Fwnone => {
                 info!("Not using firewall");

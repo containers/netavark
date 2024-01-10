@@ -10,8 +10,6 @@ use crate::network::internal_types::{
 };
 use iptables;
 use iptables::IPTables;
-use log::{debug, warn};
-use zbus::blocking::Connection;
 
 pub(crate) const MAX_HASH_SIZE: usize = 13;
 
@@ -64,7 +62,7 @@ impl firewall::FirewallDriver for IptablesDriver {
 
                 create_network_chains(chains)?;
 
-                add_firewalld_if_possible(&network);
+                firewalld::add_firewalld_if_possible(&network);
             }
         }
         Ok(())
@@ -106,7 +104,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                 }
 
                 if tear.complete_teardown {
-                    rm_firewalld_if_possible(&network)
+                    firewalld::rm_firewalld_if_possible(&network)
                 }
             }
         }
@@ -215,65 +213,4 @@ impl firewall::FirewallDriver for IptablesDriver {
         }
         Result::Ok(())
     }
-}
-
-/// Check if firewalld is running
-fn is_firewalld_running(conn: &Connection) -> bool {
-    conn.call_method(
-        Some("org.freedesktop.DBus"),
-        "/org/freedesktop/DBus",
-        Some("org.freedesktop.DBus"),
-        "GetNameOwner",
-        &"org.fedoraproject.FirewallD1",
-    )
-    .is_ok()
-}
-
-/// If possible, add a firewalld rule to allow traffic.
-/// Ignore all errors, beyond possibly logging them.
-fn add_firewalld_if_possible(net: &ipnet::IpNet) {
-    let conn = match Connection::system() {
-        Ok(conn) => conn,
-        Err(_) => return,
-    };
-    if !is_firewalld_running(&conn) {
-        return;
-    }
-    debug!("Adding firewalld rules for network {}", net.to_string());
-
-    match firewalld::add_source_subnets_to_zone(&conn, "trusted", &[*net]) {
-        Ok(_) => {}
-        Err(e) => warn!(
-            "Error adding subnet {} from firewalld trusted zone: {}",
-            net.to_string(),
-            e
-        ),
-    }
-}
-
-// If possible, remove a firewalld rule to allow traffic.
-// Ignore all errors, beyond possibly logging them.
-fn rm_firewalld_if_possible(net: &ipnet::IpNet) {
-    let conn = match Connection::system() {
-        Ok(conn) => conn,
-        Err(_) => return,
-    };
-    if !is_firewalld_running(&conn) {
-        return;
-    }
-    debug!("Removing firewalld rules for IPs {}", net.to_string());
-    match conn.call_method(
-        Some("org.fedoraproject.FirewallD1"),
-        "/org/fedoraproject/FirewallD1",
-        Some("org.fedoraproject.FirewallD1.zone"),
-        "removeSource",
-        &("trusted", net.to_string()),
-    ) {
-        Ok(_) => {}
-        Err(e) => warn!(
-            "Error removing subnet {} from firewalld trusted zone: {}",
-            net.to_string(),
-            e
-        ),
-    };
 }

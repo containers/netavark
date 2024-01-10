@@ -17,6 +17,9 @@ pub struct SetupNetwork {
     pub subnets: Option<Vec<ipnet::IpNet>>,
     /// bridge interface name
     pub bridge_name: String,
+    /// id for the network
+    #[serde(default)]
+    pub network_id: String,
     /// hash id for the network
     pub network_hash_name: String,
     /// isolation determines whether the network can communicate with others outside of its interface
@@ -35,6 +38,9 @@ pub struct TearDownNetwork {
 pub struct PortForwardConfigGeneric<Ports, IpAddresses> {
     /// id of container
     pub container_id: String,
+    /// id of the network
+    #[serde(default)]
+    pub network_id: String,
     /// port mappings
     pub port_mappings: Ports,
     /// name of network
@@ -76,6 +82,7 @@ impl<'a> From<&'a PortForwardConfigOwned> for PortForwardConfig<'a> {
     fn from(p: &'a PortForwardConfigOwned) -> PortForwardConfig<'a> {
         Self {
             container_id: p.container_id.clone(),
+            network_id: p.network_id.clone(),
             port_mappings: &p.port_mappings,
             network_name: p.network_name.clone(),
             network_hash_name: p.network_hash_name.clone(),
