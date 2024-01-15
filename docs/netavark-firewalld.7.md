@@ -31,9 +31,9 @@ When it is enabled (set to `yes`), port forwarding with root Podman will become 
 Attempting to start a container or pod with the `-p` or `-P` options will return errors.
 When StrictForwardPorts is enabled, all port forwarding must be done through firewalld using the firewall-cmd tool.
 This ensures that containers cannot allow traffic through the firewall without administrator intervention.
-Please note that rootless Podman is unaffected by this setting, and will function as it always has.
+Please note that rootless Podman is unaffected by this setting and will function as it always has.
 
-Instead, containers should be started without forwarded ports specified, and preferably with static IPs.
+Instead, containers should be started without forwarded ports specified and preferably with static IPs.
 
 To forward a port externally, the following command should be run, substituting the desired host and container port numbers, protocol, and the container's IP.
 ```

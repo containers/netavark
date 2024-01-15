@@ -473,6 +473,10 @@ export NETAVARK_FW=nftables
     test_port_fw ip=6 proto=udp hostip="fd65:8371:648b:0c06::1"
 }
 
+@test "$fw_driver - port forwarding with localhost - tcp" {
+    test_port_fw hostip="127.0.0.1"
+}
+
 @test "bridge ipam none" {
            read -r -d '\0' config <<EOF
 {

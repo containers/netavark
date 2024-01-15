@@ -560,6 +560,10 @@ fw_driver=iptables
     test_port_fw ip=6 proto=udp hostip="fd65:8371:648b:0c06::1"
 }
 
+@test "$fw_driver - port forwarding with localhost - tcp" {
+    test_port_fw hostip="127.0.0.1"
+}
+
 # Test that port forwarding works with strict Reverse Path Forwarding enabled on the host
 @test "$fw_driver - port forwarding with two networks and RPF - tcp" {
     # First, enable strict RPF on host/container ns.
