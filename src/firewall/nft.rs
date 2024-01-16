@@ -2,6 +2,7 @@ use crate::error::{NetavarkError, NetavarkResult};
 use crate::firewall;
 use crate::firewall::firewalld;
 use crate::network::internal_types;
+use crate::network::internal_types::IsolateOption;
 use crate::network::types::PortMapping;
 use ipnet::IpNet;
 use nftables::batch::Batch;
@@ -22,6 +23,9 @@ const PREROUTINGCHAIN: &str = "PREROUTING";
 const OUTPUTCHAIN: &str = "OUTPUT";
 const DNATCHAIN: &str = "NETAVARK-HOSTPORT-DNAT";
 const MASKCHAIN: &str = "NETAVARK-HOSTPORT-SETMARK";
+const ISOLATION1CHAIN: &str = "NETAVARK-ISOLATION-1";
+const ISOLATION2CHAIN: &str = "NETAVARK-ISOLATION-2";
+const ISOLATION3CHAIN: &str = "NETAVARK-ISOLATION-3";
 
 const MASK: u32 = 0x2000;
 
@@ -92,6 +96,11 @@ impl firewall::FirewallDriver for Nftables {
         // Two extra chains, not hooked to anything, for our NAT pf rules
         batch.add(make_basic_chain(DNATCHAIN));
         batch.add(make_basic_chain(MASKCHAIN));
+
+        // Three extra chains, not hooked to anything, for isolation.
+        batch.add(make_basic_chain(ISOLATION1CHAIN));
+        batch.add(make_basic_chain(ISOLATION2CHAIN));
+        batch.add(make_basic_chain(ISOLATION3CHAIN));
 
         // Postrouting chain needs a single rule to masquerade if mask is set.
         // But only one copy of that rule. So check if such a rule exists.
@@ -220,6 +229,106 @@ impl firewall::FirewallDriver for Nftables {
                     }),
                     stmt::Statement::Drop(None),
                 ],
+            ));
+        }
+
+        // Forward chain: jump NETAVARK-ISOLATION-1
+        if get_matching_rules_in_chain(
+            &existing_rules,
+            FORWARDCHAIN,
+            get_rule_matcher_jump_to(ISOLATION1CHAIN.to_string()),
+        )
+        .is_empty()
+        {
+            batch.add(make_rule(
+                FORWARDCHAIN,
+                vec![get_jump_action(ISOLATION1CHAIN)],
+            ));
+        }
+
+        let match_our_bridge = get_rule_matcher_bridge(&network_setup.bridge_name);
+
+        // If and only if isolation is enabled: add isolation chains.
+        // Some isolation rules are shared. Other rules are specific to one type
+        // of isolation.
+        if let IsolateOption::Normal | IsolateOption::Strict = network_setup.isolation {
+            // NETAVARK-ISOLATION-1: iifname <bridgename> oifname != <bridgename> jump NETAVARK-ISOLATION-{2,3}
+            // (Exact target varies based on Strict vs Normal Isolation - strict goes to 3, otherwise 2)
+            let isolation_1_jump_target = if let IsolateOption::Strict = network_setup.isolation {
+                ISOLATION3CHAIN
+            } else {
+                ISOLATION2CHAIN
+            };
+            if get_matching_rules_in_chain(&existing_rules, ISOLATION1CHAIN, &match_our_bridge)
+                .is_empty()
+            {
+                batch.add(make_rule(
+                    ISOLATION1CHAIN,
+                    vec![
+                        stmt::Statement::Match(stmt::Match {
+                            left: expr::Expression::Named(expr::NamedExpression::Meta(
+                                expr::Meta {
+                                    key: expr::MetaKey::Iifname,
+                                },
+                            )),
+                            right: expr::Expression::String(network_setup.bridge_name.clone()),
+                            op: stmt::Operator::EQ,
+                        }),
+                        stmt::Statement::Match(stmt::Match {
+                            left: expr::Expression::Named(expr::NamedExpression::Meta(
+                                expr::Meta {
+                                    key: expr::MetaKey::Oifname,
+                                },
+                            )),
+                            right: expr::Expression::String(network_setup.bridge_name.clone()),
+                            op: stmt::Operator::NEQ,
+                        }),
+                        get_jump_action(isolation_1_jump_target),
+                    ],
+                ));
+            }
+
+            // NETAVARK-ISOLATION-2: oifname == <bridgename> drop
+            if get_matching_rules_in_chain(&existing_rules, ISOLATION2CHAIN, match_our_bridge)
+                .is_empty()
+            {
+                batch.add(make_rule(
+                    ISOLATION2CHAIN,
+                    vec![
+                        get_dest_bridge_match(&network_setup.bridge_name),
+                        stmt::Statement::Drop(None),
+                    ],
+                ));
+            }
+        } else {
+            // No isolation: insert a rule at position 1 in ISOLATION3 to drop traffic.
+            // Do this to make sure the jump from ISOLATION3 to ISOLATION2 below is always the last thing in the chain.
+            // NETAVARK-ISOLATION-3: oifname == <bridgename> drop
+            if get_matching_rules_in_chain(&existing_rules, ISOLATION3CHAIN, match_our_bridge)
+                .is_empty()
+            {
+                batch.add_cmd(schema::NfCmd::Insert(make_rule(
+                    ISOLATION3CHAIN,
+                    vec![
+                        get_dest_bridge_match(&network_setup.bridge_name),
+                        stmt::Statement::Drop(None),
+                    ],
+                )));
+            }
+        }
+
+        // Always exists, even when isolation disabled. Must be the last item in the ISOLATION3 chain.
+        // NETAVARK-ISOLATION-3: jump NETAVARK-ISOLATION-2
+        if get_matching_rules_in_chain(
+            &existing_rules,
+            ISOLATION3CHAIN,
+            get_rule_matcher_jump_to(ISOLATION2CHAIN.to_string()),
+        )
+        .is_empty()
+        {
+            batch.add(make_rule(
+                ISOLATION3CHAIN,
+                vec![get_jump_action(ISOLATION2CHAIN)],
             ));
         }
 
@@ -395,6 +504,33 @@ impl firewall::FirewallDriver for Nftables {
                 // After all nftables work is done, remove us from firewalld.
                 firewalld::rm_firewalld_if_possible(&subnet);
             }
+        }
+
+        let match_our_bridge = get_rule_matcher_bridge(&tear.config.bridge_name);
+
+        let mut isolation_rules: Vec<schema::Rule> = Vec::new();
+        isolation_rules.append(&mut get_matching_rules_in_chain(
+            &existing_rules,
+            ISOLATION1CHAIN,
+            &match_our_bridge,
+        ));
+        isolation_rules.append(&mut get_matching_rules_in_chain(
+            &existing_rules,
+            ISOLATION2CHAIN,
+            &match_our_bridge,
+        ));
+        isolation_rules.append(&mut get_matching_rules_in_chain(
+            &existing_rules,
+            ISOLATION3CHAIN,
+            &match_our_bridge,
+        ));
+
+        log::debug!(
+            "Removing {} isolation rules for network",
+            isolation_rules.len()
+        );
+        for rule in isolation_rules {
+            batch.delete(schema::NfListObject::Rule(rule));
         }
 
         let rules = batch.to_nftables();
@@ -720,6 +856,18 @@ fn get_subnet_chain_name(subnet: IpNet, net_id: &str, dnat: bool) -> String {
     } else {
         format!("nv_{}_{}", net_id_clean, subnet_clean)
     }
+}
+
+/// Get a statement to match the given destination bridge.
+/// Always matches using ==.
+fn get_dest_bridge_match(bridge: &str) -> stmt::Statement {
+    stmt::Statement::Match(stmt::Match {
+        left: expr::Expression::Named(expr::NamedExpression::Meta(expr::Meta {
+            key: expr::MetaKey::Oifname,
+        })),
+        right: expr::Expression::String(bridge.to_string()),
+        op: stmt::Operator::EQ,
+    })
 }
 
 /// Get a statement to match the given IP address.
@@ -1056,6 +1204,26 @@ fn get_rule_matcher_jump_to(jump_target: String) -> Box<dyn Fn(&schema::Rule) ->
         }
         false
     })
+}
+
+/// Make a closure that matches any rule that tests for a match to a given bridge interface.
+fn get_rule_matcher_bridge(bridge: &String) -> impl '_ + Fn(&schema::Rule) -> bool {
+    move |r: &schema::Rule| -> bool {
+        for statement in &r.expr {
+            match statement {
+                stmt::Statement::Match(m) => match &m.right {
+                    expr::Expression::String(s) => {
+                        if *s == *bridge {
+                            return true;
+                        }
+                    }
+                    _ => continue,
+                },
+                _ => continue,
+            }
+        }
+        false
+    }
 }
 
 /// Find all rules in the given chain which match the given closure (true == include).
