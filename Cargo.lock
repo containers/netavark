@@ -1456,8 +1456,7 @@ dependencies = [
 [[package]]
 name = "nftables"
 version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e10abe0d631f93f30c3600ecb4ddd21561bcc6bac1837db11cda9c1c922207e7"
+source = "git+https://github.com/namib-project/nftables-rs.git?rev=1b0c60b#1b0c60ba287cbfc65546d86fbf07d6f26dbeba24"
 dependencies = [
  "serde",
  "serde_json",
