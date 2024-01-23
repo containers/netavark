@@ -826,7 +826,7 @@ fn get_isolate_option(opts: &Option<HashMap<String, String>>) -> NetavarkResult<
     // return isolate option value "false" if unknown value or no value passed
     Ok(match isolate.as_str() {
         ISOLATE_OPTION_STRICT => IsolateOption::Strict,
-        ISOLATE_OPTION_TRUE => IsolateOption::Nomal,
+        ISOLATE_OPTION_TRUE => IsolateOption::Normal,
         ISOLATE_OPTION_FALSE => IsolateOption::Never,
         _ => IsolateOption::Never,
     })

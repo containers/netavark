@@ -27,11 +27,11 @@
                 {
                     "subnet": "fd90::/64",
                     "gateway": "fd90::1"
-               }
+                }
             ],
             "options": {
                 "isolate": "true"
-             }
+            }
         }
     }
 }

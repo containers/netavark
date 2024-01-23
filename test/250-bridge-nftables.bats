@@ -80,7 +80,7 @@ export NETAVARK_FW=nftables
     # check FORWARD rules
     run_in_host_netns nft list chain inet netavark FORWARD
     assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
-    assert "${#lines[@]}" = 6 "too many FORWARD rules after teardown"
+    assert "${#lines[@]}" = 7 "too many FORWARD rules after teardown"
 
     # check POSTROUTING rules
     run_in_host_netns nft list chain inet netavark POSTROUTING
@@ -539,7 +539,6 @@ EOF
 }
 
 @test "$fw_driver - isolate networks" {
-    skip "TODO: Once isolation is added"
     # create container/networks with isolation
 
     # isolate1: 10.89.0.2/24, fd90::2, isolate=true
@@ -557,26 +556,27 @@ EOF
     create_container_ns
     run_netavark --file ${TESTSDIR}/testfiles/isolate4.json setup $(get_container_netns_path 3)
 
-    # check iptables NETAVARK_ISOLATION_1 chain
-    run_in_host_netns iptables -S NETAVARK_ISOLATION_1
-    assert "${lines[1]}" == "-A NETAVARK_ISOLATION_1 -i isolate4 ! -o isolate4 -j NETAVARK_ISOLATION_3"
-    assert "${lines[2]}" == "-A NETAVARK_ISOLATION_1 -i isolate3 ! -o isolate3 -j NETAVARK_ISOLATION_3"
-    assert "${lines[3]}" == "-A NETAVARK_ISOLATION_1 -i isolate2 ! -o isolate2 -j NETAVARK_ISOLATION_2"
-    assert "${lines[4]}" == "-A NETAVARK_ISOLATION_1 -i isolate1 ! -o isolate1 -j NETAVARK_ISOLATION_2"
+    # check nftables NETAVARK-ISOLATION-1 chain
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-1
+    assert "${lines[2]}" =~ "iifname \"isolate1\" oifname != \"isolate1\" jump NETAVARK-ISOLATION-2" "isolate1 network ISOLATION1 chain"
+    assert "${lines[3]}" =~ "iifname \"isolate2\" oifname != \"isolate2\" jump NETAVARK-ISOLATION-2" "isolate2 network ISOLATION1 chain"
+    assert "${lines[4]}" =~ "iifname \"isolate3\" oifname != \"isolate3\" jump NETAVARK-ISOLATION-3" "isolate3 network ISOLATION1 chain"
+    assert "${lines[5]}" =~ "iifname \"isolate4\" oifname != \"isolate4\" jump NETAVARK-ISOLATION-3" "isolate4 network ISOLATION1 chain"
 
-    run_in_host_netns iptables -nvL FORWARD
-    assert "${lines[2]}" =~ "NETAVARK_ISOLATION_1"
+    # check nftables FORWARD chain
+    run_in_host_netns nft list chain inet netavark FORWARD
+    assert "${lines[4]}" =~ "jump NETAVARK-ISOLATION-1" "forward chain jumps to ISOLATION1"
 
-    # check iptables NETAVARK_ISOLATION_2 chain
-    run_in_host_netns iptables -S NETAVARK_ISOLATION_2
-    assert "${lines[1]}" == "-A NETAVARK_ISOLATION_2 -o isolate4 -j DROP"
-    assert "${lines[2]}" == "-A NETAVARK_ISOLATION_2 -o isolate3 -j DROP"
-    assert "${lines[3]}" == "-A NETAVARK_ISOLATION_2 -o isolate2 -j DROP"
-    assert "${lines[4]}" == "-A NETAVARK_ISOLATION_2 -o isolate1 -j DROP"
+    # check nftables NETAVARK-ISOLATION-2 chain
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-2
+    assert "${lines[2]}" =~ "oifname \"isolate1\" drop" "isolate1 network ISOLATION2 chain"
+    assert "${lines[3]}" =~ "oifname \"isolate2\" drop" "isolate2 network ISOLATION2 chain"
+    assert "${lines[4]}" =~ "oifname \"isolate3\" drop" "isolate3 network ISOLATION2 chain"
+    assert "${lines[5]}" =~ "oifname \"isolate4\" drop" "isolate4 network ISOLATION2 chain"
 
-    # check iptables NETAVARK_ISOLATION_3 chain
-    run_in_host_netns iptables -S NETAVARK_ISOLATION_3
-    assert "${lines[1]}" == "-A NETAVARK_ISOLATION_3 -j NETAVARK_ISOLATION_2"
+    # check nftables NETAVARK-ISOLATION-3 chain
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-3
+    assert "${lines[2]}" =~ "jump NETAVARK-ISOLATION-2" "ISOLATION3 chain jumpt to ISOLATION2"
 
     # ping our own ip to make sure the ips work and there is no typo
     run_in_container_netns ping -w 1 -c 1 10.89.0.2
@@ -655,10 +655,10 @@ EOF
     create_container_ns
     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path 4)
 
-    # check iptables NETAVARK_ISOLATION_3 chain
-    run_in_host_netns iptables -S NETAVARK_ISOLATION_3
-    assert "${lines[1]}" == "-A NETAVARK_ISOLATION_3 -o podman0 -j DROP"
-    assert "${lines[2]}" == "-A NETAVARK_ISOLATION_3 -j NETAVARK_ISOLATION_2"
+    # check nftables NETAVARK-ISOLATION-3 chain
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-3
+    assert "${lines[2]}" =~ "oifname \"podman0\" drop" "non-isolated container ISOLATION3 drop rule"
+    assert "${lines[3]}" =~ "jump NETAVARK-ISOLATION-2" "final rule in ISOLATION3 is jump to ISOLATION2"
 
     # this should be able to ping non-strict isolated containers
     # from network podman to isolate1
@@ -680,12 +680,12 @@ EOF
     run_netavark --file ${TESTSDIR}/testfiles/isolate1.json teardown $(get_container_netns_path)
 
     # check that isolation rule is deleted
-    run_in_host_netns iptables -nvL NETAVARK_ISOLATION_1
-    assert "${lines[2]}" == "" "NETAVARK_ISOLATION_1 chain should be empty"
-    run_in_host_netns iptables -nvL NETAVARK_ISOLATION_2
-    assert "${lines[2]}" == "" "NETAVARK_ISOLATION_2 chain should be empty"
-    run_in_host_netns iptables -S NETAVARK_ISOLATION_3
-    assert "${lines[1]}" == "-A NETAVARK_ISOLATION_3 -j NETAVARK_ISOLATION_2"
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-1
+    assert "${#lines[@]}" = 4 "too many NETAVARK-ISOLATION-1 rules after teardown"
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-2
+    assert "${#lines[@]}" = 4 "too many NETAVARK-ISOLATION-2 rules after teardown"
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-3
+    assert "${#lines[@]}" = 5 "too many NETAVARK-ISOLATION-3 rules after teardown"
 }
 
 @test "$fw_driver - test read only /proc" {
@@ -828,9 +828,10 @@ EOF
     # check FORWARD rules
     run_in_host_netns nft list chain inet netavark FORWARD
     assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
-    assert "${lines[4]}" =~ "ip daddr 10.88.0.0/16 ct state established,related accept" "Related,established rule"
-    assert "${lines[5]}" =~ "ip saddr 10.88.0.0/16 accept" "Subnet saddr accept rule"
-    assert "${#lines[@]}" = 8 "too many FORWARD rules"
+    assert "${lines[4]}" =~ "jump NETAVARK-ISOLATION-1"
+    assert "${lines[5]}" =~ "ip daddr 10.88.0.0/16 ct state established,related accept" "Related,established rule"
+    assert "${lines[6]}" =~ "ip saddr 10.88.0.0/16 accept" "Subnet saddr accept rule"
+    assert "${#lines[@]}" = 9 "too many FORWARD rules"
 
     run_netavark teardown $(get_container_netns_path 1) <<<"${configs[1]}"
     # bridge should be removed
@@ -838,7 +839,7 @@ EOF
 
     run_in_host_netns nft list chain inet netavark FORWARD
     assert "${lines[3]}" =~ "ct state invalid drop" "forward rule 1"
-    assert "${#lines[@]}" = 6 "too many NETAVARK_FORWARD rules"
+    assert "${#lines[@]}" = 7 "too many NETAVARK_FORWARD rules"
 
     run_in_host_netns ip -o link
     assert "${#lines[@]}" == 1 "only loopback adapter"
@@ -962,7 +963,8 @@ function check_simple_bridge_nftables() {
     # check FORWARD rules
     run_in_host_netns nft list chain inet netavark FORWARD
     assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
-    assert "${lines[4]}" =~ "ip daddr 10.88.0.0/16 ct state established,related accept" "Related,established rule"
-    assert "${lines[5]}" =~ "ip saddr 10.88.0.0/16 accept" "Subnet saddr accept rule"
-    assert "${#lines[@]}" = 8 "too many FORWARD rules"
+    assert "${lines[4]}" =~ "jump NETAVARK-ISOLATION-1"
+    assert "${lines[5]}" =~ "ip daddr 10.88.0.0/16 ct state established,related accept" "Related,established rule"
+    assert "${lines[6]}" =~ "ip saddr 10.88.0.0/16 accept" "Subnet saddr accept rule"
+    assert "${#lines[@]}" = 9 "too many FORWARD rules"
 }

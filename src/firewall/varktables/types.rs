@@ -272,7 +272,7 @@ pub fn get_network_chains<'a>(
     );
     netavark_isolation_chain_3.create = true;
 
-    if let IsolateOption::Nomal | IsolateOption::Strict = isolation {
+    if let IsolateOption::Normal | IsolateOption::Strict = isolation {
         debug!("Add extra isolate rules");
         // NETAVARK_ISOLATION_1
         let mut netavark_isolation_chain_1 = VarkChain::new(
@@ -305,7 +305,7 @@ pub fn get_network_chains<'a>(
             td_policy: Some(TeardownPolicy::OnComplete),
         });
 
-        // NETAVARK_ISOLATION_2 -i bridge_name ! -o bridge_name -j DROP
+        // NETAVARK_ISOLATION_2 -o bridge_name -j DROP
         netavark_isolation_chain_2.build_rule(VarkRule {
             rule: format!("-o {} -j {}", interface_name, "DROP"),
             position: Some(ind),

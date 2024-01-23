@@ -114,6 +114,6 @@ pub struct IPAMAddresses {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum IsolateOption {
     Strict,
-    Nomal,
+    Normal,
     Never,
 }
