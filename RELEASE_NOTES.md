@@ -1,5 +1,12 @@
 # Release Notes
 
+## v1.10.0
+* added an nftables backend that allows its use on systems without iptables installed
+* added command line option to change firewall driver
+* show error if process is in wrong netns
+* removed unessesary unlock lockfile calls
+* updated dependencies
+
 ## v1.9.0
 * add firewalld-reload subcommand
 * bridge: force static mac on bridge interface
