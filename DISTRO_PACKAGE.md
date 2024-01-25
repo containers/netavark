@@ -47,11 +47,6 @@ And then create a cargo config file to point it to the vendor dir.
 tar xvf %{SOURCE}
 mkdir -p .cargo
 cat >.cargo/config << EOF
-[source."git+https://github.com/namib-project/nftables-rs.git?rev=1b0c60b"]
-git = "https://github.com/namib-project/nftables-rs.git"
-rev = "1b0c60b"
-replace-with = "vendored-sources"
-
 [source.crates-io]
 replace-with = "vendored-sources"
 
