@@ -1,5 +1,8 @@
 # Release Notes
 
+## v1.10.1
+* updated nftables to 0.3
+
 ## v1.10.0
 * added an nftables backend that allows its use on systems without iptables installed
 * added command line option to change firewall driver
