@@ -40,7 +40,7 @@ the official packages.
 The vendored sources for netavark will be attached to each netavark release as
 a tarball. You can download them with the following:
 
-`https://github.com/containers/netavark/releases/download/v{version}/netavark-v{version}.tar.gz`
+`https://github.com/containers/netavark/releases/download/v{version}/netavark-v{version}-vendor.tar.gz`
 
 And then create a cargo config file to point it to the vendor dir.
 ```
