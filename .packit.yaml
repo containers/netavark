@@ -49,7 +49,10 @@ jobs:
     dist_git_branches:
       - fedora-all
 
-  - job: bodhi_update
-    trigger: commit
-    dist_git_branches:
-      - fedora-branched # rawhide updates are created automatically
+        # NOTE: Bodhi update tasks are disabled to allow netavark and aardvark-dns X.Y
+        # builds in a single manual bodhi update. Leaving this commented out
+        # but not deleted so it's not forgotten.
+        #- job: bodhi_update
+        #trigger: commit
+        #dist_git_branches:
+        #- fedora-branched # rawhide updates are created automatically

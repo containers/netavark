@@ -19,10 +19,15 @@
 %global debug_package %{nil}
 %endif
 
+# Minimum X.Y dep for aardvark-dns
+%define major_minor %((v=%{version}; echo ${v%.*}))
+
 Name: netavark
 # Set a different Epoch for copr builds
 %if %{defined copr_username}
 Epoch: 102
+%else
+Epoch: 0
 %endif
 Version: 0
 Release: %autorelease
@@ -41,8 +46,8 @@ Source1: %{url}/releases/download/v%{version}/%{name}-v%{version}-vendor.tar.gz
 BuildRequires: cargo
 BuildRequires: %{_bindir}/go-md2man
 # aardvark-dns and %%{name} are usually released in sync
-Recommends: aardvark-dns >= %{version}-1
-Requires: (aardvark-dns >= %{version}-1 if fedora-release-identity-server)
+Recommends: aardvark-dns >= %{epoch}:%{major_minor}
+Requires: (aardvark-dns >=  %{epoch}:%{major_minor} if fedora-release-identity-server)
 Provides: container-network-stack = 2
 BuildRequires: make
 BuildRequires: protobuf-c
