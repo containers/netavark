@@ -146,23 +146,27 @@ impl Aardvark {
         Ok(())
     }
 
-    pub fn notify(&self, start: bool) -> NetavarkResult<()> {
+    pub fn notify(&self, start: bool, is_update: bool) -> NetavarkResult<()> {
         match self.get_aardvark_pid() {
             Ok(pid) => {
                 match signal::kill(Pid::from_raw(pid), Signal::SIGHUP) {
-                    Ok(_) => match self.check_netns(pid) {
-                        Ok(_) => return Ok(()),
-                        Err(e) => {
-                            // If the error is ENOENT it means the process must have died in
-                            // the meantime so drop down below to start a new server process.
-                            if e.kind() != std::io::ErrorKind::NotFound {
-                                return Err(NetavarkError::wrap(
-                                    "check aardvark-dns netns",
-                                    e.into(),
-                                ));
+                    Ok(_) => {
+                        if !is_update {
+                            match self.check_netns(pid) {
+                                Ok(_) => return Ok(()),
+                                Err(e) => {
+                                    // If the error is ENOENT it means the process must have died in
+                                    // the meantime so drop down below to start a new server process.
+                                    if e.kind() != std::io::ErrorKind::NotFound {
+                                        return Err(NetavarkError::wrap(
+                                            "check aardvark-dns netns",
+                                            e.into(),
+                                        ));
+                                    }
+                                }
                             }
                         }
-                    },
+                    }
                     Err(err) => {
                         // ESRCH == process does not exists
                         // start new sever below in that case and not error
@@ -312,7 +316,7 @@ impl Aardvark {
     pub fn commit_netavark_entries(&self, entries: Vec<AardvarkEntry>) -> NetavarkResult<()> {
         if !entries.is_empty() {
             self.commit_entries(entries)?;
-            self.notify(true)?;
+            self.notify(true, false)?;
         }
         Ok(())
     }
@@ -407,7 +411,7 @@ impl Aardvark {
         // If dns servers were updated notify the aardvark-dns server
         // if refresh is needed.
         if dns_servers_modified {
-            self.notify(false)?;
+            self.notify(false, true)?;
         }
 
         Ok(())
@@ -417,6 +421,6 @@ impl Aardvark {
         for entry in &entries {
             self.delete_entry(entry.container_id, entry.network_name)?;
         }
-        self.notify(false)
+        self.notify(false, false)
     }
 }
