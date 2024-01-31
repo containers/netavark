@@ -150,8 +150,11 @@ fw_driver=iptables
     run_helper ps "$aardvark_pid"
     assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p $dns_port run" "aardvark not running or bad options"
 
-    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-network-container-dns-server.json \
+    # Use run_helper instead of run_netavark here to check network namespace detection logic.
+    # See https://github.com/containers/netavark/issues/911 for details.
+    NETAVARK_DNS_PORT="$dns_port" run_helper $NETAVARK --config "$NETAVARK_TMPDIR/config" --rootless "$rootless" --file ${TESTSDIR}/testfiles/dualstack-bridge-network-container-dns-server.json \
         update podman1 --network-dns-servers 8.8.8.8
+    assert "$output" = ""
 
     # check aardvark config and running
     run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
