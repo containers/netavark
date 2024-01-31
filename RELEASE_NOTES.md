@@ -1,5 +1,8 @@
 # Release Notes
 
+## v1.10.2
+* Fixed a bug where netavark update could sometimes fail
+
 ## v1.10.1
 * updated nftables to 0.3
 
