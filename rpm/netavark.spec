@@ -90,19 +90,22 @@ Its features include:
 # dependencies directly from the network.
 %if !%{defined copr_username}
 tar fx %{SOURCE1}
-mkdir -p .cargo
-
-cat >.cargo/config << EOF
-[source.crates-io]
-replace-with = "vendored-sources"
-
-[source.vendored-sources]
-directory = "vendor"
-EOF
+%if 0%{?fedora} || 0%{?rhel} >= 10
+%cargo_prep -v vendor
+%else
+%cargo_prep -V 1
+%endif
 %endif
 
 %build
 %{__make} CARGO="%{__cargo}" build
+%if 0%{?fedora} || 0%{?rhel} >= 10
+%cargo_license_summary
+%{cargo_license} > LICENSE.dependencies
+%if !%{defined copr_username}
+%cargo_vendor_manifest
+%endif
+%endif
 
 cd docs
 %{__make}
@@ -120,6 +123,12 @@ cd docs
 
 %files
 %license LICENSE
+%if 0%{?fedora} || 0%{?rhel} >= 10
+%license LICENSE.dependencies
+%if !%{defined copr_username}
+%license cargo-vendor.txt
+%endif
+%endif
 %dir %{_libexecdir}/podman
 %{_libexecdir}/podman/%{name}*
 %{_mandir}/man1/%{name}.1*
