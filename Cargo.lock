@@ -1351,7 +1351,7 @@ dependencies = [
  "log",
  "mozim",
  "netlink-packet-core",
- "netlink-packet-route",
+ "netlink-packet-route 0.18.1",
  "netlink-packet-utils",
  "netlink-sys",
  "nftables",
@@ -1403,6 +1403,20 @@ name = "netlink-packet-route"
 version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd9ccdfabb457e05c7c61e66eb39262a204fbb376c53968b5e52dce15b423fc5"
+dependencies = [
+ "anyhow",
+ "byteorder",
+ "libc",
+ "log",
+ "netlink-packet-core",
+ "netlink-packet-utils",
+]
+
+[[package]]
+name = "netlink-packet-route"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74c171cd77b4ee8c7708da746ce392440cb7bcf618d122ec9ecc607b12938bf4"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -1468,16 +1482,16 @@ dependencies = [
 
 [[package]]
 name = "nispor"
-version = "1.2.16"
+version = "1.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c9f198b82210da3f72354fb061ca8b683f274ae137cd6d862758bd9b176d047"
+checksum = "ab94247a35ef2d05faadf1f9092e5aa3afcf4a1070ca131f789721af8d76e04a"
 dependencies = [
  "ethtool",
  "futures",
  "libc",
  "log",
  "mptcp-pm",
- "netlink-packet-route",
+ "netlink-packet-route 0.19.0",
  "netlink-packet-utils",
  "netlink-sys",
  "rtnetlink",
@@ -1839,7 +1853,7 @@ dependencies = [
  "futures",
  "log",
  "netlink-packet-core",
- "netlink-packet-route",
+ "netlink-packet-route 0.18.1",
  "netlink-packet-utils",
  "netlink-proto",
  "netlink-sys",
