@@ -156,6 +156,10 @@ fw_driver=iptables
         update podman1 --network-dns-servers 8.8.8.8
     assert "$output" = ""
 
+    # after update the pid should never change
+    aardvark_pid2=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    assert "$aardvark_pid2" == "$aardvark_pid" "aardvark-dns pid after nv update"
+
     # check aardvark config and running
     run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
     assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1 8.8.8.8" "aardvark set to listen to all IPs"
