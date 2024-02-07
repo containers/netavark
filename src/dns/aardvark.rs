@@ -151,18 +151,23 @@ impl Aardvark {
             Ok(pid) => {
                 match signal::kill(Pid::from_raw(pid), Signal::SIGHUP) {
                     Ok(_) => {
-                        if !is_update {
-                            match self.check_netns(pid) {
-                                Ok(_) => return Ok(()),
-                                Err(e) => {
-                                    // If the error is ENOENT it means the process must have died in
-                                    // the meantime so drop down below to start a new server process.
-                                    if e.kind() != std::io::ErrorKind::NotFound {
-                                        return Err(NetavarkError::wrap(
-                                            "check aardvark-dns netns",
-                                            e.into(),
-                                        ));
-                                    }
+                        // We do not want to check the netns when doing an update
+                        // this is not working because podman doe snot enter the
+                        // rootless netns for the update as we only change the file
+                        // and send SIGHUP.
+                        if is_update {
+                            return Ok(());
+                        }
+                        match self.check_netns(pid) {
+                            Ok(_) => return Ok(()),
+                            Err(e) => {
+                                // If the error is ENOENT it means the process must have died in
+                                // the meantime so drop down below to start a new server process.
+                                if e.kind() != std::io::ErrorKind::NotFound {
+                                    return Err(NetavarkError::wrap(
+                                        "check aardvark-dns netns",
+                                        e.into(),
+                                    ));
                                 }
                             }
                         }
