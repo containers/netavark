@@ -1,5 +1,8 @@
 # Release Notes
 
+## v1.10.3
+* Fixed a bug where the netavark update command could sometimes incorrectly start a new Aardvark DNS server instead of restarting the existing server
+
 ## v1.10.2
 * Fixed a bug where netavark update could sometimes fail
 
