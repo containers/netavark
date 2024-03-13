@@ -46,8 +46,7 @@ Source1: %{url}/releases/download/v%{version}/%{name}-v%{version}-vendor.tar.gz
 BuildRequires: cargo
 BuildRequires: %{_bindir}/go-md2man
 # aardvark-dns and %%{name} are usually released in sync
-Recommends: aardvark-dns >= %{epoch}:%{major_minor}
-Requires: (aardvark-dns >=  %{epoch}:%{major_minor} if fedora-release-identity-server)
+Requires: aardvark-dns >=  %{epoch}:%{major_minor}
 Provides: container-network-stack = 2
 BuildRequires: make
 BuildRequires: protobuf-c
