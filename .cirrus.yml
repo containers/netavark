@@ -251,7 +251,7 @@ centos9_build_task:
 
 
 success_task:
-  name: "Total success"
+  name: "Total Success"
   alias: success
   depends_on:
     - "build"
