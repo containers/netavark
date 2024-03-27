@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -44,14 +44,7 @@ fn main() {
 
     // get timestamp
     let now = match env::var("SOURCE_DATE_EPOCH") {
-        Ok(val) => {
-            let naive = match NaiveDateTime::from_timestamp_opt(val.parse::<i64>().unwrap(), 0) {
-                Some(n) => n,
-                None => Utc::now().naive_utc(),
-            };
-            let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive, Utc);
-            datetime
-        }
+        Ok(val) => DateTime::from_timestamp(val.parse::<i64>().unwrap(), 0).unwrap(),
         Err(_) => Utc::now(),
     };
     println!("cargo:rustc-env=BUILD_TIMESTAMP={}", now.to_rfc3339());
