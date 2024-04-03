@@ -127,9 +127,21 @@ impl Aardvark {
         Ok(())
     }
 
-    fn check_netns(&self, pid: pid_t) -> Result<()> {
-        let cur_ns = fs::read_link("/proc/self/ns/net")?;
-        let aardvark_ns = fs::read_link(format!("/proc/{pid}/ns/net"))?;
+    fn check_netns(&self, pid: pid_t) {
+        // This should never fail but ignore errors anyway
+        let cur_ns = match fs::read_link("/proc/self/ns/net") {
+            Ok(p) => p,
+            Err(_) => return,
+        };
+        // This might fail
+        let aardvark_ns = match fs::read_link(format!("/proc/{pid}/ns/net")) {
+            Ok(p) => p,
+            // In case of errors ignore them and do not warn. When the process is exiting then
+            // several different errors can happen. I have observed ENOENT, ESRCH and EACCES so
+            // to be safe just ignore all errors as this warning here is just best effort anyway.
+            // https://github.com/containers/podman/issues/22103
+            Err(_) => return,
+        };
 
         if aardvark_ns != cur_ns {
             // netns does not match, this means dns will not work.
@@ -142,8 +154,6 @@ impl Aardvark {
                 self.config.display()
             );
         }
-
-        Ok(())
     }
 
     pub fn notify(&self, start: bool, is_update: bool) -> NetavarkResult<()> {
@@ -152,25 +162,13 @@ impl Aardvark {
                 match signal::kill(Pid::from_raw(pid), Signal::SIGHUP) {
                     Ok(_) => {
                         // We do not want to check the netns when doing an update
-                        // this is not working because podman doe snot enter the
+                        // this is not working because podman does not enter the
                         // rootless netns for the update as we only change the file
                         // and send SIGHUP.
-                        if is_update {
-                            return Ok(());
+                        if !is_update {
+                            self.check_netns(pid)
                         }
-                        match self.check_netns(pid) {
-                            Ok(_) => return Ok(()),
-                            Err(e) => {
-                                // If the error is ENOENT it means the process must have died in
-                                // the meantime so drop down below to start a new server process.
-                                if e.kind() != std::io::ErrorKind::NotFound {
-                                    return Err(NetavarkError::wrap(
-                                        "check aardvark-dns netns",
-                                        e.into(),
-                                    ));
-                                }
-                            }
-                        }
+                        return Ok(());
                     }
                     Err(err) => {
                         // ESRCH == process does not exists
