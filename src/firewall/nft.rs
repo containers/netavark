@@ -381,10 +381,10 @@ impl firewall::FirewallDriver for Nftables {
                         get_subnet_match(&subnet, "saddr", stmt::Operator::EQ),
                         stmt::Statement::Match(stmt::Match {
                             left: expr::Expression::Named(expr::NamedExpression::Payload(
-                                expr::Payload {
+                                expr::Payload::PayloadField(expr::PayloadField {
                                     protocol: "udp".to_string(),
                                     field: "dport".to_string(),
-                                },
+                                }),
                             )),
                             right: expr::Expression::Number(53),
                             op: stmt::Operator::EQ,
@@ -888,10 +888,12 @@ fn ip_to_payload(addr: &IpAddr, field: &str) -> expr::Expression {
         IpAddr::V6(_) => "ip6".to_string(),
     };
 
-    expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload {
-        protocol: proto,
-        field: field.to_string(),
-    }))
+    expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload::PayloadField(
+        expr::PayloadField {
+            protocol: proto,
+            field: field.to_string(),
+        },
+    )))
 }
 
 /// Get a statement to match the given subnet.
@@ -916,20 +918,24 @@ fn subnet_to_payload(net: &IpNet, field: &str) -> expr::Expression {
         IpNet::V6(_) => "ip6".to_string(),
     };
 
-    expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload {
-        protocol: proto,
-        field: field.to_string(),
-    }))
+    expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload::PayloadField(
+        expr::PayloadField {
+            protocol: proto,
+            field: field.to_string(),
+        },
+    )))
 }
 
 /// Get a condition to match destination port/ports based on a given PortMapping.
 /// Properly handles port ranges, protocol, etc.
 fn get_dport_cond(port: &PortMapping) -> stmt::Statement {
     stmt::Statement::Match(stmt::Match {
-        left: expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload {
-            protocol: port.protocol.clone(),
-            field: "dport".to_string(),
-        })),
+        left: expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload::PayloadField(
+            expr::PayloadField {
+                protocol: port.protocol.clone(),
+                field: "dport".to_string(),
+            },
+        ))),
         right: if port.range > 1 {
             // Ranges are a vector with a length of 2.
             // First value start, second value end.
@@ -989,10 +995,12 @@ fn get_dnat_port_rules(
             statements.push(stmt.clone());
         }
         statements.push(stmt::Statement::Match(stmt::Match {
-            left: expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload {
-                protocol: port.protocol.clone(),
-                field: "dport".to_string(),
-            })),
+            left: expr::Expression::Named(expr::NamedExpression::Payload(
+                expr::Payload::PayloadField(expr::PayloadField {
+                    protocol: port.protocol.clone(),
+                    field: "dport".to_string(),
+                }),
+            )),
             right: expr::Expression::Number(host_port),
             op: stmt::Operator::EQ,
         }));
@@ -1118,10 +1126,12 @@ fn make_dns_dnat_rule(dns_ip: &IpAddr, dns_port: u16) -> schema::NfListObject {
         vec![
             get_ip_match(dns_ip, "daddr", stmt::Operator::EQ),
             stmt::Statement::Match(stmt::Match {
-                left: expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload {
-                    protocol: "udp".to_string(),
-                    field: "dport".to_string(),
-                })),
+                left: expr::Expression::Named(expr::NamedExpression::Payload(
+                    expr::Payload::PayloadField(expr::PayloadField {
+                        protocol: "udp".to_string(),
+                        field: "dport".to_string(),
+                    }),
+                )),
                 right: expr::Expression::Number(53),
                 op: stmt::Operator::EQ,
             }),
