@@ -91,7 +91,7 @@ impl firewall::FirewallDriver for Nftables {
 
         // dnat rules. Not used here, but need to be created first, because they have rules that must be first in their chains.
         // A lot of these are thus conditional on if the rule already exists or not.
-        let existing_rules = helper::get_current_ruleset(None, None)?;
+        let existing_rules = get_netavark_rules()?;
 
         // Two extra chains, not hooked to anything, for our NAT pf rules
         batch.add(make_basic_chain(DNATCHAIN));
@@ -441,7 +441,7 @@ impl firewall::FirewallDriver for Nftables {
     fn teardown_network(&self, tear: internal_types::TearDownNetwork) -> NetavarkResult<()> {
         let mut batch = Batch::new();
 
-        let existing_rules = helper::get_current_ruleset(None, None)?;
+        let existing_rules = get_netavark_rules()?;
 
         if let Some(nets) = tear.config.subnets {
             for subnet in nets {
@@ -545,7 +545,7 @@ impl firewall::FirewallDriver for Nftables {
     ) -> NetavarkResult<()> {
         let mut batch = Batch::new();
 
-        let existing_rules = helper::get_current_ruleset(None, None)?;
+        let existing_rules = get_netavark_rules()?;
 
         // Need DNAT rules for DNS if Aardvark is not on port 53.
         // Only need one per DNS server IP, so check if they already exist first.
@@ -630,7 +630,7 @@ impl firewall::FirewallDriver for Nftables {
     ) -> NetavarkResult<()> {
         let mut batch = Batch::new();
 
-        let existing_rules = helper::get_current_ruleset(None, None)?;
+        let existing_rules = get_netavark_rules()?;
 
         let dnat_chain_v4 = teardown_pf
             .config
@@ -1256,9 +1256,6 @@ fn get_matching_rules_in_chain<F: Fn(&schema::Rule) -> bool>(
             schema::NfObject::CmdObject(_) => continue,
             schema::NfObject::ListObject(obj) => match obj {
                 schema::NfListObject::Rule(r) => {
-                    if r.table != *TABLENAME {
-                        continue;
-                    }
                     if r.chain != *chain {
                         continue;
                     }
@@ -1283,9 +1280,6 @@ fn get_chain(base_rules: &schema::Nftables, chain: &str) -> Option<schema::Chain
             schema::NfObject::CmdObject(_) => continue,
             schema::NfObject::ListObject(obj) => match obj {
                 schema::NfListObject::Chain(c) => {
-                    if c.table != *TABLENAME {
-                        continue;
-                    }
                     if c.name == *chain {
                         log::debug!("Found chain {}", chain);
                         return Some(c.clone());
@@ -1297,4 +1291,29 @@ fn get_chain(base_rules: &schema::Nftables, chain: &str) -> Option<schema::Chain
     }
 
     None
+}
+
+fn get_netavark_rules() -> Result<schema::Nftables, helper::NftablesError> {
+    match helper::get_current_ruleset(None, Some(vec!["list", "table", "inet", TABLENAME])) {
+        Ok(rules) => Ok(rules),
+        Err(err) => match err {
+            helper::NftablesError::NftFailed {
+                program: _,
+                hint: _,
+                stdout: _,
+                ref stderr,
+            } => {
+                // OK this is hacky but seems to work, when we run the first time after the boot the
+                // netavark table does not exists to the list table call will fail (nft exit code 1).
+                // Just return an empty ruleset in this case.
+                if stderr.contains("No such file or directory") {
+                    Ok(schema::Nftables { objects: vec![] })
+                } else {
+                    Err(err)
+                }
+            }
+
+            err => Err(err),
+        },
+    }
 }
