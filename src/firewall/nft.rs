@@ -91,7 +91,7 @@ impl firewall::FirewallDriver for Nftables {
 
         // dnat rules. Not used here, but need to be created first, because they have rules that must be first in their chains.
         // A lot of these are thus conditional on if the rule already exists or not.
-        let existing_rules = helper::get_current_ruleset(None, None)?;
+        let existing_rules = get_netavark_rules()?;
 
         // Two extra chains, not hooked to anything, for our NAT pf rules
         batch.add(make_basic_chain(DNATCHAIN));
@@ -381,10 +381,10 @@ impl firewall::FirewallDriver for Nftables {
                         get_subnet_match(&subnet, "saddr", stmt::Operator::EQ),
                         stmt::Statement::Match(stmt::Match {
                             left: expr::Expression::Named(expr::NamedExpression::Payload(
-                                expr::Payload {
+                                expr::Payload::PayloadField(expr::PayloadField {
                                     protocol: "udp".to_string(),
                                     field: "dport".to_string(),
-                                },
+                                }),
                             )),
                             right: expr::Expression::Number(53),
                             op: stmt::Operator::EQ,
@@ -441,7 +441,7 @@ impl firewall::FirewallDriver for Nftables {
     fn teardown_network(&self, tear: internal_types::TearDownNetwork) -> NetavarkResult<()> {
         let mut batch = Batch::new();
 
-        let existing_rules = helper::get_current_ruleset(None, None)?;
+        let existing_rules = get_netavark_rules()?;
 
         if let Some(nets) = tear.config.subnets {
             for subnet in nets {
@@ -545,7 +545,7 @@ impl firewall::FirewallDriver for Nftables {
     ) -> NetavarkResult<()> {
         let mut batch = Batch::new();
 
-        let existing_rules = helper::get_current_ruleset(None, None)?;
+        let existing_rules = get_netavark_rules()?;
 
         // Need DNAT rules for DNS if Aardvark is not on port 53.
         // Only need one per DNS server IP, so check if they already exist first.
@@ -630,7 +630,7 @@ impl firewall::FirewallDriver for Nftables {
     ) -> NetavarkResult<()> {
         let mut batch = Batch::new();
 
-        let existing_rules = helper::get_current_ruleset(None, None)?;
+        let existing_rules = get_netavark_rules()?;
 
         let dnat_chain_v4 = teardown_pf
             .config
@@ -888,10 +888,12 @@ fn ip_to_payload(addr: &IpAddr, field: &str) -> expr::Expression {
         IpAddr::V6(_) => "ip6".to_string(),
     };
 
-    expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload {
-        protocol: proto,
-        field: field.to_string(),
-    }))
+    expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload::PayloadField(
+        expr::PayloadField {
+            protocol: proto,
+            field: field.to_string(),
+        },
+    )))
 }
 
 /// Get a statement to match the given subnet.
@@ -916,20 +918,24 @@ fn subnet_to_payload(net: &IpNet, field: &str) -> expr::Expression {
         IpNet::V6(_) => "ip6".to_string(),
     };
 
-    expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload {
-        protocol: proto,
-        field: field.to_string(),
-    }))
+    expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload::PayloadField(
+        expr::PayloadField {
+            protocol: proto,
+            field: field.to_string(),
+        },
+    )))
 }
 
 /// Get a condition to match destination port/ports based on a given PortMapping.
 /// Properly handles port ranges, protocol, etc.
 fn get_dport_cond(port: &PortMapping) -> stmt::Statement {
     stmt::Statement::Match(stmt::Match {
-        left: expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload {
-            protocol: port.protocol.clone(),
-            field: "dport".to_string(),
-        })),
+        left: expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload::PayloadField(
+            expr::PayloadField {
+                protocol: port.protocol.clone(),
+                field: "dport".to_string(),
+            },
+        ))),
         right: if port.range > 1 {
             // Ranges are a vector with a length of 2.
             // First value start, second value end.
@@ -989,10 +995,12 @@ fn get_dnat_port_rules(
             statements.push(stmt.clone());
         }
         statements.push(stmt::Statement::Match(stmt::Match {
-            left: expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload {
-                protocol: port.protocol.clone(),
-                field: "dport".to_string(),
-            })),
+            left: expr::Expression::Named(expr::NamedExpression::Payload(
+                expr::Payload::PayloadField(expr::PayloadField {
+                    protocol: port.protocol.clone(),
+                    field: "dport".to_string(),
+                }),
+            )),
             right: expr::Expression::Number(host_port),
             op: stmt::Operator::EQ,
         }));
@@ -1118,10 +1126,12 @@ fn make_dns_dnat_rule(dns_ip: &IpAddr, dns_port: u16) -> schema::NfListObject {
         vec![
             get_ip_match(dns_ip, "daddr", stmt::Operator::EQ),
             stmt::Statement::Match(stmt::Match {
-                left: expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload {
-                    protocol: "udp".to_string(),
-                    field: "dport".to_string(),
-                })),
+                left: expr::Expression::Named(expr::NamedExpression::Payload(
+                    expr::Payload::PayloadField(expr::PayloadField {
+                        protocol: "udp".to_string(),
+                        field: "dport".to_string(),
+                    }),
+                )),
                 right: expr::Expression::Number(53),
                 op: stmt::Operator::EQ,
             }),
@@ -1246,9 +1256,6 @@ fn get_matching_rules_in_chain<F: Fn(&schema::Rule) -> bool>(
             schema::NfObject::CmdObject(_) => continue,
             schema::NfObject::ListObject(obj) => match obj {
                 schema::NfListObject::Rule(r) => {
-                    if r.table != *TABLENAME {
-                        continue;
-                    }
                     if r.chain != *chain {
                         continue;
                     }
@@ -1273,9 +1280,6 @@ fn get_chain(base_rules: &schema::Nftables, chain: &str) -> Option<schema::Chain
             schema::NfObject::CmdObject(_) => continue,
             schema::NfObject::ListObject(obj) => match obj {
                 schema::NfListObject::Chain(c) => {
-                    if c.table != *TABLENAME {
-                        continue;
-                    }
                     if c.name == *chain {
                         log::debug!("Found chain {}", chain);
                         return Some(c.clone());
@@ -1287,4 +1291,29 @@ fn get_chain(base_rules: &schema::Nftables, chain: &str) -> Option<schema::Chain
     }
 
     None
+}
+
+fn get_netavark_rules() -> Result<schema::Nftables, helper::NftablesError> {
+    match helper::get_current_ruleset(None, Some(vec!["list", "table", "inet", TABLENAME])) {
+        Ok(rules) => Ok(rules),
+        Err(err) => match err {
+            helper::NftablesError::NftFailed {
+                program: _,
+                hint: _,
+                stdout: _,
+                ref stderr,
+            } => {
+                // OK this is hacky but seems to work, when we run the first time after the boot the
+                // netavark table does not exists to the list table call will fail (nft exit code 1).
+                // Just return an empty ruleset in this case.
+                if stderr.contains("No such file or directory") {
+                    Ok(schema::Nftables { objects: vec![] })
+                } else {
+                    Err(err)
+                }
+            }
+
+            err => Err(err),
+        },
+    }
 }
