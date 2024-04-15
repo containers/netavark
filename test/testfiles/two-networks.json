@@ -3,7 +3,7 @@
     "container_name": "heuristic_archimedes",
     "port_mappings": [
         {
-          "host_ip": "127.0.0.1",
+          "host_ip": "",
           "container_port": 8080,
           "host_port": 8080,
           "range": 1,

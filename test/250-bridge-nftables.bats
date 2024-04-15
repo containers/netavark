@@ -696,6 +696,8 @@ EOF
     # when the sysctl value is already set correctly we should not error
     run_in_host_netns sh -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
     run_in_container_netns sh -c "echo 1 > /proc/sys/net/ipv4/conf/default/arp_notify"
+    run_in_host_netns sh -c "echo 2 > /proc/sys/net/ipv4/conf/default/rp_filter"
+    run_in_container_netns sh -c "echo 2 > /proc/sys/net/ipv4/conf/default/rp_filter"
     run_in_host_netns mount -t proc -o ro,nosuid,nodev,noexec proc /proc
 
     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
