@@ -570,6 +570,17 @@ fn create_interfaces(
                     CoreUtils::apply_sysctl_value(br_accept_ra, "0")?;
                 }
 
+                // Disable strict reverse path search validation. On RHEL it is set to strict mode
+                // which breaks port forwarding when multiple networks are attached as the package
+                // may be routed over a different interface on the reverse path.
+                // As documented for the sysctl for complicated or asymmetric routing loose mode (2)
+                // is recommended.
+                let br_rp_filter = format!(
+                    "/proc/sys/net/ipv4/conf/{}/rp_filter",
+                    &data.bridge_interface_name
+                );
+                CoreUtils::apply_sysctl_value(br_rp_filter, "2")?;
+
                 let link = host
                     .get_link(netlink::LinkID::Name(
                         data.bridge_interface_name.to_string(),
@@ -690,6 +701,13 @@ fn create_veth_pair<'fd>(
             &data.container_interface_name
         );
         core_utils::CoreUtils::apply_sysctl_value(enable_arp_notify, "1")?;
+
+        // disable strict reverse path search validation
+        let rp_filter = format!(
+            "/proc/sys/net/ipv4/conf/{}/rp_filter",
+            &data.container_interface_name
+        );
+        CoreUtils::apply_sysctl_value(rp_filter, "2")?;
         Ok::<(), NetavarkError>(())
     });
     // check the result and return error

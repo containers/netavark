@@ -554,6 +554,35 @@ fw_driver=iptables
     test_port_fw ip=6 proto=udp hostip="fd65:8371:648b:0c06::1"
 }
 
+# Test that port forwarding works with strict Reverse Path Forwarding enabled on the host
+@test "$fw_driver - port forwarding with two networks and RPF - tcp" {
+    # First, enable strict RPF on host/container ns.
+    run_in_host_netns sysctl -w net.ipv4.conf.all.rp_filter=1
+    run_in_host_netns sysctl -w net.ipv4.conf.default.rp_filter=1
+    run_in_container_netns sysctl -w net.ipv4.conf.all.rp_filter=1
+    run_in_container_netns sysctl -w net.ipv4.conf.default.rp_filter=1
+
+    # We need a dummy interface with a host ip,
+    # if we connect directly to the bridge ip it doesn't reproduce.
+    add_dummy_interface_on_host dummy0 "10.0.0.1/24"
+
+    run_netavark --file ${TESTSDIR}/testfiles/two-networks.json setup $(get_container_netns_path)
+    result="$output"
+
+    run_in_host_netns cat /proc/sys/net/ipv4/conf/podman2/rp_filter
+    assert "2" "rp_filter podman2 bridge"
+    run_in_host_netns cat /proc/sys/net/ipv4/conf/podman3/rp_filter
+    assert "2" "rp_filter podman3 bridge"
+
+    run_in_container_netns cat /proc/sys/net/ipv4/conf/eth0/rp_filter
+    assert "2" "rp_filter eth0 interface"
+    run_in_container_netns cat /proc/sys/net/ipv4/conf/eth1/rp_filter
+    assert "2" "rp_filter eth1 interface"
+
+    # Important: Use the "host" ip here and not localhost or bridge ip.
+    run_nc_test "0" "tcp" 8080 "10.0.0.1" 8080
+}
+
 @test "bridge ipam none" {
            read -r -d '\0' config <<EOF
 {
@@ -789,6 +818,8 @@ EOF
     # when the sysctl value is already set correctly we should not error
     run_in_host_netns sh -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
     run_in_container_netns sh -c "echo 1 > /proc/sys/net/ipv4/conf/default/arp_notify"
+    run_in_host_netns sh -c "echo 2 > /proc/sys/net/ipv4/conf/default/rp_filter"
+    run_in_container_netns sh -c "echo 2 > /proc/sys/net/ipv4/conf/default/rp_filter"
     run_in_host_netns mount -t proc -o ro,nosuid,nodev,noexec proc /proc
 
     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
