@@ -203,6 +203,7 @@ impl driver::NetworkDriver for Bridge<'_> {
                 container_ips_v6: ipv6,
                 container_names: names,
                 container_dns_servers: self.info.container_dns_servers,
+                is_internal: self.info.network.internal,
             })
         } else {
             // If --dns-enable=false and --dns was set then return following DNS servers
