@@ -30,7 +30,7 @@ default = ["serde", "deps-serde"]
 deps-serde = ["chrono/serde", "url/serde"]
 
 [dependencies]
-anyhow = "1.0"
+anyhow = "1.0.82"
 clap = { version = "~4.4.12", features = ["derive", "env"] }
 env_logger = "0.11.3"
 ipnet = { version = "2", features = ["serde"] }
