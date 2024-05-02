@@ -35,7 +35,7 @@ clap = { version = "~4.4.12", features = ["derive", "env"] }
 env_logger = "0.11.3"
 ipnet = { version = "2", features = ["serde"] }
 iptables = "0.5.1"
-libc = "0.2"
+libc = "0.2.154"
 log = "0.4.21"
 serde = { version = "1.0.199", features = ["derive"], optional = true }
 serde-value = "0.7.0"
