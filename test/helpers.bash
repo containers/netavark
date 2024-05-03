@@ -621,17 +621,18 @@ function run_nc_test() {
     local host_port=$5
 
     local nc_common_args=""
-    local stdin=/dev/null
+    exec {stdin}<>/dev/null
 
     case $proto in
     tcp) ;; # nothing to do (default)
     udp) nc_common_args=--udp ;;
     sctp)
         nc_common_args=--sctp
-        # for some reason we have to attach STDIN to the server only for the sctp proto
-        # otherwise it will just exit for unknown reasons. However we must not add STDIN
-        # to udp and tcp otherwise those tests will fail.
-        stdin=/dev/zero
+        # For some reason we have to attach a empty STDIN (not /dev/null and not something with data in it)
+        # to the server only for the sctp proto otherwise it will just exit for weird reasons.
+        # As such create a empty anonymous pipe to work around that.
+        # https://github.com/nmap/nmap/issues/2829
+        exec {stdin}<> <(:)
         ;;
     *) die "unknown port proto '$proto'" ;;
     esac
@@ -644,7 +645,7 @@ function run_nc_test() {
     fi
 
     nsenter -n -t "${CONTAINER_NS_PIDS[$container_ns]}" timeout --foreground -v --kill=10 5 \
-        nc $nc_common_args -l -p $container_port &>"$NETAVARK_TMPDIR/nc-out" <$stdin &
+        nc $nc_common_args -l -p $container_port &>"$NETAVARK_TMPDIR/nc-out" <&$stdin &
 
     # make sure to wait until port is bound otherwise test can flake
     # https://github.com/containers/netavark/issues/433
@@ -661,6 +662,9 @@ function run_nc_test() {
 
     got=$(cat "$NETAVARK_TMPDIR/nc-out")
     assert "$got" == "$data" "ncat received data"
+
+    # close the fd
+    exec {stdin}>&-
 }
 
 #################
