@@ -42,20 +42,18 @@ pub fn get_dhcp_lease(
         container_iface: container_network_interface.to_string(),
         container_mac_addr: container_macvlan_mac.to_string(),
     };
-    let lease = match {
-        tokio::task::LocalSet::new().block_on(
-            match &tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .build()
-            {
-                Ok(r) => r,
-                Err(e) => {
-                    return Err(NetavarkError::msg(format!("unable to build thread: {e}")));
-                }
-            },
-            nvp_config.get_lease(DEFAULT_UDS_PATH),
-        )
-    } {
+    let lease = match tokio::task::LocalSet::new().block_on(
+        match &tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .build()
+        {
+            Ok(r) => r,
+            Err(e) => {
+                return Err(NetavarkError::msg(format!("unable to build thread: {e}")));
+            }
+        },
+        nvp_config.get_lease(DEFAULT_UDS_PATH),
+    ) {
         Ok(l) => l,
         Err(e) => {
             return Err(NetavarkError::msg(format!("unable to obtain lease: {e}")));
@@ -114,20 +112,18 @@ pub fn release_dhcp_lease(
         container_iface: container_network_interface.to_string(),
         container_mac_addr: container_macvlan_mac.to_string(),
     };
-    match {
-        tokio::task::LocalSet::new().block_on(
-            match &tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .build()
-            {
-                Ok(r) => r,
-                Err(e) => {
-                    return Err(NetavarkError::msg(format!("unable to build thread: {e}")));
-                }
-            },
-            nvp_config.drop_lease(DEFAULT_UDS_PATH),
-        )
-    } {
+    match tokio::task::LocalSet::new().block_on(
+        match &tokio::runtime::Builder::new_current_thread()
+            .enable_io()
+            .build()
+        {
+            Ok(r) => r,
+            Err(e) => {
+                return Err(NetavarkError::msg(format!("unable to build thread: {e}")));
+            }
+        },
+        nvp_config.drop_lease(DEFAULT_UDS_PATH),
+    ) {
         Ok(_) => {}
         Err(e) => {
             return Err(NetavarkError::Message(e.to_string()));

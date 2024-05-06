@@ -40,9 +40,9 @@ impl CustomErr for ProxyError {
     }
 }
 
-impl ToString for ProxyError {
-    fn to_string(&self) -> String {
-        self.0.to_string()
+impl std::fmt::Display for ProxyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

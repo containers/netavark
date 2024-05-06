@@ -12,35 +12,8 @@ use crate::network::netlink;
 use crate::network::netlink::Socket;
 use ipnet::IpNet;
 use log::debug;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr};
 use std::str::FromStr;
-
-trait IpConv {
-    fn to_v4(&self) -> Result<&Ipv4Addr, ProxyError>;
-    fn to_v6(&self) -> Result<&Ipv6Addr, ProxyError>;
-}
-
-// Simple implementation for converting from IPAddr to
-// specific IP type
-impl IpConv for IpAddr {
-    fn to_v4(&self) -> Result<&Ipv4Addr, ProxyError> {
-        match self {
-            IpAddr::V4(ip) => Ok(ip),
-            IpAddr::V6(_) => Err(ProxyError::new(
-                "invalid value for ipv4 conversion".to_string(),
-            )),
-        }
-    }
-
-    fn to_v6(&self) -> Result<&Ipv6Addr, ProxyError> {
-        match self {
-            IpAddr::V4(_) => Err(ProxyError::new(
-                "invalid value for ipv6 conversion".to_string(),
-            )),
-            IpAddr::V6(ip) => Ok(ip),
-        }
-    }
-}
 
 /*
    Information that came back in the DHCP lease like name_servers,
@@ -63,7 +36,6 @@ trait Address<T> {
         Self: Sized;
     fn add_ip(&self, nls: &mut Socket) -> Result<(), ProxyError>;
     fn add_gws(&self, nls: &mut Socket) -> Result<(), ProxyError>;
-    fn remove(self) -> Result<(), ProxyError>;
 }
 
 fn handle_gws(g: Vec<String>, netmask: &str) -> Result<Vec<IpNet>, ProxyError> {
@@ -122,7 +94,7 @@ impl Address<Ipv4Addr> for MacVLAN {
         let gateways = match handle_gws(l.gateways.clone(), &l.subnet_mask) {
             Ok(g) => g,
             Err(e) => {
-                return Err(ProxyError::new(format!("bad gateways: {}", e.to_string())));
+                return Err(ProxyError::new(format!("bad gateways: {}", e)));
             }
         };
         let prefix_length = match get_prefix_length_v4(&l.subnet_mask) {
@@ -157,15 +129,6 @@ impl Address<Ipv4Addr> for MacVLAN {
             Ok(_) => Ok(()),
             Err(e) => Err(ProxyError::new(e.to_string())),
         }
-    }
-
-    /*
-       For now, nv will remove the interface; this causes all IP stuff
-       to fold.
-    */
-    fn remove(self) -> Result<(), ProxyError> {
-        debug!("removing interface {}", self.interface);
-        todo!()
     }
 }
 
