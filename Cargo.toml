@@ -39,7 +39,7 @@ libc = "0.2.154"
 log = "0.4.21"
 serde = { version = "1.0.199", features = ["derive"], optional = true }
 serde-value = "0.7.0"
-serde_json = "1.0.116"
+serde_json = "1.0.117"
 sysctl = "0.5.5"
 url = "2.5.0"
 zbus = { version = "3.15.2" }
