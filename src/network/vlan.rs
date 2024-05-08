@@ -307,7 +307,7 @@ fn setup(
                     let random = Alphanumeric.sample_string(&mut rand::thread_rng(), 10);
                     let tmp_name = "mv-".to_string() + &random;
                     let mut opts = opts.clone();
-                    opts.name = tmp_name.clone();
+                    opts.name.clone_from(&tmp_name);
                     result = host.create_link(opts);
                     if let Err(ref e) = result {
                         // if last element return directly

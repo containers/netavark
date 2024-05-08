@@ -9,7 +9,7 @@ use g_rpc::netavark_proxy_client::NetavarkProxyClient;
 use log::debug;
 use std::fs::File;
 use std::net::AddrParseError;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::Ipv4Addr;
 use std::str::FromStr;
 use tokio::net::UnixStream;
 use tonic::transport::{Channel, Endpoint, Uri};
@@ -271,7 +271,6 @@ impl NetworkConfig {
 
 trait VectorConv {
     fn to_v4_addrs(&self) -> Result<Option<Vec<Ipv4Addr>>, AddrParseError>;
-    fn to_v6_addrs(&self) -> Result<Option<Vec<Ipv6Addr>>, AddrParseError>;
 }
 
 impl VectorConv for Vec<String> {
@@ -282,20 +281,6 @@ impl VectorConv for Vec<String> {
         let mut out_addrs = Vec::new();
         for ip in self {
             match Ipv4Addr::from_str(ip) {
-                Ok(i) => out_addrs.push(i),
-                Err(e) => return Err(e),
-            };
-        }
-        Ok(Some(out_addrs))
-    }
-
-    fn to_v6_addrs(&self) -> Result<Option<Vec<Ipv6Addr>>, AddrParseError> {
-        if self.is_empty() {
-            return Ok(None);
-        }
-        let mut out_addrs = Vec::new();
-        for ip in self {
-            match Ipv6Addr::from_str(ip) {
                 Ok(i) => out_addrs.push(i),
                 Err(e) => return Err(e),
             };

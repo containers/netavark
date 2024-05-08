@@ -202,6 +202,7 @@ impl Aardvark {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&lockfile_path)
         {
             Ok(file) => file,
@@ -355,7 +356,7 @@ impl Aardvark {
     pub fn modify_network_dns_servers(
         &self,
         network_name: &str,
-        network_dns_servers: &Vec<String>,
+        network_dns_servers: &[String],
     ) -> NetavarkResult<()> {
         let mut dns_servers_modified = false;
         let path = Path::new(&self.config).join(network_name);
