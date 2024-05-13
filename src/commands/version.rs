@@ -11,6 +11,7 @@ struct Info {
     commit: &'static str,
     build_time: &'static str,
     target: &'static str,
+    default_fw_driver: &'static str,
 }
 
 impl Version {
@@ -20,6 +21,7 @@ impl Version {
             commit: env!("GIT_COMMIT"),
             build_time: env!("BUILD_TIMESTAMP"),
             target: env!("BUILD_TARGET"),
+            default_fw_driver: env!("DEFAULT_FW"),
         };
 
         let out = serde_json::to_string_pretty(&info)?;

@@ -71,9 +71,7 @@ fn get_firewall_impl(driver_name: Option<String>) -> NetavarkResult<FirewallImpl
         }
     }
 
-    // Until firewalld 1.1.0 with support for self-port forwarding lands:
-    // Just use iptables
-    Ok(FirewallImpl::Iptables)
+    get_default_fw_impl()
 
     // Is firewalld running?
     // let conn = match Connection::system() {
@@ -90,6 +88,21 @@ fn get_firewall_impl(driver_name: Option<String>) -> NetavarkResult<FirewallImpl
     //     Ok(_) => FirewallImpl::Firewalld(conn),
     //     Err(_) => FirewallImpl::Iptables,
     // }
+}
+
+#[cfg(default_fw = "nftables")]
+fn get_default_fw_impl() -> NetavarkResult<FirewallImpl> {
+    Ok(FirewallImpl::Nftables)
+}
+
+#[cfg(default_fw = "iptables")]
+fn get_default_fw_impl() -> NetavarkResult<FirewallImpl> {
+    Ok(FirewallImpl::Iptables)
+}
+
+#[cfg(default_fw = "none")]
+fn get_default_fw_impl() -> NetavarkResult<FirewallImpl> {
+    Ok(FirewallImpl::Fwnone)
 }
 
 /// Get the preferred firewall implementation for the current system
