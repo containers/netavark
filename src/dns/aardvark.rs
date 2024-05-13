@@ -29,6 +29,7 @@ pub struct AardvarkEntry<'a> {
     pub container_ips_v6: Vec<Ipv6Addr>,
     pub container_names: Vec<String>,
     pub container_dns_servers: &'a Option<Vec<IpAddr>>,
+    pub is_internal: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -221,7 +222,12 @@ impl Aardvark {
         }
 
         for entry in &entries {
-            let path = Path::new(&self.config).join(entry.network_name);
+            let mut path = Path::new(&self.config).join(entry.network_name);
+            if entry.is_internal {
+                let new_path = Path::new(&self.config).join(entry.network_name.to_owned() + "%int");
+                let _ = std::fs::rename(&path, &new_path);
+                path = new_path;
+            }
 
             let file = match OpenOptions::new().write(true).create_new(true).open(&path) {
                 Ok(mut f) => {
@@ -326,7 +332,11 @@ impl Aardvark {
     }
 
     pub fn delete_entry(&self, container_id: &str, network_name: &str) -> Result<()> {
-        let path = Path::new(&self.config).join(network_name);
+        let mut path = Path::new(&self.config).join(network_name);
+        if !path.exists() {
+            path = Path::new(&self.config).join(network_name.to_owned() + "%int");
+        }
+
         let file_content = fs::read_to_string(&path)?;
         let lines: Vec<&str> = file_content.split_terminator('\n').collect();
 

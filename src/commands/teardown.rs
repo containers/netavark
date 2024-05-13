@@ -57,6 +57,7 @@ impl Teardown {
                     container_ips_v6: Vec::new(),
                     container_names: Vec::new(),
                     container_dns_servers: &None,
+                    is_internal: network.internal,
                 });
             }
         }
