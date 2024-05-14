@@ -22,6 +22,15 @@
 # Minimum X.Y dep for aardvark-dns
 %define major_minor %((v=%{version}; echo ${v%.*}))
 
+# Set default firewall to nftables on CentOS Stream 10+, RHEL 10+
+# and default to iptables on all other environments
+# The `rhel` macro is defined on CentOS Stream, RHEL as well as Fedora ELN.
+%if %{defined rhel} && 0%{?rhel} >= 10
+%define default_fw nftables
+%else
+%define default_fw iptables
+%endif
+
 Name: netavark
 # Set a different Epoch for copr builds
 %if %{defined copr_username}
@@ -101,7 +110,7 @@ EOF
 %endif
 
 %build
-%{__make} CARGO="%{__cargo}" build
+NETAVARK_DEFAULT_FW=%{default_fw} %{__make} CARGO="%{__cargo}" build
 
 cd docs
 %{__make}
