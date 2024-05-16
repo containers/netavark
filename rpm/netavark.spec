@@ -2,14 +2,6 @@
 # Latest upstream rtnetlink frequently required
 # sha2, zbus, zvariant are currently out of date
 
-# RHEL doesn't include the package rust-packaging which provides %%__cargo macro, but EPEL
-# does. So we set it separately here and skip rust-packaging dependency for RHEL.
-# Buildability without EPEL is essential for packit builds.
-# ELN doesn't need this.
-%if %{defined rhel} && 0%{?rhel} < 10
-%define __cargo %{_bindir}/env CARGO_HOME=.cargo RUSTC_BOOTSTRAP=1 RUSTFLAGS='-Copt-level=3 -Cdebuginfo=2 -Ccodegen-units=1 -Clink-arg=-Wl,-z,relro -Clink-arg=-Wl,-z,now --cap-lints=warn' %{_bindir}/cargo
-%endif
-
 %global with_debug 1
 
 %if 0%{?with_debug}
