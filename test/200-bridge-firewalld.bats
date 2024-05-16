@@ -329,3 +329,67 @@ function setup() {
     expected_rc=1 run_netavark -f ${TESTSDIR}/testfiles/invalid-port.json setup $(get_container_netns_path)
     assert_json ".error" "invalid host ip \"abcd\" provided for port 8080" "host ip error"
 }
+
+@test "$fw_driver - test firewalld reload" {
+    NETAVARK_FW=iptables run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+
+    check_simple_bridge_iptables
+    assert "$(<$NETAVARK_TMPDIR/config/firewall/firewall-driver)" "==" "iptables" "firewall-driver file content"
+
+    run_in_host_netns firewall-cmd --reload
+
+    # After a firewalld reload we expect rules to be deleted
+    # expected_rc=1 run_in_host_netns iptables -S NETAVARK_FORWARD
+    # There was a firewalld change in 3.0 that it no longer flushes all rules, howver we can still check if
+    # we are added to trusted.
+    run_in_host_netns firewall-cmd --zone=trusted --list-sources
+    assert "$output" == "" "no trusted sources"
+
+    # start reload service on start it should restore the rules
+    run_netavark_firewalld_reload
+
+    # this run in the background so give it some time to add the rules
+    sleep 1
+    check_simple_bridge_iptables
+    run_in_host_netns firewall-cmd --zone=trusted --list-sources
+    assert "$output" == "10.88.0.0/16" "container subnet is trusted after start"
+
+    run_in_host_netns firewall-cmd --reload
+    sleep 1
+    check_simple_bridge_iptables
+    run_in_host_netns firewall-cmd --zone=trusted --list-sources
+    assert "$output" == "10.88.0.0/16" "container subnet is trusted after reload"
+}
+
+@test "$fw_driver - port forwarding ipv4 - tcp with firewalld reload" {
+    test_port_fw firewalld_reload=true
+}
+
+@test "$fw_driver - test firewalld reload" {
+    NETAVARK_FW=nftables run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+
+    check_simple_bridge_nftables
+    assert "$(<$NETAVARK_TMPDIR/config/firewall/firewall-driver)" "==" "nftables" "firewall-driver file content"
+
+    run_in_host_netns firewall-cmd --reload
+
+    # There was a firewalld change in 3.0 that it no longer flushes all rules, howver we can still check if
+    # we are added to trusted.
+    run_in_host_netns firewall-cmd --zone=trusted --list-sources
+    assert "$output" == "" "no trusted sources"
+
+    # start reload service on start it should restore the rules
+    run_netavark_firewalld_reload
+
+    # this run in the background so give it some time to add the rules
+    sleep 1
+    check_simple_bridge_nftables
+    run_in_host_netns firewall-cmd --zone=trusted --list-sources
+    assert "$output" == "10.88.0.0/16" "container subnet is trusted after start"
+
+    run_in_host_netns firewall-cmd --reload
+    sleep 1
+    check_simple_bridge_nftables
+    run_in_host_netns firewall-cmd --zone=trusted --list-sources
+    assert "$output" == "10.88.0.0/16" "container subnet is trusted after reload"
+}
