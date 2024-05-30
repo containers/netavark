@@ -1,9 +1,19 @@
 # Release Notes
 
+## v1.11.0
+
+* Do not perform namespace detection for aardvark-dns updates as it is not needed
+* Fixed condition where ignored errors were being returned as real
+* With nftables, only dump netavark table rules
+* Fix port forward with strict RPF and multi-networks
+* updated dependencies
+
 ## v1.10.1
+
 * updated nftables to 0.3
 
 ## v1.10.0
+
 * added an nftables backend that allows its use on systems without iptables installed
 * added command line option to change firewall driver
 * show error if process is in wrong netns
@@ -11,12 +21,14 @@
 * updated dependencies
 
 ## v1.9.0
+
 * add firewalld-reload subcommand
 * bridge: force static mac on bridge interface
 * dependency updates
 * numerous fixes to test suite
 
 ## v1.8.0
+
 * iptables: improve error when ip6?tables commands are missing
 * docs: Convert markdown with go-md2man instead of mandown
 * iptables: drop invalid packages
@@ -25,6 +37,7 @@
 * Add vrf support for bridges
 
 ## v1.7.0
+
 * Fix misleading dns disabled log
 * Dependency updates
 * --config is now required when dns is used
@@ -35,22 +48,26 @@
 * static routes can now be configured
 
 ## v1.6.0
+
 * Now supports a driver plugin module for user defined network drivers
 * Initial MACVLAN DHCP support (additional unit file required for packagers)
 * Dependency updates
 
 ## v1.5.0
+
 * Removed crossbeam-utils
 * Dependency updates
 * Preliminary macvlan dhcp support (not fully supported yet)
 * Addition of ipvlan support
 
 ## v1.4.0
+
 * Added network update command
 * Corrected issue #491 to only teardown network forwarding when on complete teardown only
 * Fixed some rust documentation
 
 ## v1.3.0
+
 * Housekeep and code cleanup
 * macvlan: remove tmp interface when name already used in netns
 * Add support for route metrics
@@ -63,24 +80,30 @@
 * do not use ipv6 autoconf
 
 ## v1.2.0
+
 * Reworked how netavark calls aardvark
 * Implemented locking when committing
 * Remove bridge only when no containers are attached
 * Updated versions of libraries where possible
 
 ## v1.1.0
-* Netavark is now capable of starting Aardvark on a port other than 53 (controlled by `dns_bind_port` in `containers.conf`). Firewall rules are added to ensure DNS still functions properly despite the port change.
-* Added the ability to isolate networks. Networks with the isolate option set cannot communicate with other networks with the isolate option set.
-* Improved the way Aardvark is launched to avoid potential race conditions where DNS would not be ready when containers were started.
+
+* Netavark is now capable of starting Aardvark on a port other than 53 (controlled by `dns_bind_port`
+  in `containers.conf`). Firewall rules are added to ensure DNS still functions properly despite the port change.
+* Added the ability to isolate networks. Networks with the isolate option set cannot communicate with other networks
+  with the isolate option set.
+* Improved the way Aardvark is launched to avoid potential race conditions where DNS would not be ready when containers
+  were started.
 * Fixed a bug where Aardvark could not be run in environments with a read-only `/proc` (e.g. inside a container).
 
 ## v1.0.3
+
 * Updated dependenciess
 * Simplified option parsing for bridge/macvlan
 * Added support for an ipam `none` driver
 
-
 ## v1.0.2
+
 * Fix issue [#13533](https://github.com/containers/podman/issues/13533) - only use systemd when present
 * Dropped vergen dependency
 * Updated several dependency libraries
@@ -93,10 +116,13 @@
 * Remove vendor directory from upstream github repo
 
 ## v1.0.0
+
 * First official release of netavark
 
 ## v1.0.0-RC2
+
 * RC2 containers several bug fixes and code cleanup
 
 ## v1.0.0-RC1
+
 * This is the first release candidate of Netavark. All functionality should be working.
