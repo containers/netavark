@@ -15,8 +15,7 @@ use netlink_packet_core::{
 };
 use netlink_packet_route::{
     address::AddressMessage,
-    link::{InfoData, InfoKind, LinkAttribute, LinkInfo},
-    link::{LinkFlag, LinkMessage},
+    link::{InfoData, InfoKind, LinkAttribute, LinkFlags, LinkInfo, LinkMessage},
     route::{RouteAddress, RouteMessage, RouteProtocol, RouteScope, RouteType},
     AddressFamily, RouteNetlinkMessage,
 };
@@ -395,8 +394,8 @@ impl Socket {
             LinkID::Name(name) => msg.attributes.push(LinkAttribute::IfName(name)),
         }
 
-        msg.header.flags = vec![LinkFlag::Up];
-        msg.header.change_mask = vec![LinkFlag::Up];
+        msg.header.flags = LinkFlags::Up;
+        msg.header.change_mask = LinkFlags::Up;
 
         let result = self.make_netlink_request(
             RouteNetlinkMessage::SetLink(msg),

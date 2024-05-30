@@ -2,7 +2,9 @@ use log::{debug, error};
 use std::os::fd::BorrowedFd;
 use std::{collections::HashMap, net::IpAddr};
 
-use netlink_packet_route::link::{InfoData, InfoIpVlan, InfoKind, InfoMacVlan, LinkAttribute};
+use netlink_packet_route::link::{
+    InfoData, InfoIpVlan, InfoKind, InfoMacVlan, IpVlanMode, LinkAttribute, MacVlanMode,
+};
 use rand::distributions::{Alphanumeric, DistString};
 
 use crate::network::macvlan_dhcp::{get_dhcp_lease, release_dhcp_lease};
@@ -30,14 +32,14 @@ enum KindData {
         /// static mac address
         mac_address: Option<Vec<u8>>,
         /// macvlan mode
-        mode: u32,
+        mode: MacVlanMode,
 
         // IFLA_MACVLAN_BC_CUTOFF option if set
         bclim: Option<i32>,
     },
     IpVlan {
         /// ipvlan mode
-        mode: u16,
+        mode: IpVlanMode,
     },
 }
 
