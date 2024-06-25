@@ -375,3 +375,17 @@ EOF
    run_in_container_netns ip -o link show
    assert "${#lines[@]}" == 2 "only two interfaces (lo, eth0) in the netns, the tmp macvlan interface should be gone"
 }
+
+@test "macvlan route metric from config" {
+    run_netavark --file ${TESTSDIR}/testfiles/metric-macvlan.json setup $(get_container_netns_path)
+
+    run_in_container_netns ip -j route list match 0.0.0.0
+    default_route="$output"
+    assert_json "$default_route" '.[0].dst' == "default" "Default route was selected"
+    assert_json "$default_route" '.[0].metric' == "200" "Route metric set from config"
+
+    run_in_container_netns ip -j -6 route list match ::0
+    default_route_v6="$output"
+    assert_json "$default_route_v6" '.[0].dst' == "default" "Default route was selected"
+    assert_json "$default_route_v6" '.[0].metric' == "200" "v6 route metric matches v4"
+}
