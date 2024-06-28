@@ -42,7 +42,7 @@ serde-value = "0.7.0"
 serde_json = "1.0.118"
 sysctl = "0.5.5"
 url = "2.5.2"
-zbus = { version = "3.15.2" }
+zbus = { version = "4.3.0" }
 nix = { version = "0.29.0", features = ["sched", "signal", "user"] }
 rand = "0.8.5"
 sha2 = "0.10.8"
