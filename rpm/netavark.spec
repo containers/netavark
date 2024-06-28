@@ -28,7 +28,7 @@ Name: netavark
 %if %{defined copr_username}
 Epoch: 102
 %else
-Epoch: 0
+Epoch: 2
 %endif
 Version: 0
 Release: %autorelease
