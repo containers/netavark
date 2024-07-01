@@ -1389,7 +1389,7 @@ dependencies = [
  "log",
  "mozim",
  "netlink-packet-core",
- "netlink-packet-route 0.20.0",
+ "netlink-packet-route 0.20.1",
  "netlink-packet-utils",
  "netlink-sys",
  "nftables",
@@ -1452,9 +1452,9 @@ dependencies = [
 
 [[package]]
 name = "netlink-packet-route"
-version = "0.20.0"
+version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a37142a3d25dff78c49e99c27244827409717366287ff229b16e36cfeee17cf1"
+checksum = "55e5bda7ca0f9ac5e75b5debac3b75e29a8ac8e2171106a2c3bb466389a8dd83"
 dependencies = [
  "anyhow",
  "bitflags 2.5.0",
