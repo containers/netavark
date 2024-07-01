@@ -237,19 +237,6 @@ ubuntu20_build_task:
         - cargo build
 
 
-centos9_build_task:
-    alias: centos9_build
-    depends_on:
-      - "build"
-    gce_instance: *standard_gce_x86_64
-    container:
-        cpu: 2 # Do not increase, will result in scheduling delays
-        memory: "8Gb"
-        image: quay.io/libpod/centos9rust
-    script:
-        - cargo build
-
-
 success_task:
   name: "Total success"
   alias: success
@@ -264,7 +251,6 @@ success_task:
     - "integration_aarch64"
     - "meta"
     - "ubuntu20_build"
-    - "centos9_build"
   gce_instance: *standard_gce_x86_64
   env:
     API_URL_BASE: "https://api.cirrus-ci.com/v1/artifact/build/${CIRRUS_BUILD_ID}"
