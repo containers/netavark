@@ -1330,9 +1330,9 @@ dependencies = [
 
 [[package]]
 name = "mozim"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e45df57fccf2794fe629fd5aa9bfac597a7e2e66fa58c3afcedd20e97dd2f4ed"
+checksum = "60e650710a77d000a05361154218ae4a30bcb8cb7eb453b2e46666fe1e2b0cf8"
 dependencies = [
  "byteorder",
  "dhcproto",
