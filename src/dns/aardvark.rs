@@ -116,16 +116,35 @@ impl Aardvark {
         // After https://github.com/containers/aardvark-dns/pull/148 this command
         // will block till aardvark-dns's parent process returns back and let
         // aardvark inherit all the fds.
-        Command::new(aardvark_args[0])
+        let out = Command::new(aardvark_args[0])
             .args(&aardvark_args[1..])
-            .stdin(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
             // set RUST_LOG for aardvark
             .env("RUST_LOG", log::max_level().as_str())
             .output()?;
 
-        Ok(())
+        if out.status.success() {
+            return Ok(());
+        }
+        if out.stderr.is_empty() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "aardvark-dns exited unexpectedly without error message",
+            ));
+        }
+        // aardvark-dns failed capture stderr
+        let msg = String::from_utf8(out.stderr).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("failed to parse aardvark-dns stderr message: {e}"),
+            )
+        })?;
+
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("aardvark-dns failed to start: {}", msg),
+        ))
     }
 
     fn check_netns(&self, pid: pid_t) {
