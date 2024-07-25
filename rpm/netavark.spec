@@ -49,6 +49,11 @@ BuildRequires: %{_bindir}/go-md2man
 # aardvark-dns and %%{name} are usually released in sync
 Requires: aardvark-dns >=  %{epoch}:%{major_minor}
 Provides: container-network-stack = 2
+%if "%{default_fw}" == "nftables"
+Requires: nftables
+%else
+Requires: iptables
+%endif
 BuildRequires: make
 BuildRequires: protobuf-c
 BuildRequires: protobuf-compiler
