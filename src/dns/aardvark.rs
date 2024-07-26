@@ -143,7 +143,7 @@ impl Aardvark {
 
         Err(std::io::Error::new(
             std::io::ErrorKind::Other,
-            format!("aardvark-dns failed to start: {}", msg),
+            format!("aardvark-dns failed to start: {}", msg.trim()),
         ))
     }
 
