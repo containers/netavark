@@ -14,10 +14,10 @@
 # Minimum X.Y dep for aardvark-dns
 %define major_minor %((v=%{version}; echo ${v%.*}))
 
-# Set default firewall to nftables on CentOS Stream 10+, RHEL 10+
+# Set default firewall to nftables on CentOS Stream 10+, RHEL 10+, Fedora 41+
 # and default to iptables on all other environments
 # The `rhel` macro is defined on CentOS Stream, RHEL as well as Fedora ELN.
-%if %{defined rhel} && 0%{?rhel} >= 10
+%if (%{defined rhel} && 0%{?rhel} >= 10) || (%{defined fedora} && 0%{?fedora} >= 41)
 %define default_fw nftables
 %else
 %define default_fw iptables
