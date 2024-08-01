@@ -1,5 +1,12 @@
 # Release Notes
 
+## v1.12.0
+
+* Dependency updates
+* Netavark-DHCP proxy: use dns servers from dhcp lease
+* Improved handling and visibility of errors from aardvark-dns
+* Use nftables as default driver for Fedora 41
+
 ## v1.11.0
 
 * Do not perform namespace detection for aardvark-dns updates as it is not needed
