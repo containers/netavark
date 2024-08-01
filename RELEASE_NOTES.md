@@ -1,5 +1,9 @@
 # Release Notes
 
+## v1.12.1
+
+* Fixed problem with categories in Cargo.toml that prevented us from publishing v1.12.0
+
 ## v1.12.0
 
 * Dependency updates
