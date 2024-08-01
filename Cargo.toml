@@ -8,7 +8,7 @@ readme = "README.md"
 description = "A container network stack"
 homepage = "https://github.com/containers/netavark"
 repository = "https://github.com/containers/netavark"
-categories = ["containers", "networking", "podman"]
+categories = ["virtualization"]
 exclude = ["/.cirrus.yml", "/.github/*", "/hack/*"]
 build = "build.rs"
 
