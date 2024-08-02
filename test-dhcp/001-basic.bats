@@ -5,7 +5,4 @@
 
 load helpers
 
-@test "simple example" {
-
-}
-
+@test "simple example" {}
