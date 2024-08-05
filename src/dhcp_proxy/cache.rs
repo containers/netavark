@@ -43,7 +43,7 @@ impl<W: Write + Clear> LeaseCache<W> {
     /// # Arguments
     ///
     /// * `writer`: any type that can has the Write and Clear trait implemented. In production this
-    /// is a file. In development/testing this is a Cursor of bytes
+    ///   is a file. In development/testing this is a Cursor of bytes
     ///
     /// returns: Result<LeaseCache<W>, Error>
     ///
