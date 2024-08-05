@@ -40,10 +40,7 @@ pub mod g_rpc {
     impl From<DhcpV4Lease> for Lease {
         fn from(l: DhcpV4Lease) -> Lease {
             // Since these fields are optional as per mozim. Match them first and then set them
-            let domain_name = match l.domain_name {
-                None => String::from(""),
-                Some(l) => l,
-            };
+            let domain_name = l.domain_name.unwrap_or_default();
             let mtu = l.mtu.unwrap_or(0) as u32;
 
             Lease {
