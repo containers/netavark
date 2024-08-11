@@ -10,7 +10,7 @@ pub struct Setup {}
 
 impl Setup {
     pub async fn exec(&self, p: &str, config: NetworkConfig) -> Result<Lease, NetavarkError> {
-        debug!("{:?}", "Setting up...");
+        debug!("Setting up...");
         debug!("input: {:#?}", serde_json::to_string_pretty(&config));
 
         config.clone().get_lease(p).await
