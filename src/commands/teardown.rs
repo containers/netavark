@@ -37,7 +37,7 @@ impl Teardown {
         plugin_directories: Option<Vec<OsString>>,
         rootless: bool,
     ) -> NetavarkResult<()> {
-        debug!("{:?}", "Tearing down..");
+        debug!("Tearing down..");
         let network_options = network::types::NetworkOptions::load(input_file)?;
 
         let mut error_list = NetavarkErrorList::new();
@@ -129,7 +129,7 @@ impl Teardown {
             return Err(NetavarkError::List(error_list));
         }
 
-        debug!("{:?}", "Teardown complete");
+        debug!("Teardown complete");
         Ok(())
     }
 }
