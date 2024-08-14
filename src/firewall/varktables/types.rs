@@ -373,13 +373,15 @@ pub fn get_network_chains<'a>(
 
     // Always add ACCEPT rules in firewall for dns traffic from containers
     // to gateway when using bridge network with internal dns.
-    netavark_input_chain.build_rule(VarkRule::new(
-        format!(
-            "-p {} -s {} --dport {} -j {}",
-            "udp", network, dns_port, ACCEPT
-        ),
-        Some(TeardownPolicy::OnComplete),
-    ));
+    for proto in ["udp", "tcp"] {
+        netavark_input_chain.build_rule(VarkRule::new(
+            format!(
+                "-p {} -s {} --dport {} -j {}",
+                proto, network, dns_port, ACCEPT
+            ),
+            Some(TeardownPolicy::OnComplete),
+        ));
+    }
     chains.push(netavark_input_chain);
 
     // Drop all invalid packages, due a race the container source ip could be leaked on the local
@@ -522,13 +524,15 @@ pub fn get_port_forwarding_chains<'a>(
                 ip_value = format!("[{ip_value}]")
             }
             netavark_hostport_dn_chain.create = true;
-            netavark_hostport_dn_chain.build_rule(VarkRule::new(
-                format!(
-                    "-j {} -d {} -p {} --dport {} --to-destination {}:{}",
-                    DNAT, dns_ip, "udp", 53, ip_value, pfwd.dns_port
-                ),
-                Some(TeardownPolicy::OnComplete),
-            ));
+            for proto in ["udp", "tcp"] {
+                netavark_hostport_dn_chain.build_rule(VarkRule::new(
+                    format!(
+                        "-j {} -d {} -p {} --dport {} --to-destination {}:{}",
+                        DNAT, dns_ip, proto, 53, ip_value, pfwd.dns_port
+                    ),
+                    Some(TeardownPolicy::OnComplete),
+                ));
+            }
         }
     }
 
