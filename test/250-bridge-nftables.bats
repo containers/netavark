@@ -258,6 +258,17 @@ export NETAVARK_FW=nftables
     assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p $dns_port run" "aardvark not running or bad options"
 }
 
+@test "$fw_driver - aardvark-dns entries after startup failure" {
+    # force failure with invalid aardvark-dns binary
+    expected_rc=1 run_netavark --aardvark-binary ${TESTSDIR} --file ${TESTSDIR}/testfiles/dualstack-bridge-custom-dns-server.json \
+        setup $(get_container_netns_path)
+    assert "$output" =~ "aardvark-dns failed to start: Failed to find executable" "netavark error"
+
+    # check aardvark config must not exists after error
+    run_helper ls "$NETAVARK_TMPDIR/config/aardvark-dns"
+    assert "$output" == "" "No aardvark entries"
+}
+
 @test "$fw_driver - bridge driver must generate config for aardvark with multiple custom dns server" {
     # get a random port directly to avoid low ports e.g. 53 would not create nftables
     dns_port=$((RANDOM+10000))
