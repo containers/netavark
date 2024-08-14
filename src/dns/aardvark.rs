@@ -211,7 +211,7 @@ impl Aardvark {
         Ok(())
     }
 
-    pub fn commit_entries(&self, entries: Vec<AardvarkEntry>) -> Result<()> {
+    pub fn commit_entries(&self, entries: &[AardvarkEntry]) -> Result<()> {
         // Acquire fs lock to ensure other instance of aardvark cannot commit
         // or start aardvark instance till already running instance has not
         // completed its `commit` phase.
@@ -240,7 +240,7 @@ impl Aardvark {
             ));
         }
 
-        for entry in &entries {
+        for entry in entries {
             let mut path = Path::new(&self.config).join(entry.network_name);
             if entry.is_internal {
                 let new_path = Path::new(&self.config).join(entry.network_name.to_owned() + "%int");
@@ -344,8 +344,18 @@ impl Aardvark {
 
     pub fn commit_netavark_entries(&self, entries: Vec<AardvarkEntry>) -> NetavarkResult<()> {
         if !entries.is_empty() {
-            self.commit_entries(entries)?;
-            self.notify(true, false)?;
+            self.commit_entries(&entries)?;
+            match self.notify(true, false) {
+                Ok(_) => (),
+                Err(e) => {
+                    if let Err(err) = self.delete_from_netavark_entries(&entries) {
+                        log::warn!(
+                            "Failed to delete aardvark-dns entries after failed start: {err}"
+                        );
+                    };
+                    return Err(e);
+                }
+            };
         }
         Ok(())
     }
@@ -450,8 +460,8 @@ impl Aardvark {
         Ok(())
     }
 
-    pub fn delete_from_netavark_entries(&self, entries: Vec<AardvarkEntry>) -> NetavarkResult<()> {
-        for entry in &entries {
+    pub fn delete_from_netavark_entries(&self, entries: &[AardvarkEntry]) -> NetavarkResult<()> {
+        for entry in entries {
             self.delete_entry(entry.container_id, entry.network_name)?;
         }
         self.notify(false, false)
