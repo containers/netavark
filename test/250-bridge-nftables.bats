@@ -240,11 +240,12 @@ export NETAVARK_FW=nftables
 }
 
 @test "$fw_driver - bridge driver must generate config for aardvark with custom dns server" {
-    # get a random port directly to avoid low ports e.g. 53 would not create nftables rules
-    dns_port=$((RANDOM+10000))
-
-    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-custom-dns-server.json \
+    run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-custom-dns-server.json \
         setup $(get_container_netns_path)
+
+    # check nftables
+    run_in_host_netns nft list chain inet netavark INPUT
+    assert "${lines[3]}" =~ "ip saddr 10.89.3.0/24 meta l4proto \{ tcp, udp \} th dport 53 accept" "DNS accept rule"
 
     # check aardvark config and running
     run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
@@ -255,7 +256,7 @@ export NETAVARK_FW=nftables
     aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
     assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
     run_helper ps "$aardvark_pid"
-    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p $dns_port run" "aardvark not running or bad options"
+    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p 53 run" "aardvark not running or bad options"
 }
 
 @test "$fw_driver - bridge driver must generate config for aardvark with multiple custom dns server" {
@@ -305,7 +306,7 @@ export NETAVARK_FW=nftables
 
     # check nftables
     run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
-    assert "${lines[2]}" =~ "ip daddr 10.89.3.1 udp dport 53 dnat ip to 10.89.3.1:$dns_port" "DNS forward rule"
+    assert "${lines[2]}" =~ "ip daddr 10.89.3.1 meta l4proto \{ tcp, udp \} th dport 53 dnat ip to 10.89.3.1:$dns_port" "DNS forward rule"
 
     # check aardvark config and running
     run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
