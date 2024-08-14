@@ -380,9 +380,21 @@ impl firewall::FirewallDriver for Nftables {
                     vec![
                         get_subnet_match(&subnet, "saddr", stmt::Operator::EQ),
                         stmt::Statement::Match(stmt::Match {
+                            left: expr::Expression::Named(expr::NamedExpression::Meta(
+                                expr::Meta {
+                                    key: expr::MetaKey::L4proto,
+                                },
+                            )),
+                            right: expr::Expression::Named(expr::NamedExpression::Set(vec![
+                                expr::SetItem::Element(expr::Expression::String("udp".to_string())),
+                                expr::SetItem::Element(expr::Expression::String("tcp".to_string())),
+                            ])),
+                            op: stmt::Operator::EQ,
+                        }),
+                        stmt::Statement::Match(stmt::Match {
                             left: expr::Expression::Named(expr::NamedExpression::Payload(
                                 expr::Payload::PayloadField(expr::PayloadField {
-                                    protocol: "udp".to_string(),
+                                    protocol: "th".to_string(),
                                     field: "dport".to_string(),
                                 }),
                             )),
@@ -1126,9 +1138,19 @@ fn make_dns_dnat_rule(dns_ip: &IpAddr, dns_port: u16) -> schema::NfListObject {
         vec![
             get_ip_match(dns_ip, "daddr", stmt::Operator::EQ),
             stmt::Statement::Match(stmt::Match {
+                left: expr::Expression::Named(expr::NamedExpression::Meta(expr::Meta {
+                    key: expr::MetaKey::L4proto,
+                })),
+                right: expr::Expression::Named(expr::NamedExpression::Set(vec![
+                    expr::SetItem::Element(expr::Expression::String("udp".to_string())),
+                    expr::SetItem::Element(expr::Expression::String("tcp".to_string())),
+                ])),
+                op: stmt::Operator::EQ,
+            }),
+            stmt::Statement::Match(stmt::Match {
                 left: expr::Expression::Named(expr::NamedExpression::Payload(
                     expr::Payload::PayloadField(expr::PayloadField {
-                        protocol: "udp".to_string(),
+                        protocol: "th".to_string(),
                         field: "dport".to_string(),
                     }),
                 )),
