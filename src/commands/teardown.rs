@@ -67,7 +67,7 @@ impl Teardown {
             let path = Path::new(&config_dir).join("aardvark-dns");
 
             let aardvark_interface = Aardvark::new(path, rootless, aardvark_bin, dns_port);
-            if let Err(err) = aardvark_interface.delete_from_netavark_entries(aardvark_entries) {
+            if let Err(err) = aardvark_interface.delete_from_netavark_entries(&aardvark_entries) {
                 error_list.push(NetavarkError::wrap("remove aardvark entries", err));
             }
         }
