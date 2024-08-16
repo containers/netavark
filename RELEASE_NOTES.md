@@ -1,5 +1,10 @@
 # Release Notes
 
+## v1.12.2
+
+* Ensure DNS rules cover TCP for iptables and nftables
+* On ardvark-dns start, delete entries again on failure
+
 ## v1.12.1
 
 * Fixed problem with categories in Cargo.toml that prevented us from publishing v1.12.0
