@@ -75,6 +75,7 @@ fn main() {
         "none" => "none",
         inv => panic!("Invalid default firewall driver {}", inv),
     };
+    println!("cargo:rustc-check-cfg=cfg(default_fw, values(\"nftables\", \"iptables\", \"none\"))");
     println!("cargo:rustc-cfg=default_fw=\"{}\"", fwdriver);
     println!("cargo:rustc-env=DEFAULT_FW={fwdriver}");
 }
