@@ -250,11 +250,15 @@ fw_driver=iptables
 }
 
 @test "$fw_driver - bridge driver must generate config for aardvark with custom dns server" {
-    # get a random port directly to avoid low ports e.g. 53 would not create iptables
-    dns_port=$((RANDOM+10000))
-
-    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-custom-dns-server.json \
+    run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-custom-dns-server.json \
         setup $(get_container_netns_path)
+
+     run_in_host_netns iptables -S NETAVARK_INPUT
+    assert "${lines[1]}" == "-A NETAVARK_INPUT -s 10.89.3.0/24 -p udp -m udp --dport 53 -j ACCEPT" "ipv4 dns udp accept rule"
+    assert "${lines[2]}" == "-A NETAVARK_INPUT -s 10.89.3.0/24 -p tcp -m tcp --dport 53 -j ACCEPT" "ipv4 dns tcp accept rule"
+    run_in_host_netns ip6tables -S NETAVARK_INPUT
+    assert "${lines[1]}" == "-A NETAVARK_INPUT -s fd10:88:a::/64 -p udp -m udp --dport 53 -j ACCEPT" "ipv6 dns udp accept rule"
+    assert "${lines[2]}" == "-A NETAVARK_INPUT -s fd10:88:a::/64 -p tcp -m tcp --dport 53 -j ACCEPT" "ipv6 dns tcp accept rule"
 
     # check aardvark config and running
     run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
@@ -265,7 +269,7 @@ fw_driver=iptables
     aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
     assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
     run_helper ps "$aardvark_pid"
-    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p $dns_port run" "aardvark not running or bad options"
+    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p 53 run" "aardvark not running or bad options"
 }
 
 @test "$fw_driver - bridge driver must generate config for aardvark with multiple custom dns server" {
@@ -316,8 +320,10 @@ fw_driver=iptables
     # check iptables
     run_in_host_netns iptables -t nat -S NETAVARK-HOSTPORT-DNAT
     assert "${lines[1]}" == "-A NETAVARK-HOSTPORT-DNAT -d 10.89.3.1/32 -p udp -m udp --dport 53 -j DNAT --to-destination 10.89.3.1:$dns_port" "ipv4 dns forward rule"
+    assert "${lines[2]}" == "-A NETAVARK-HOSTPORT-DNAT -d 10.89.3.1/32 -p tcp -m tcp --dport 53 -j DNAT --to-destination 10.89.3.1:$dns_port" "ipv4 dns tcp forward rule"
     run_in_host_netns ip6tables -t nat -S NETAVARK-HOSTPORT-DNAT
     assert "${lines[1]}" == "-A NETAVARK-HOSTPORT-DNAT -d fd10:88:a::1/128 -p udp -m udp --dport 53 -j DNAT --to-destination [fd10:88:a::1]:$dns_port" "ipv6 dns forward rule"
+    assert "${lines[2]}" == "-A NETAVARK-HOSTPORT-DNAT -d fd10:88:a::1/128 -p tcp -m tcp --dport 53 -j DNAT --to-destination [fd10:88:a::1]:$dns_port" "ipv6 dns tcp forward rule"
 
     # check aardvark config and running
     run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
