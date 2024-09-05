@@ -12,7 +12,7 @@ use nftables::schema;
 use nftables::stmt;
 use nftables::types;
 use std::collections::HashSet;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 
 const TABLENAME: &str = "netavark";
 
@@ -36,6 +36,8 @@ const DNATPRIO: i32 = -100;
 const SRCNATPRIO: i32 = 100;
 /// The filter priority for chains
 const FILTERPRIO: i32 = 0;
+
+const IPV4_LOCALHOST: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
 
 pub struct Nftables {}
 
@@ -1110,7 +1112,7 @@ fn get_dnat_rules_for_addr_family(
                 // Container dnat chain: ip saddr 127.0.0.1 ip daddr <host IP> <proto> dport <port(s)> jump SETMARKCHAIN
                 let mut localhost_jump_statements: Vec<stmt::Statement> = Vec::new();
                 localhost_jump_statements.push(get_ip_match(
-                    &("127.0.0.1".parse()?),
+                    &IPV4_LOCALHOST,
                     "saddr",
                     stmt::Operator::EQ,
                 ));
