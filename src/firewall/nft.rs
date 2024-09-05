@@ -1122,9 +1122,12 @@ fn get_dnat_rules_for_addr_family(
                 rules.push(make_rule(&subnet_dnat_chain, localhost_jump_statements));
             }
 
-            for rule in get_dnat_port_rules(&subnet_dnat_chain, port, &ip, &daddr_cond) {
-                rules.push(rule);
-            }
+            rules.append(&mut get_dnat_port_rules(
+                &subnet_dnat_chain,
+                port,
+                &ip,
+                &daddr_cond,
+            ));
         }
     }
 
