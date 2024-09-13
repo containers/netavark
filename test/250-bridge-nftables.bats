@@ -982,3 +982,23 @@ function check_simple_bridge_nftables() {
     assert "${lines[6]}" =~ "ip saddr 10.88.0.0/16 accept" "Subnet saddr accept rule"
     assert "${#lines[@]}" = 9 "too many FORWARD rules"
 }
+
+# regression test for https://github.com/containers/netavark/issues/1068
+@test "$fw_driver - port firewall rule cleanup" {
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-port-tcp-udp.json setup $(get_container_netns_path)
+
+    local chain="nv_2f259bab_10_88_0_0_nm16_dnat"
+    run_in_host_netns nft list chain inet netavark $chain
+
+    # extra check so we can be sure that these rules exists before checking later of they are removed
+    assert "$output" =~ "ip saddr 10.88.0.0/16 ip daddr 192.168.188.25 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip saddr 127.0.0.1 ip daddr 192.168.188.25 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip daddr 192.168.188.25 tcp dport 8080 dnat ip to 10.88.0.14:8080"
+    assert "$output" =~ "ip saddr 10.88.0.0/16 ip daddr 192.168.188.25 udp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip saddr 127.0.0.1 ip daddr 192.168.188.25 udp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip daddr 192.168.188.25 udp dport 8080 dnat ip to 10.88.0.14:8080"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-port-tcp-udp.json teardown $(get_container_netns_path)
+
+    expected_rc=1 run_in_host_netns nft list chain inet netavark $chain
+}
