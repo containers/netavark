@@ -319,11 +319,11 @@ fw_driver=iptables
 
     # check iptables
     run_in_host_netns iptables -t nat -S NETAVARK-HOSTPORT-DNAT
-    assert "${lines[1]}" == "-A NETAVARK-HOSTPORT-DNAT -d 10.89.3.1/32 -p udp -m udp --dport 53 -j DNAT --to-destination 10.89.3.1:$dns_port" "ipv4 dns forward rule"
-    assert "${lines[2]}" == "-A NETAVARK-HOSTPORT-DNAT -d 10.89.3.1/32 -p tcp -m tcp --dport 53 -j DNAT --to-destination 10.89.3.1:$dns_port" "ipv4 dns tcp forward rule"
+    assert "${lines[2]}" == "-A NETAVARK-HOSTPORT-DNAT -d 10.89.3.1/32 -p udp -m udp --dport 53 -j DNAT --to-destination 10.89.3.1:$dns_port" "ipv4 dns forward rule"
+    assert "${lines[1]}" == "-A NETAVARK-HOSTPORT-DNAT -d 10.89.3.1/32 -p tcp -m tcp --dport 53 -j DNAT --to-destination 10.89.3.1:$dns_port" "ipv4 dns tcp forward rule"
     run_in_host_netns ip6tables -t nat -S NETAVARK-HOSTPORT-DNAT
-    assert "${lines[1]}" == "-A NETAVARK-HOSTPORT-DNAT -d fd10:88:a::1/128 -p udp -m udp --dport 53 -j DNAT --to-destination [fd10:88:a::1]:$dns_port" "ipv6 dns forward rule"
-    assert "${lines[2]}" == "-A NETAVARK-HOSTPORT-DNAT -d fd10:88:a::1/128 -p tcp -m tcp --dport 53 -j DNAT --to-destination [fd10:88:a::1]:$dns_port" "ipv6 dns tcp forward rule"
+    assert "${lines[2]}" == "-A NETAVARK-HOSTPORT-DNAT -d fd10:88:a::1/128 -p udp -m udp --dport 53 -j DNAT --to-destination [fd10:88:a::1]:$dns_port" "ipv6 dns forward rule"
+    assert "${lines[1]}" == "-A NETAVARK-HOSTPORT-DNAT -d fd10:88:a::1/128 -p tcp -m tcp --dport 53 -j DNAT --to-destination [fd10:88:a::1]:$dns_port" "ipv6 dns tcp forward rule"
 
     # check aardvark config and running
     run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
