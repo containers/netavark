@@ -317,7 +317,8 @@ export NETAVARK_FW=nftables
 
     # check nftables
     run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
-    assert "${lines[2]}" =~ "ip daddr 10.89.3.1 meta l4proto \{ tcp, udp \} th dport 53 dnat ip to 10.89.3.1:$dns_port" "DNS forward rule"
+    assert "${lines[2]}" =~ "ip6 daddr fd10:88:a::1 meta l4proto \{ tcp, udp \} th dport 53 dnat ip6 to \[fd10:88:a::1\]:$dns_port" "DNS forward rule ip6"
+    assert "${lines[3]}" =~ "ip daddr 10.89.3.1 meta l4proto \{ tcp, udp \} th dport 53 dnat ip to 10.89.3.1:$dns_port" "DNS forward rule ip4"
 
     # check aardvark config and running
     run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"

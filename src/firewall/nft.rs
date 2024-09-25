@@ -592,12 +592,22 @@ impl firewall::FirewallDriver for Nftables {
                 match ip {
                     IpAddr::V4(_) => {
                         if setup_portfw.container_ip_v4.is_some() {
-                            batch.add(make_dns_dnat_rule(ip, setup_portfw.dns_port));
+                            // rule should be first so it is ordered before the normal contianer DNAT,
+                            // thus  use insert over the normal add
+                            batch.add_cmd(schema::NfCmd::Insert(make_dns_dnat_rule(
+                                ip,
+                                setup_portfw.dns_port,
+                            )));
                         }
                     }
                     IpAddr::V6(_) => {
                         if setup_portfw.container_ip_v6.is_some() {
-                            batch.add(make_dns_dnat_rule(ip, setup_portfw.dns_port));
+                            // rule should be first so it is ordered before the normal contianer DNAT,
+                            // thus  use insert over the normal add
+                            batch.add_cmd(schema::NfCmd::Insert(make_dns_dnat_rule(
+                                ip,
+                                setup_portfw.dns_port,
+                            )));
                         }
                     }
                 }
@@ -1048,8 +1058,10 @@ fn get_dnat_rules_for_addr_family(
 
 /// Make a DNAT rule to allow DNS traffic to a DNS server on a non-standard port (53 -> actual port).
 fn make_dns_dnat_rule(dns_ip: &IpAddr, dns_port: u16) -> schema::NfListObject {
-    make_rule(
-        DNATCHAIN,
+    let rule = schema::Rule::new(
+        types::NfFamily::INet,
+        TABLENAME.to_string(),
+        DNATCHAIN.to_string(),
         vec![
             get_ip_match(dns_ip, "daddr", stmt::Operator::EQ),
             stmt::Statement::Match(stmt::Match {
@@ -1083,7 +1095,9 @@ fn make_dns_dnat_rule(dns_ip: &IpAddr, dns_port: u16) -> schema::NfListObject {
                 flags: None,
             })),
         ],
-    )
+    );
+
+    schema::NfListObject::Rule(rule)
 }
 
 /// Create a statement to jump to the given target

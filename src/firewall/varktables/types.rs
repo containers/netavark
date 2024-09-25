@@ -525,13 +525,15 @@ pub fn get_port_forwarding_chains<'a>(
             }
             netavark_hostport_dn_chain.create = true;
             for proto in ["udp", "tcp"] {
-                netavark_hostport_dn_chain.build_rule(VarkRule::new(
-                    format!(
+                netavark_hostport_dn_chain.build_rule(VarkRule {
+                    rule: format!(
                         "-j {} -d {} -p {} --dport {} --to-destination {}:{}",
                         DNAT, dns_ip, proto, 53, ip_value, pfwd.dns_port
                     ),
-                    Some(TeardownPolicy::OnComplete),
-                ));
+                    // rule should be first otherwise another container might hijack all 53 traffic to itself
+                    position: Some(1),
+                    td_policy: Some(TeardownPolicy::OnComplete),
+                });
             }
         }
     }
