@@ -1507,9 +1507,9 @@ dependencies = [
 
 [[package]]
 name = "nispor"
-version = "1.2.19"
+version = "1.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cd23dbe46d34178505027dc6b39446d3ce4e726fbeb90f397f1caa1f3bcdd4e"
+checksum = "543c422bf0ff04f6c632e55136336a3064f842631bdd997fa4ef7546e2e016c9"
 dependencies = [
  "ethtool",
  "futures",
@@ -1523,6 +1523,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+ "wl-nl80211",
 ]
 
 [[package]]
@@ -2741,6 +2742,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f593a95398737aeed53e489c785df13f3618e41dbcd6718c6addbf1395aa6876"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "wl-nl80211"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5cffcf1e1dca38467779e22768bfc7f294f1b7b3bd99727edf13280eb2429789"
+dependencies = [
+ "anyhow",
+ "bitflags 2.6.0",
+ "byteorder",
+ "futures",
+ "genetlink",
+ "log",
+ "netlink-packet-core",
+ "netlink-packet-generic",
+ "netlink-packet-utils",
+ "netlink-proto",
+ "netlink-sys",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
