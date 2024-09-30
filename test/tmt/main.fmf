@@ -1,0 +1,26 @@
+# Only common dependencies that are NOT required to run test_integration.sh are
+# specified here. Everything else is in test_integration.sh.
+require:
+    - cargo
+    - git-core
+    - make
+    - protobuf-compiler
+
+adjust:
+    duration: 10m
+    when: arch == aarch64
+
+/validate:
+    tag: upstream
+    summary: Validate test
+    test: make -C ../.. validate
+
+/unit:
+    tag: upstream
+    summary: Unit test
+    test: make -C ../.. unit
+
+/integration:
+    tag: [ upstream, downstream ]
+    summary: Integration tests
+    test: bash test_integration.sh
