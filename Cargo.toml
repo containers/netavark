@@ -54,7 +54,7 @@ fs2 = "0.4.3"
 netlink-sys = "0.8.6"
 tokio = { version = "1.40.0", features = ["rt", "rt-multi-thread", "signal", "fs"] }
 tokio-stream = { version = "0.1.16", features = ["net"] }
-tonic = "0.11"
+tonic = "0.12"
 mozim = "0.2.4"
 prost = "0.12.6"
 futures-channel = "0.3.30"
