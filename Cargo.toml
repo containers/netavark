@@ -54,18 +54,19 @@ fs2 = "0.4.3"
 netlink-sys = "0.8.6"
 tokio = { version = "1.40.0", features = ["rt", "rt-multi-thread", "signal", "fs"] }
 tokio-stream = { version = "0.1.16", features = ["net"] }
-tonic = "0.11"
+tonic = "0.12.3"
 mozim = "0.2.4"
-prost = "0.12.6"
+prost = "0.13.3"
 futures-channel = "0.3.30"
 futures-core = "0.3.30"
 futures-util = "0.3.30"
 nispor = "1.2.21"
 tower = { version = "0.5.1", features = ["util"] }
+hyper-util = "0.1.9"
 
 [build-dependencies]
 chrono = { version = "0.4.38", default-features = false, features = ["clock"] }
-tonic-build = "0.11"
+tonic-build = "0.12.3"
 
 [dev-dependencies]
 once_cell = "1.20.1"
