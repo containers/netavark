@@ -36,7 +36,7 @@ fn main() {
         .out_dir(PathBuf::from("src/proto-build"));
 
     builder
-        .compile(&[Path::new("src/proto/proxy.proto")], &[Path::new("proto")])
+        .compile_protos(&[Path::new("src/proto/proxy.proto")], &[Path::new("proto")])
         .unwrap_or_else(|e| panic!("Failed at builder: {:?}", e.to_string()));
 
     // Generate the default 'cargo:' instruction output
