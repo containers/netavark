@@ -88,12 +88,14 @@ jobs:
 
   - job: koji_build
     trigger: commit
+    packages: [netavark-fedora]
     sidetag_group: netavark-releases
     dist_git_branches:
       - fedora-all
 
   - job: bodhi_update
     trigger: koji_build
+    packages: [netavark-fedora]
     sidetag_group: netavark-releases
     dependencies:
       - aardvark-dns
