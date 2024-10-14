@@ -1,2 +1,0 @@
-FROM quay.io/centos/centos:stream9
-RUN dnf -y --enablerepo=crb install cargo protobuf-compiler && dnf -y clean all
