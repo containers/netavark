@@ -1,0 +1,4 @@
+# Source for quay.io/libpod/nv-rust
+# This version should always match the MSRV, when you update this also update the version in the root README.md.
+FROM docker.io/library/rust:1.76
+RUN apt-get update && apt-get -y install protobuf-compiler libprotobuf-dev

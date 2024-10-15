@@ -22,6 +22,15 @@ Netavark is a tool for configuring networking for Linux containers. Its features
 - [Podman](https://podman.io/docs) 4.0+
 - [protoc](https://grpc.io/docs/protoc-installation/)
 
+## MSRV (Minimum Supported Rust Version)
+
+v1.76
+
+We test that Netavark can be build on this Rust version and on some newer versions.
+All newer versions should also build, and if they do not, the issue should be
+reported and will be fixed. Older versions are not guaranteed to build and issues
+will not be fixed.
+
 ## Build
 
 ```console
