@@ -3,7 +3,7 @@ use std::{
     path::Path,
 };
 
-use zbus::{blocking::Connection, dbus_proxy, CacheProperties};
+use zbus::{blocking::Connection, proxy, CacheProperties};
 
 use crate::{
     error::{ErrorWrap, NetavarkResult},
@@ -11,7 +11,7 @@ use crate::{
     network::constants,
 };
 
-#[dbus_proxy(
+#[proxy(
     interface = "org.fedoraproject.FirewallD1",
     default_service = "org.fedoraproject.FirewallD1",
     default_path = "/org/fedoraproject/FirewallD1"
@@ -40,7 +40,7 @@ pub fn listen(config_dir: Option<OsString>) -> NetavarkResult<()> {
     reload_rules(config_dir);
 
     // This loops forever until the process is killed or there is some dbus error.
-    for _ in proxy.receive_signal(SIGNAL_NAME)? {
+    for _ in proxy.0.receive_signal(SIGNAL_NAME)? {
         log::debug!("got firewalld {} signal", SIGNAL_NAME);
         reload_rules(config_dir);
     }
