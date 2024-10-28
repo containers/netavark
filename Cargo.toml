@@ -37,9 +37,9 @@ ipnet = { version = "2.9.0", features = ["serde"] }
 iptables = "0.5.2"
 libc = "0.2.157"
 log = "0.4.22"
-serde = { version = "1.0.199", features = ["derive"], optional = true }
+serde = { version = "1.0.213", features = ["derive"], optional = true }
 serde-value = "0.7.0"
-serde_json = "1.0.123"
+serde_json = "1.0.132"
 sysctl = "0.6.0"
 url = "2.5.2"
 zbus = { version = "4.3.1" }
