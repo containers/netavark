@@ -54,10 +54,11 @@ impl firewall::FirewallDriver for Nftables {
         let mut batch = Batch::new();
 
         // Overall table
-        batch.add(schema::NfListObject::Table(schema::Table::new(
-            types::NfFamily::INet,
-            TABLENAME.to_string(),
-        )));
+        batch.add(schema::NfListObject::Table(schema::Table {
+            family: types::NfFamily::INet,
+            name: TABLENAME.to_string(),
+            ..schema::Table::default()
+        }));
 
         // Five default chains, one for each hook we have to monitor
         batch.add(make_complex_chain(
@@ -749,13 +750,13 @@ fn delete_port_rules(
     for object in &existing_rules.objects {
         match object {
             schema::NfObject::CmdObject(_) => continue,
-            schema::NfObject::ListObject(list) => match list {
+            schema::NfObject::ListObject(list) => match list.as_ref() {
                 schema::NfListObject::Rule(ref rule) => {
                     for port_rule in &port_rules {
                         match port_rule {
                             schema::NfListObject::Rule(r) => {
                                 if cmp_rules(r, rule) {
-                                    batch.delete(list.clone());
+                                    batch.delete(*list.clone());
                                 }
                             }
                             _ => continue,
@@ -1058,11 +1059,11 @@ fn get_dnat_rules_for_addr_family(
 
 /// Make a DNAT rule to allow DNS traffic to a DNS server on a non-standard port (53 -> actual port).
 fn make_dns_dnat_rule(dns_ip: &IpAddr, dns_port: u16) -> schema::NfListObject {
-    let rule = schema::Rule::new(
-        types::NfFamily::INet,
-        TABLENAME.to_string(),
-        DNATCHAIN.to_string(),
-        vec![
+    let rule = schema::Rule {
+        family: types::NfFamily::INet,
+        table: TABLENAME.to_string(),
+        chain: DNATCHAIN.to_string(),
+        expr: vec![
             get_ip_match(dns_ip, "daddr", stmt::Operator::EQ),
             stmt::Statement::Match(stmt::Match {
                 left: expr::Expression::Named(expr::NamedExpression::Meta(expr::Meta {
@@ -1095,7 +1096,8 @@ fn make_dns_dnat_rule(dns_ip: &IpAddr, dns_port: u16) -> schema::NfListObject {
                 flags: None,
             })),
         ],
-    );
+        ..schema::Rule::default()
+    };
 
     schema::NfListObject::Rule(rule)
 }
@@ -1110,16 +1112,12 @@ fn get_jump_action(target: &str) -> stmt::Statement {
 /// Create an instruction to make a basic chain (no hooks, no priority).
 /// Chain is always inet, always in our overall netavark table.
 fn make_basic_chain(name: &str) -> schema::NfListObject {
-    schema::NfListObject::Chain(schema::Chain::new(
-        types::NfFamily::INet,
-        TABLENAME.to_string(),
-        name.to_string(),
-        None,
-        None,
-        None,
-        None,
-        None,
-    ))
+    schema::NfListObject::Chain(schema::Chain {
+        family: types::NfFamily::INet,
+        table: TABLENAME.to_string(),
+        name: name.to_string(),
+        ..schema::Chain::default()
+    })
 }
 
 /// Create a more complicated chain with hooks and priority.
@@ -1130,26 +1128,27 @@ fn make_complex_chain(
     hook: types::NfHook,
     priority: i32,
 ) -> schema::NfListObject {
-    schema::NfListObject::Chain(schema::Chain::new(
-        types::NfFamily::INet,
-        TABLENAME.to_string(),
-        name.to_string(),
-        Some(chain_type),
-        Some(hook),
-        Some(priority),
-        None,
-        Some(types::NfChainPolicy::Accept),
-    ))
+    schema::NfListObject::Chain(schema::Chain {
+        family: types::NfFamily::INet,
+        table: TABLENAME.to_string(),
+        name: name.to_string(),
+        _type: Some(chain_type),
+        hook: Some(hook),
+        prio: Some(priority),
+        policy: Some(types::NfChainPolicy::Accept),
+        ..schema::Chain::default()
+    })
 }
 
 /// Make a rule in the given chain with the given conditions
 fn make_rule(chain: &str, conditions: Vec<stmt::Statement>) -> schema::NfListObject {
-    schema::NfListObject::Rule(schema::Rule::new(
-        types::NfFamily::INet,
-        TABLENAME.to_string(),
-        chain.to_string(),
-        conditions,
-    ))
+    schema::NfListObject::Rule(schema::Rule {
+        family: types::NfFamily::INet,
+        table: TABLENAME.to_string(),
+        chain: chain.to_string(),
+        expr: conditions,
+        ..schema::Rule::default()
+    })
 }
 
 /// Make a closure that matches any rule that jumps to the given chain.
@@ -1205,7 +1204,7 @@ fn get_matching_rules_in_chain<F: Fn(&schema::Rule) -> bool>(
     for object in &base_rules.objects {
         match object {
             schema::NfObject::CmdObject(_) => continue,
-            schema::NfObject::ListObject(obj) => match obj {
+            schema::NfObject::ListObject(obj) => match obj.as_ref() {
                 schema::NfListObject::Rule(r) => {
                     if r.chain != *chain {
                         continue;
@@ -1229,7 +1228,7 @@ fn get_chain(base_rules: &schema::Nftables, chain: &str) -> Option<schema::Chain
     for object in &base_rules.objects {
         match object {
             schema::NfObject::CmdObject(_) => continue,
-            schema::NfObject::ListObject(obj) => match obj {
+            schema::NfObject::ListObject(obj) => match obj.as_ref() {
                 schema::NfListObject::Chain(c) => {
                     if c.name == *chain {
                         log::debug!("Found chain {}", chain);
