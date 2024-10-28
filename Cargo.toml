@@ -62,7 +62,7 @@ futures-core = "0.3.31"
 futures-util = "0.3.31"
 nispor = "1.2.21"
 tower = { version = "0.5.1", features = ["util"] }
-hyper-util = "0.1.9"
+hyper-util = "0.1.10"
 
 [build-dependencies]
 chrono = { version = "0.4.38", default-features = false, features = ["clock"] }
