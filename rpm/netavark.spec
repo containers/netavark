@@ -88,6 +88,13 @@ Its features include:
 * Support for IPv4 and IPv6
 * Support for container DNS resolution via aardvark-dns.
 
+%package tests
+Summary: Tests for %{name}
+Requires: %{name} = %{epoch}:%{version}-%{release}
+
+%description tests
+%{summary}
+
 %prep
 %autosetup -Sgit %{name}-%{version}
 # Following steps are only required on environments like koji which have no
@@ -110,11 +117,17 @@ NETAVARK_DEFAULT_FW=%{default_fw} %{__make} CARGO="%{__cargo}" build
 %cargo_vendor_manifest
 %endif
 
+# Build examples package for tests
+%{__make} CARGO="%{__cargo}" examples
+
 cd docs
 %{__make}
 
 %install
 %{__make} DESTDIR=%{buildroot} PREFIX=%{_prefix} install
+
+install -d -p %{buildroot}%{_datadir}/%{name}/test/examples
+cp -pav targets/release/examples/* %{buildroot}%{_datadir}/%{name}/test/examples
 
 %preun
 %systemd_preun %{name}-dhcp-proxy.service
@@ -136,6 +149,12 @@ cd docs
 %{_unitdir}/%{name}-dhcp-proxy.service
 %{_unitdir}/%{name}-dhcp-proxy.socket
 %{_unitdir}/%{name}-firewalld-reload.service
+
+%files tests
+%dir %{_datadir}/%{name}
+%dir %{_datadir}/%{name}/test
+%dir %{_datadir}/%{name}/test/examples
+%{_datadir}/%{name}/test/examples/*
 
 %changelog
 %if %{defined autochangelog}
