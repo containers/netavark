@@ -1026,5 +1026,13 @@ function check_simple_bridge_nftables() {
     expected_rc=1 run_in_host_netns nft list chain inet netavark $chain
     run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
     assert "$output" == $'table inet netavark {\n\tchain NETAVARK-HOSTPORT-DNAT {\n\t}\n}' "NETAVARK-HOSTPORT-DNAT chain must be empty"
+}
 
+@test "$fw_driver - aardvark-dns error cleanup" {
+    expected_rc=1 run_netavark -a /usr/bin/false --file ${TESTSDIR}/testfiles/dualstack-bridge-custom-dns-server.json setup $(get_container_netns_path)
+    assert_json ".error" "error while applying dns entries: IO error: aardvark-dns exited unexpectedly without error message" "aardvark-dns error"
+
+    run_in_host_netns nft list table inet netavark
+    assert "$output" !~ "10.89.3.0/24" "leaked network nft rules after setup error"
+    assert "$output" !~ "fd10:88:a::/64" "leaked network nft rules after setup error"
 }
