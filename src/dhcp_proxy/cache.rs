@@ -288,7 +288,7 @@ mod cache_tests {
             let deserialized_lease = s
                 .get(macaddr)
                 .expect("Could not get the mac address from the map")
-                .get(0)
+                .first()
                 .expect("Could not get lease from set of mac addresses")
                 .clone();
             // Assure that the amount of leases added is correct amount
@@ -331,7 +331,7 @@ mod cache_tests {
             let deserialized_lease = s
                 .get(macaddr)
                 .expect("Could not get the mac address from the map")
-                .get(0)
+                .first()
                 .expect("Could not get lease from set of mac addresses")
                 .clone();
             // Assure that the amount of leases added is correct amount
@@ -354,7 +354,7 @@ mod cache_tests {
             let deserialized_lease = s
                 .get(macaddr)
                 .expect("Could not get the mac address from the map")
-                .get(0)
+                .first()
                 .expect("Could not get lease from set of mac addresses")
                 .clone();
 
@@ -418,7 +418,7 @@ mod cache_tests {
             let deserialized_lease = s
                 .get(macaddr)
                 .expect("Could not get the mac address from the map")
-                .get(0)
+                .first()
                 .expect("Could not get lease from set of mac addresses")
                 .clone();
             // Assure that the amount of leases added is correct amount
@@ -450,7 +450,7 @@ mod cache_tests {
             let deserialized_updated_lease = s
                 .get(macaddr)
                 .expect("Could not get lease from deserialized map")
-                .get(0)
+                .first()
                 .expect("Could not find lease in set of multi-homing leases");
 
             assert_eq!(deserialized_updated_lease, &new_lease);
