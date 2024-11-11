@@ -22,6 +22,7 @@ pub const OPTION_METRIC: &str = "metric";
 pub const OPTION_NO_DEFAULT_ROUTE: &str = "no_default_route";
 pub const OPTION_BCLIM: &str = "bclim";
 pub const OPTION_VRF: &str = "vrf";
+pub const OPTION_HOST_INTERFACE_NAME: &str = "host_interface_name";
 
 /// 100 is the default metric for most Linux networking tools.
 pub const DEFAULT_METRIC: u32 = 100;
