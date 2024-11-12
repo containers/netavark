@@ -20,8 +20,8 @@ use crate::{
 use super::{
     constants::{
         ISOLATE_OPTION_FALSE, ISOLATE_OPTION_STRICT, ISOLATE_OPTION_TRUE,
-        NO_CONTAINER_INTERFACE_ERROR, OPTION_ISOLATE, OPTION_METRIC, OPTION_MTU,
-        OPTION_NO_DEFAULT_ROUTE, OPTION_VRF,
+        NO_CONTAINER_INTERFACE_ERROR, OPTION_HOST_INTERFACE_NAME, OPTION_ISOLATE, OPTION_METRIC,
+        OPTION_MTU, OPTION_NO_DEFAULT_ROUTE, OPTION_VRF,
     },
     core_utils::{self, get_ipam_addresses, join_netns, parse_option, CoreUtils},
     driver::{self, DriverInfo},
@@ -38,6 +38,8 @@ const NO_BRIDGE_NAME_ERROR: &str = "no bridge interface name given";
 struct InternalData {
     /// interface name of the veth pair inside the container netns
     container_interface_name: String,
+    /// interace name of the veth pair in the host netns
+    host_interface_name: String,
     /// interface name of the bridge for on the host
     bridge_interface_name: String,
     /// static mac address
@@ -86,6 +88,11 @@ impl driver::NetworkDriver for Bridge<'_> {
         let no_default_route: bool =
             parse_option(&self.info.network.options, OPTION_NO_DEFAULT_ROUTE)?.unwrap_or(false);
         let vrf: Option<String> = parse_option(&self.info.network.options, OPTION_VRF)?;
+        let host_interface_name = parse_option(
+            &self.info.per_network_opts.options,
+            OPTION_HOST_INTERFACE_NAME,
+        )?
+        .unwrap_or_else(|| "".to_string());
 
         let static_mac = match &self.info.per_network_opts.static_mac {
             Some(mac) => Some(CoreUtils::decode_address_from_hex(mac)?),
@@ -95,6 +102,7 @@ impl driver::NetworkDriver for Bridge<'_> {
         self.data = Some(InternalData {
             bridge_interface_name: bridge_name,
             container_interface_name: self.info.per_network_opts.interface_name.clone(),
+            host_interface_name,
             mac_address: static_mac,
             ipam,
             mtu,
@@ -647,17 +655,25 @@ fn create_veth_pair<'fd>(
     let mut peer = LinkMessage::default();
     netlink::parse_create_link_options(&mut peer, peer_opts);
 
-    let mut host_veth = netlink::CreateLinkOptions::new(String::from(""), InfoKind::Veth);
+    let mut host_veth =
+        netlink::CreateLinkOptions::new(data.host_interface_name.clone(), InfoKind::Veth);
     host_veth.mtu = data.mtu;
     host_veth.primary_index = primary_index;
     host_veth.info_data = Some(InfoData::Veth(InfoVeth::Peer(peer)));
 
     host.create_link(host_veth).map_err(|err| match err {
         NetavarkError::Netlink(ref e) if -e.raw_code() == libc::EEXIST => NetavarkError::wrap(
-            format!(
-                "create veth pair: interface {} already exists on container namespace",
-                data.container_interface_name
-            ),
+            if data.host_interface_name.is_empty() {
+                format!(
+                    "create veth pair: interface {} already exists on container namespace",
+                    data.container_interface_name
+                )
+            } else {
+                format!(
+                    "create veth pair: interface {} already exists on container namespace or {} exists on host namespace",
+                    data.container_interface_name, data.host_interface_name,
+                )
+            },
             err,
         ),
         _ => NetavarkError::wrap("create veth pair", err),
