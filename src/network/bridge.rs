@@ -146,9 +146,11 @@ impl driver::NetworkDriver for Bridge<'_> {
         );
 
         if let BridgeMode::Managed = data.mode {
-            setup_ipv4_fw_sysctl()?;
-            if data.ipam.ipv6_enabled {
-                setup_ipv6_fw_sysctl()?;
+            if !self.info.network.internal {
+                setup_ipv4_fw_sysctl()?;
+                if data.ipam.ipv6_enabled {
+                    setup_ipv6_fw_sysctl()?;
+                }
             }
         }
 
