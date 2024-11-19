@@ -130,7 +130,7 @@ integration: $(CARGO_TARGET_DIR) examples
 .PHONY: validate
 validate: $(CARGO_TARGET_DIR)
 	$(CARGO) fmt --all -- --check
-	$(CARGO) clippy -p netavark@$(CRATE_VERSION) -- -D warnings
+	$(CARGO) clippy -p netavark -- -D warnings
 	$(MAKE) docs
 
 .PHONY: vendor-tarball

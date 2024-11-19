@@ -188,11 +188,8 @@ impl driver::NetworkDriver for Bridge<'_> {
                 }
             }
             let mut names = vec![self.info.container_name.to_string()];
-            match &self.info.per_network_opts.aliases {
-                Some(n) => {
-                    names.extend(n.clone());
-                }
-                None => {}
+            if let Some(n) = &self.info.per_network_opts.aliases {
+                names.extend(n.clone());
             }
 
             let gw = data
