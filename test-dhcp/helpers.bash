@@ -281,25 +281,24 @@ function basic_setup() {
 }
 
 #
-# add_bridge br0
+# add_bridge <name>
 #
 function add_bridge() {
   local bridge_name="$1"
   br_cidr=$(gateway_from_subnet "$SUBNET_CIDR")
-  run_in_container_netns brctl addbr $bridge_name
-  run_in_container_netns ifconfig $bridge_name $br_cidr up
-	run_in_container_netns firewall-cmd  --add-interface=$bridge_name --zone=trusted
+  run_in_container_netns ip link add $bridge_name type bridge
+  run_in_container_netns ip addr add $br_cidr dev $bridge_name
+  run_in_container_netns ip link set $bridge_name up
 }
 
 #
-# remove_bridge br0
+# remove_bridge <name>
 #
 function remove_bridge() {
   local bridge_name="$1"
-	run_in_container_netns firewall-cmd  --remove-interface="$bridge_name" --zone=trusted
   run_in_container_netns ip link set "$bridge_name" down
   # shellcheck disable=SC2086
-  run_in_container_netns brctl delbr $bridge_name
+  run_in_container_netns ip link del $bridge_name
 }
 
 #
@@ -310,10 +309,7 @@ function remove_veth() {
   local bridge_name="$2"
   local veth_br_name="${veth_name}br"
 
-  run_in_container_netns ip link set "$veth_br_name" down
-  run_in_container_netns ip link set "$veth_name" down
-  run_in_container_netns brctl delif "$bridge_name" "$veth_br_name"
-  run_in_container_netns ip link del "$veth_br_name" type veth peer name "$veth_name"
+  run_in_container_netns ip link del "$veth_br_name"
 }
 
 #
@@ -324,7 +320,7 @@ function add_veth() {
   local bridge_name="$2"
   local veth_br_name="${veth_name}br"
   run_in_container_netns ip link add "$veth_br_name" type veth peer name "$veth_name"
-  run_in_container_netns brctl addif "$bridge_name" "$veth_br_name"
+  run_in_container_netns ip link set "$veth_br_name" master "$bridge_name"
   run_in_container_netns ip link set "$veth_br_name" up
   run_in_container_netns ip link set "$veth_name" up
 }
