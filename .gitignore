@@ -8,3 +8,6 @@ vendor/
 src/proto-build/netavark_proxy.rs
 contrib/systemd/*/*.service
 .vscode*
+rpm/RPMS
+rpm/SRPMS
+rpm/*.tar.gz

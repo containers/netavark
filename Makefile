@@ -59,7 +59,7 @@ build_netavark: bin $(CARGO_TARGET_DIR)
 
 .PHONY: examples
 examples: bin $(CARGO_TARGET_DIR)
-	cargo build --examples $(release)
+	$(CARGO) build --examples $(release)
 
 .PHONY: crate-publish
 crate-publish:
@@ -122,7 +122,14 @@ unit: $(CARGO_TARGET_DIR)
 	$(CARGO) test
 
 .PHONY: integration
+# The TEST_PLUGINS envvar is used by bats to specify path to test-plugins
+# directory
+ifdef TEST_PLUGINS
+$(info Skipping examples build as TEST_PLUGINS is set)
+integration: $(CARGO_TARGET_DIR)
+else
 integration: $(CARGO_TARGET_DIR) examples
+endif
 	# needs to be run as root or with podman unshare --rootless-netns
 	bats test/
 	bats test-dhcp/
