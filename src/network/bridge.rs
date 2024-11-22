@@ -21,7 +21,7 @@ use super::{
     constants::{
         ISOLATE_OPTION_FALSE, ISOLATE_OPTION_STRICT, ISOLATE_OPTION_TRUE,
         NO_CONTAINER_INTERFACE_ERROR, OPTION_HOST_INTERFACE_NAME, OPTION_ISOLATE, OPTION_METRIC,
-        OPTION_MTU, OPTION_NO_DEFAULT_ROUTE, OPTION_VRF,
+        OPTION_MODE, OPTION_MTU, OPTION_NO_DEFAULT_ROUTE, OPTION_VRF,
     },
     core_utils::{self, get_ipam_addresses, join_netns, parse_option, CoreUtils},
     driver::{self, DriverInfo},
@@ -34,6 +34,14 @@ use super::{
 };
 
 const NO_BRIDGE_NAME_ERROR: &str = "no bridge interface name given";
+
+#[derive(Clone, Copy, PartialEq)]
+enum BridgeMode {
+    /// The bridge is managed by netavark.
+    Managed,
+    /// The bridge was created externally and we only add/remove veths.
+    Unmanaged,
+}
 
 struct InternalData {
     /// interface name of the veth pair inside the container netns
@@ -52,6 +60,8 @@ struct InternalData {
     isolate: IsolateOption,
     /// Route metric for any default routes added for the network
     metric: Option<u32>,
+    /// Management mode of the bridge.
+    mode: BridgeMode,
     /// if set, no default gateway will be added
     no_default_route: bool,
     /// sef vrf for bridge
@@ -82,6 +92,7 @@ impl driver::NetworkDriver for Bridge<'_> {
         }
         let ipam = get_ipam_addresses(self.info.per_network_opts, self.info.network)?;
 
+        let mode: Option<String> = parse_option(&self.info.network.options, OPTION_MODE)?;
         let mtu: u32 = parse_option(&self.info.network.options, OPTION_MTU)?.unwrap_or(0);
         let isolate: IsolateOption = get_isolate_option(&self.info.network.options)?;
         let metric: u32 = parse_option(&self.info.network.options, OPTION_METRIC)?.unwrap_or(100);
@@ -108,6 +119,7 @@ impl driver::NetworkDriver for Bridge<'_> {
             mtu,
             isolate,
             metric: Some(metric),
+            mode: get_bridge_mode_from_string(mode.as_deref())?,
             no_default_route,
             vrf,
         });
@@ -133,9 +145,13 @@ impl driver::NetworkDriver for Bridge<'_> {
             data.bridge_interface_name, data.ipam.gateway_addresses
         );
 
-        setup_ipv4_fw_sysctl()?;
-        if data.ipam.ipv6_enabled {
-            setup_ipv6_fw_sysctl()?;
+        if let BridgeMode::Managed = data.mode {
+            if !self.info.network.internal {
+                setup_ipv4_fw_sysctl()?;
+                if data.ipam.ipv6_enabled {
+                    setup_ipv6_fw_sysctl()?;
+                }
+            }
         }
 
         let (host_sock, netns_sock) = netlink_sockets;
@@ -221,29 +237,29 @@ impl driver::NetworkDriver for Bridge<'_> {
             None
         };
 
-        // if the network is internal block routing and do not setup firewall rules
-        if self.info.network.internal {
-            CoreUtils::apply_sysctl_value(
-                format!(
-                    "/proc/sys/net/ipv4/conf/{}/forwarding",
-                    data.bridge_interface_name
-                ),
-                "0",
-            )?;
-            if data.ipam.ipv6_enabled {
+        if let BridgeMode::Managed = data.mode {
+            // if the network is internal block routing and do not setup firewall rules
+            if self.info.network.internal {
                 CoreUtils::apply_sysctl_value(
                     format!(
-                        "/proc/sys/net/ipv6/conf/{}/forwarding",
+                        "/proc/sys/net/ipv4/conf/{}/forwarding",
                         data.bridge_interface_name
                     ),
                     "0",
                 )?;
+                if data.ipam.ipv6_enabled {
+                    CoreUtils::apply_sysctl_value(
+                        format!(
+                            "/proc/sys/net/ipv6/conf/{}/forwarding",
+                            data.bridge_interface_name
+                        ),
+                        "0",
+                    )?;
+                }
+            } else {
+                self.setup_firewall(data)?
             }
-            // return here to skip setting up firewall rules
-            return Ok((response, aardvark_entry));
         }
-
-        self.setup_firewall(data)?;
 
         Ok((response, aardvark_entry))
     }
@@ -252,6 +268,8 @@ impl driver::NetworkDriver for Bridge<'_> {
         &self,
         netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
     ) -> NetavarkResult<()> {
+        let mode: Option<String> = parse_option(&self.info.network.options, OPTION_MODE)?;
+        let mode = get_bridge_mode_from_string(mode.as_deref())?;
         let (host_sock, netns_sock) = netlink_sockets;
 
         let mut error_list = NetavarkErrorList::new();
@@ -268,6 +286,7 @@ impl driver::NetworkDriver for Bridge<'_> {
         let complete_teardown = match remove_link(
             host_sock,
             netns_sock,
+            mode,
             &bridge_name,
             &self.info.per_network_opts.interface_name,
         ) {
@@ -278,19 +297,14 @@ impl driver::NetworkDriver for Bridge<'_> {
             }
         };
 
-        if self.info.network.internal {
-            if !error_list.is_empty() {
-                return Err(NetavarkError::List(error_list));
+        if !self.info.network.internal && mode == BridgeMode::Managed {
+            match self.teardown_firewall(complete_teardown, bridge_name) {
+                Ok(_) => {}
+                Err(err) => {
+                    error_list.push(err);
+                }
             }
-            return Ok(());
         }
-
-        match self.teardown_firewall(complete_teardown, bridge_name) {
-            Ok(_) => {}
-            Err(err) => {
-                error_list.push(err);
-            }
-        };
 
         if !error_list.is_empty() {
             return Err(NetavarkError::List(error_list));
@@ -547,6 +561,12 @@ fn create_interfaces(
                     // for all other errors we want to return the error
                     return Err(err).wrap("get bridge interface");
                 }
+
+                if let BridgeMode::Unmanaged = data.mode {
+                    return Err(err)
+                        .wrap("in unmanaged mode, the bridge must already exist on the host");
+                }
+
                 let mut create_link_opts = netlink::CreateLinkOptions::new(
                     data.bridge_interface_name.to_string(),
                     InfoKind::Bridge,
@@ -700,41 +720,44 @@ fn create_veth_pair<'fd>(
         ));
     }
 
-    exec_netns!(hostns_fd, netns_fd, res, {
-        disable_ipv6_autoconf(&data.container_interface_name)?;
-        if data.ipam.ipv6_enabled {
-            //  Disable dad inside the container too
-            let disable_dad_in_container = format!(
-                "/proc/sys/net/ipv6/conf/{}/accept_dad",
+    if let BridgeMode::Managed = data.mode {
+        exec_netns!(hostns_fd, netns_fd, res, {
+            disable_ipv6_autoconf(&data.container_interface_name)?;
+            if data.ipam.ipv6_enabled {
+                //  Disable dad inside the container too
+                let disable_dad_in_container = format!(
+                    "/proc/sys/net/ipv6/conf/{}/accept_dad",
+                    &data.container_interface_name
+                );
+                core_utils::CoreUtils::apply_sysctl_value(disable_dad_in_container, "0")?;
+            }
+            let enable_arp_notify = format!(
+                "/proc/sys/net/ipv4/conf/{}/arp_notify",
                 &data.container_interface_name
             );
-            core_utils::CoreUtils::apply_sysctl_value(disable_dad_in_container, "0")?;
-        }
-        let enable_arp_notify = format!(
-            "/proc/sys/net/ipv4/conf/{}/arp_notify",
-            &data.container_interface_name
-        );
-        core_utils::CoreUtils::apply_sysctl_value(enable_arp_notify, "1")?;
+            core_utils::CoreUtils::apply_sysctl_value(enable_arp_notify, "1")?;
 
-        // disable strict reverse path search validation
-        let rp_filter = format!(
-            "/proc/sys/net/ipv4/conf/{}/rp_filter",
-            &data.container_interface_name
-        );
-        CoreUtils::apply_sysctl_value(rp_filter, "2")?;
-        Ok::<(), NetavarkError>(())
-    });
-    // check the result and return error
-    res?;
+            // disable strict reverse path search validation
+            let rp_filter = format!(
+                "/proc/sys/net/ipv4/conf/{}/rp_filter",
+                &data.container_interface_name
+            );
+            CoreUtils::apply_sysctl_value(rp_filter, "2")?;
+            Ok::<(), NetavarkError>(())
+        });
+        // check the result and return error
+        res?;
 
-    if data.ipam.ipv6_enabled {
-        let host_veth = host.get_link(netlink::LinkID::ID(host_link))?;
+        if data.ipam.ipv6_enabled {
+            let host_veth = host.get_link(netlink::LinkID::ID(host_link))?;
 
-        for nla in host_veth.attributes.into_iter() {
-            if let LinkAttribute::IfName(name) = nla {
-                //  Disable dad inside on the host too
-                let disable_dad_in_container = format!("/proc/sys/net/ipv6/conf/{name}/accept_dad");
-                core_utils::CoreUtils::apply_sysctl_value(disable_dad_in_container, "0")?;
+            for nla in host_veth.attributes.into_iter() {
+                if let LinkAttribute::IfName(name) = nla {
+                    //  Disable dad inside on the host too
+                    let disable_dad_in_container =
+                        format!("/proc/sys/net/ipv6/conf/{name}/accept_dad");
+                    core_utils::CoreUtils::apply_sysctl_value(disable_dad_in_container, "0")?;
+                }
             }
         }
     }
@@ -827,6 +850,7 @@ fn check_link_is_vrf(msg: LinkMessage, vrf_name: &str) -> NetavarkResult<LinkMes
 fn remove_link(
     host: &mut netlink::Socket,
     netns: &mut netlink::Socket,
+    mode: BridgeMode,
     br_name: &str,
     container_veth_name: &str,
 ) -> NetavarkResult<bool> {
@@ -845,10 +869,12 @@ fn remove_link(
         .wrap("failed to get connected bridge interfaces")?;
     // no connected interfaces on that bridge we can remove it
     if links.is_empty() {
-        log::info!("removing bridge {}", br_name);
-        host.del_link(netlink::LinkID::ID(br.header.index))
-            .wrap(format!("failed to delete bridge {container_veth_name}"))?;
-        return Ok(true);
+        if let BridgeMode::Managed = mode {
+            log::info!("removing bridge {}", br_name);
+            host.del_link(netlink::LinkID::ID(br.header.index))
+                .wrap(format!("failed to delete bridge {container_veth_name}"))?;
+            return Ok(true);
+        }
     }
     Ok(false)
 }
@@ -862,4 +888,15 @@ fn get_isolate_option(opts: &Option<HashMap<String, String>>) -> NetavarkResult<
         ISOLATE_OPTION_FALSE => IsolateOption::Never,
         _ => IsolateOption::Never,
     })
+}
+
+fn get_bridge_mode_from_string(mode: Option<&str>) -> NetavarkResult<BridgeMode> {
+    match mode {
+        // default to l3 when unset
+        None | Some("") | Some("managed") => Ok(BridgeMode::Managed),
+        Some("unmanaged") => Ok(BridgeMode::Unmanaged),
+        Some(name) => Err(NetavarkError::msg(format!(
+            "invalid bridge mode \"{name}\""
+        ))),
+    }
 }
