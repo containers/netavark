@@ -29,6 +29,7 @@ pub struct DriverInfo<'a> {
     pub dns_port: u16,
     pub config_dir: &'a Path,
     pub rootless: bool,
+    pub container_hostname: &'a Option<String>,
 }
 
 pub trait NetworkDriver {
