@@ -66,9 +66,13 @@ pub struct NetworkOptions {
     #[serde(rename = "container_id")]
     pub container_id: String,
 
-    /// The container name, used as dns name.
+    /// The container name.
     #[serde(rename = "container_name")]
     pub container_name: String,
+
+    /// The container hostname.
+    #[serde(rename = "container_hostname")]
+    pub container_hostname: Option<String>,
 
     /// The options used to create the interfaces with.
     /// The networks listed in "network_info" have to match this,

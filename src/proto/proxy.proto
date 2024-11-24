@@ -16,6 +16,7 @@ message NetworkConfig {
   string host_name = 5;
   Version version = 6;
   string ns_path = 7;
+  string container_id = 8;
 
 }
 // Lease can either contain a IPv4 or IPv6 DHCP lease, and the common IP information

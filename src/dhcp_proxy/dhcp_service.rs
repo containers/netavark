@@ -49,6 +49,30 @@ impl DhcpV4Service {
     pub fn new(nc: NetworkConfig, timeout: u32) -> Result<Self, DhcpServiceError> {
         let mut config = DhcpV4Config::new_proxy(&nc.host_iface, &nc.container_mac_addr);
         config.set_timeout(timeout);
+
+        // Sending the hostname to the DHCP server is optional but it can be useful
+        // in environments where DDNS is used to create or update DNS records.
+        if !nc.host_name.is_empty() {
+            config.set_host_name(&nc.host_name);
+        };
+
+        // DHCP servers use the "client id", which is usually the MAC address,
+        // to keep track of leases but each time the container starts, it gets
+        // a new, random, MAC address so there's a good chance that the container
+        // won't get the same IP address if it restarts. This can be an issue if
+        // a container provides a service and needs to be restarted because, even
+        // if DDNS is in use and the container has a DNS A record, a client may
+        // still have the old IP address cached until the DNS TTL expires.
+        //
+        // Since the container id remains constant for life of the container
+        // and it should be globally unique, we can use it as the client id to
+        // ensure the container gets the same IP address each time it starts.
+
+        // The client id is a byte array so we need to convert the container id
+        // to a byte array.  The client_id_type of "0" means the client id
+        // is not a hardware address.
+        config.set_client_id(0, nc.container_id.as_bytes());
+
         let client = match DhcpV4ClientAsync::init(config, None) {
             Ok(client) => Ok(client),
             Err(err) => Err(DhcpServiceError::new(InvalidArgument, err.to_string())),
