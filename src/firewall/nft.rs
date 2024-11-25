@@ -1011,14 +1011,18 @@ fn get_dnat_rules_for_addr_family(
                     continue;
                 }
             }
-            let daddr_cond: Option<stmt::Statement> =
-                daddr.map(|i| get_ip_match(&i, "daddr", stmt::Operator::EQ));
 
-            // dnat chain: <protocol> dport <port> jump <container_dnat_chain>
-            rules.push(make_rule(
-                DNATCHAIN,
-                vec![dport_cond.clone(), get_jump_action(&subnet_dnat_chain)],
-            ));
+            let mut jump_statements = Vec::with_capacity(3);
+            let daddr_cond: Option<stmt::Statement> = daddr.map(|i| {
+                let daddr = get_ip_match(&i, "daddr", stmt::Operator::EQ);
+                jump_statements.push(daddr.clone());
+                daddr
+            });
+            jump_statements.push(dport_cond.clone());
+            jump_statements.push(get_jump_action(&subnet_dnat_chain));
+
+            // dnat chain: [ip daddr <ip>] <protocol> dport <port> jump <container_dnat_chain>
+            rules.push(make_rule(DNATCHAIN, jump_statements));
 
             // Container dnat chain: ip saddr <subnet> ip daddr <host IP> <proto> dport <port(s)> jump SETMARKCHAIN
             rules.push(get_subnet_dport_match(
