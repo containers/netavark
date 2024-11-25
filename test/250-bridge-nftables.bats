@@ -985,7 +985,7 @@ function check_simple_bridge_nftables() {
 }
 
 # regression test for https://github.com/containers/netavark/issues/1068
-@test "$fw_driver - port firewall rule cleanup" {
+@test "$fw_driver - port firewall rule cleanup port protocol" {
     run_netavark --file ${TESTSDIR}/testfiles/bridge-port-tcp-udp.json setup $(get_container_netns_path)
 
     local chain="nv_2f259bab_10_88_0_0_nm16_dnat"
@@ -1002,4 +1002,29 @@ function check_simple_bridge_nftables() {
     run_netavark --file ${TESTSDIR}/testfiles/bridge-port-tcp-udp.json teardown $(get_container_netns_path)
 
     expected_rc=1 run_in_host_netns nft list chain inet netavark $chain
+}
+
+# regression test for https://github.com/containers/netavark/issues/1129
+@test "$fw_driver - port firewall rule cleanup host ip" {
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-port-hostip.json setup $(get_container_netns_path)
+
+    local chain="nv_2f259bab_10_88_0_0_nm16_dnat"
+    run_in_host_netns nft list chain inet netavark $chain
+
+    run_in_host_netns nft list ruleset
+
+    # extra check so we can be sure that these rules exists before checking later of they are removed
+    assert "$output" =~ "ip saddr 10.88.0.0/16 ip daddr 192.168.188.25 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip saddr 127.0.0.1 ip daddr 192.168.188.25 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip daddr 192.168.188.25 tcp dport 8080 dnat ip to 10.88.0.14:8080"
+    assert "$output" =~ "ip saddr 10.88.0.0/16 ip daddr 192.168.188.24 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip saddr 127.0.0.1 ip daddr 192.168.188.24 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip daddr 192.168.188.24 tcp dport 8080 dnat ip to 10.88.0.14:8080"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-port-hostip.json teardown $(get_container_netns_path)
+
+    expected_rc=1 run_in_host_netns nft list chain inet netavark $chain
+    run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
+    assert "$output" == $'table inet netavark {\n\tchain NETAVARK-HOSTPORT-DNAT {\n\t}\n}' "NETAVARK-HOSTPORT-DNAT chain must be empty"
+
 }
