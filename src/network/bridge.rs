@@ -334,7 +334,7 @@ impl<'a> Bridge<'a> {
         nameservers: &'a Vec<IpAddr>,
         isolate: IsolateOption,
         bridge_name: String,
-    ) -> NetavarkResult<(SetupNetwork, PortForwardConfig)> {
+    ) -> NetavarkResult<(SetupNetwork, PortForwardConfig<'a>)> {
         let id_network_hash =
             CoreUtils::create_network_hash(&self.info.network.name, MAX_HASH_SIZE);
         let sn = SetupNetwork {

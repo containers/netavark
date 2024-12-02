@@ -82,7 +82,7 @@ pub struct VarkChain<'a> {
     pub td_policy: Option<TeardownPolicy>,
 }
 
-impl<'a> VarkChain<'a> {
+impl VarkChain<'_> {
     fn new(
         driver: &IPTables,
         table: String,
