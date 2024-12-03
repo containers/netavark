@@ -13,11 +13,11 @@ use crate::{
     wrap,
 };
 
-/// File layout looks like this
-/// $config/firewall/
-///                 - firewall-driver -> name of the firewall driver
-///                 - networks/$netID -> network config setup
-///                 - ports/$netID_$conID -> port config
+// File layout looks like this
+// $config/firewall/
+//                 - firewall-driver -> name of the firewall driver
+//                 - networks/$netID -> network config setup
+//                 - ports/$netID_$conID -> port config
 
 const FIREWALL_DIR: &str = "firewall";
 const FIREWALL_DRIVER_FILE: &str = "firewall-driver";
