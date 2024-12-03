@@ -33,17 +33,19 @@ pub fn get_dhcp_lease(
     container_network_interface: &str,
     ns_path: &str,
     container_macvlan_mac: &str,
+    container_hostname: &str,
+    container_id: &str,
 ) -> NetavarkResult<DhcpLeaseInfo> {
     let nvp_config = NetworkConfig {
         host_iface: host_network_interface.to_string(),
         // TODO add in domain name support
         domain_name: "".to_string(),
-        //  TODO add in host name support
-        host_name: "".to_string(),
+        host_name: container_hostname.to_string(),
         version: 0,
         ns_path: ns_path.to_string(),
         container_iface: container_network_interface.to_string(),
         container_mac_addr: container_macvlan_mac.to_string(),
+        container_id: container_id.to_string(),
     };
     let lease = match tokio::task::LocalSet::new().block_on(
         match &tokio::runtime::Builder::new_current_thread()
@@ -127,12 +129,12 @@ pub fn release_dhcp_lease(
         host_iface: host_network_interface.to_string(),
         // TODO add in domain name support
         domain_name: "".to_string(),
-        //  TODO add in host name support
         host_name: "".to_string(),
         version: 0,
         ns_path: ns_path.to_string(),
         container_iface: container_network_interface.to_string(),
         container_mac_addr: container_macvlan_mac.to_string(),
+        container_id: "".to_string(),
     };
     match tokio::task::LocalSet::new().block_on(
         match &tokio::runtime::Builder::new_current_thread()

@@ -188,6 +188,8 @@ impl driver::NetworkDriver for Vlan<'_> {
                 &data.container_interface_name,
                 self.info.netns_path,
                 &container_vlan_mac,
+                self.info.container_hostname.as_deref().unwrap_or(""),
+                self.info.container_id,
             )?;
             // do not overwrite dns servers set by dns podman flag
             if !self.info.container_dns_servers.is_some() {

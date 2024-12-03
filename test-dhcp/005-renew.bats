@@ -15,7 +15,8 @@ load helpers
   "domain_name": "example.com",
   "host_name": "foobar",
   "version": 0,
-  "ns_path": "$NS_PATH"
+  "ns_path": "$NS_PATH",
+  "container_id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 }
   \0
 EOF
