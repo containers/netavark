@@ -1,0 +1,52 @@
+{
+    "container_id": "f922ffdda5718b26ea585a500d5ad05191da5461b06d6f62e4d1f66ca901a253",
+    "container_name": "sharp_gould",
+    "port_mappings": [
+        {
+            "host_ip": "192.168.188.25",
+            "container_port": 8080,
+            "host_port": 8080,
+            "range": 1,
+            "protocol": "tcp"
+        },
+        {
+            "host_ip": "192.168.188.24",
+            "container_port": 8080,
+            "host_port": 8080,
+            "range": 1,
+            "protocol": "tcp"
+        }
+    ],
+    "networks": {
+        "podman": {
+            "static_ips": [
+                "10.88.0.14"
+            ],
+            "aliases": [
+                "f922ffdda571"
+            ],
+            "interface_name": "eth0"
+        }
+    },
+    "network_info": {
+        "podman": {
+            "name": "podman",
+            "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+            "driver": "bridge",
+            "network_interface": "podman0",
+            "created": "2024-09-05T15:00:04.45111926+02:00",
+            "subnets": [
+                {
+                    "subnet": "10.88.0.0/16",
+                    "gateway": "10.88.0.1"
+                }
+            ],
+            "ipv6_enabled": false,
+            "internal": false,
+            "dns_enabled": false,
+            "ipam_options": {
+                "driver": "host-local"
+            }
+        }
+    }
+}

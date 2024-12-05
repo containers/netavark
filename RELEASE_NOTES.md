@@ -1,5 +1,10 @@
 # Release Notes
 
+## v1.13.1
+
+* Fixed a bug where port forwarding rules might not be removed correctly on nftables when different host ips are used for the same port. ([#1129](https://github.com/containers/netavark/issues/1129))
+* On aardvark-dns setup errors properly cleanup interfaces and firewall rules again. ([#1121](https://github.com/containers/netavark/issues/1121))
+
 ## v1.13.0
 
 * Fixed bug where port forwarding rules might not be removed correctly on nftables
