@@ -51,7 +51,7 @@ netlink-packet-route = "0.21.0"
 netlink-packet-core = "0.7.0"
 nftables = "0.5.0"
 fs2 = "0.4.3"
-netlink-sys = "0.8.6"
+netlink-sys = "0.8.7"
 tokio = { version = "1.41.1", features = ["rt", "rt-multi-thread", "signal", "fs"] }
 tokio-stream = { version = "0.1.16", features = ["net"] }
 tonic = "0.12.3"
