@@ -11,6 +11,7 @@ repository = "https://github.com/containers/netavark"
 categories = ["virtualization"]
 exclude = ["/.cirrus.yml", "/.github/*", "/hack/*"]
 build = "build.rs"
+rust-version = "1.76"
 
 [package.metadata.vendor-filter]
 platforms = ["*-unknown-linux-*"]
@@ -51,12 +52,12 @@ netlink-packet-route = "0.21.0"
 netlink-packet-core = "0.7.0"
 nftables = "0.5.0"
 fs2 = "0.4.3"
-netlink-sys = "0.8.6"
-tokio = { version = "1.41.1", features = ["rt", "rt-multi-thread", "signal", "fs"] }
-tokio-stream = { version = "0.1.16", features = ["net"] }
+netlink-sys = "0.8.7"
+tokio = { version = "1.42.0", features = ["rt", "rt-multi-thread", "signal", "fs"] }
+tokio-stream = { version = "0.1.17", features = ["net"] }
 tonic = "0.12.3"
 mozim = "0.2.4"
-prost = "0.13.3"
+prost = "0.13.4"
 futures-channel = "0.3.31"
 futures-core = "0.3.31"
 futures-util = "0.3.31"
@@ -65,7 +66,7 @@ tower = { version = "0.5.1", features = ["util"] }
 hyper-util = "0.1.10"
 
 [build-dependencies]
-chrono = { version = "0.4.38", default-features = false, features = ["clock"] }
+chrono = { version = "0.4.39", default-features = false, features = ["clock"] }
 tonic-build = "0.12.3"
 
 [dev-dependencies]
