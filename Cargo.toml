@@ -62,7 +62,7 @@ futures-channel = "0.3.31"
 futures-core = "0.3.31"
 futures-util = "0.3.31"
 nispor = "1.2.21"
-tower = { version = "0.5.1", features = ["util"] }
+tower = { version = "0.5.2", features = ["util"] }
 hyper-util = "0.1.10"
 
 [build-dependencies]
