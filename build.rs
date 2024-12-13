@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 fn main() {
@@ -32,8 +32,7 @@ fn main() {
         .type_attribute(
             "netavark_proxy.NetworkConfig",
             "#[derive(serde::Serialize)]",
-        )
-        .out_dir(PathBuf::from("src/proto-build"));
+        );
 
     builder
         .compile_protos(&[Path::new("src/proto/proxy.proto")], &[Path::new("proto")])
