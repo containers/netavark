@@ -5,6 +5,5 @@ targets/
 netavark.1
 vendor/
 .idea/*
-src/proto-build/netavark_proxy.rs
 contrib/systemd/*/*.service
 .vscode*

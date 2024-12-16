@@ -19,7 +19,7 @@ use tower::service_fn;
 
 #[allow(clippy::unwrap_used)]
 pub mod g_rpc {
-    include!("../proto-build/netavark_proxy.rs");
+    include!(concat!(env!("OUT_DIR"), "/netavark_proxy.rs"));
     use crate::dhcp_proxy::lib::VectorConv;
     use crate::dhcp_proxy::types::{CustomErr, ProxyError};
     use mozim::DhcpV4Lease;
