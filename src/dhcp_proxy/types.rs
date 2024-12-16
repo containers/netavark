@@ -23,6 +23,7 @@ impl FromStr for NetworkConfig {
             version: 0,
             ns_path: "".to_string(),
             container_iface: "".to_string(),
+            container_id: "".to_string(),
         })
     }
 }

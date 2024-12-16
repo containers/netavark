@@ -96,6 +96,7 @@ impl Teardown {
                     firewall: firewall_driver.as_ref(),
                     container_id: &network_options.container_id,
                     container_name: &network_options.container_name,
+                    container_hostname: &network_options.container_hostname,
                     container_dns_servers: &network_options.dns_servers,
                     netns_host: hostns.file.as_fd(),
                     netns_container: netns.file.as_fd(),
