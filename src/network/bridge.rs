@@ -7,7 +7,7 @@ use netlink_packet_route::link::{
     LinkMessage,
 };
 
-use crate::network::macvlan_dhcp::get_dhcp_lease;
+use crate::network::dhcp::{dhcp_teardown, get_dhcp_lease};
 use crate::{
     dns::aardvark::AardvarkEntry,
     error::{ErrorWrap, NetavarkError, NetavarkErrorList, NetavarkResult},
@@ -315,7 +315,7 @@ impl driver::NetworkDriver for Bridge<'_> {
 
         let mut error_list = NetavarkErrorList::new();
 
-        core_utils::dhcp_teardown(&self.info, netns_sock)?;
+        dhcp_teardown(&self.info, netns_sock)?;
 
         let routes = core_utils::create_route_list(&self.info.network.routes)?;
         for route in routes.iter() {

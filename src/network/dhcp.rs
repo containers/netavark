@@ -1,4 +1,4 @@
-use crate::error::{NetavarkError, NetavarkResult};
+use crate::error::{ErrorWrap, NetavarkError, NetavarkResult};
 use crate::network::types::NetAddress;
 use ipnet::IpNet;
 use std::net::IpAddr;
@@ -6,6 +6,9 @@ use std::str::FromStr;
 
 use crate::dhcp_proxy::lib::g_rpc::NetworkConfig;
 use crate::dhcp_proxy::proxy_conf::DEFAULT_UDS_PATH;
+
+use super::driver::DriverInfo;
+use super::{core_utils, netlink};
 
 pub type DhcpLeaseInfo = (Vec<NetAddress>, Option<Vec<IpAddr>>, Option<Vec<String>>);
 
@@ -153,5 +156,28 @@ pub fn release_dhcp_lease(
             return Err(NetavarkError::Message(e.to_string()));
         }
     };
+    Ok(())
+}
+
+pub fn dhcp_teardown(info: &DriverInfo, sock: &mut netlink::Socket) -> NetavarkResult<()> {
+    let ipam = core_utils::get_ipam_addresses(info.per_network_opts, info.network)?;
+    let if_name = info.per_network_opts.interface_name.clone();
+
+    // If we are using DHCP, we need to at least call to the proxy so that
+    // the proxy's cache can get updated and the current lease can be released.
+    if ipam.dhcp_enabled {
+        let dev = sock.get_link(netlink::LinkID::Name(if_name)).wrap(format!(
+            "get container interface {}",
+            &info.per_network_opts.interface_name
+        ))?;
+
+        let container_mac_address = core_utils::get_mac_address(dev.attributes)?;
+        release_dhcp_lease(
+            &info.network.network_interface.clone().unwrap_or_default(),
+            &info.per_network_opts.interface_name,
+            info.netns_path,
+            &container_mac_address,
+        )?
+    }
     Ok(())
 }

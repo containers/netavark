@@ -7,7 +7,7 @@ use netlink_packet_route::link::{
 };
 use rand::distributions::{Alphanumeric, DistString};
 
-use crate::network::macvlan_dhcp::get_dhcp_lease;
+use crate::network::dhcp::{dhcp_teardown, get_dhcp_lease};
 use crate::{
     dns::aardvark::AardvarkEntry,
     error::{ErrorWrap, NetavarkError, NetavarkResult},
@@ -218,7 +218,7 @@ impl driver::NetworkDriver for Vlan<'_> {
         &self,
         netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
     ) -> NetavarkResult<()> {
-        core_utils::dhcp_teardown(&self.info, netlink_sockets.1)?;
+        dhcp_teardown(&self.info, netlink_sockets.1)?;
 
         let routes = core_utils::create_route_list(&self.info.network.routes)?;
         for route in routes.iter() {
