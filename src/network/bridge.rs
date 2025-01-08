@@ -114,6 +114,18 @@ impl driver::NetworkDriver for Bridge<'_> {
             None => None,
         };
 
+        let mode = get_bridge_mode_from_string(mode.as_deref())?;
+
+        // Cannot chain both conditions with "&&"
+        // until https://github.com/rust-lang/rust/issues/53667 is stable
+        if ipam.dhcp_enabled {
+            if let BridgeMode::Managed = mode {
+                return Err(NetavarkError::msg(
+                    "cannot use dhcp ipam driver without using the option mode=unmanaged",
+                ));
+            }
+        }
+
         self.data = Some(InternalData {
             bridge_interface_name: bridge_name,
             container_interface_name: self.info.per_network_opts.interface_name.clone(),
@@ -123,7 +135,7 @@ impl driver::NetworkDriver for Bridge<'_> {
             mtu,
             isolate,
             metric: Some(metric),
-            mode: get_bridge_mode_from_string(mode.as_deref())?,
+            mode,
             no_default_route,
             vrf,
             vlan,
