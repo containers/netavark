@@ -40,3 +40,7 @@ load helpers
     assert_json "$link_info" '.[].flags[] | select(.=="UP")' == "UP" "Host bridge interface is up"
 }
 
+@test "bridge - managed mode with dhcp" {
+    expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/bridge-managed-dhcp.json setup $(get_container_netns_path)
+    assert_json ".error" "cannot use dhcp ipam driver without using the option mode=unmanaged" "dhcp error"
+}
