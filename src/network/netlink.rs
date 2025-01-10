@@ -15,7 +15,10 @@ use netlink_packet_core::{
 };
 use netlink_packet_route::{
     address::AddressMessage,
-    link::{InfoData, InfoKind, LinkAttribute, LinkFlags, LinkInfo, LinkMessage},
+    link::{
+        AfSpecBridge, BridgeVlanInfo, BridgeVlanInfoFlags, InfoBridge, InfoData, InfoKind,
+        LinkAttribute, LinkFlags, LinkInfo, LinkMessage,
+    },
     route::{RouteAddress, RouteMessage, RouteProtocol, RouteScope, RouteType},
     AddressFamily, RouteNetlinkMessage,
 };
@@ -180,6 +183,48 @@ impl Socket {
         msg.header.index = link_id;
         msg.attributes
             .push(LinkAttribute::NetNsFd(netns.as_fd().as_raw_fd()));
+
+        let result = self.make_netlink_request(RouteNetlinkMessage::SetLink(msg), NLM_F_ACK)?;
+        expect_netlink_result!(result, 0);
+        Ok(())
+    }
+
+    /// set the vlan_filtering attribute on a bridge
+    pub fn set_vlan_filtering(&mut self, link_id: u32, vlan_filtering: bool) -> NetavarkResult<()> {
+        let mut msg = LinkMessage::default();
+        msg.header.index = link_id;
+        msg.attributes.push(LinkAttribute::LinkInfo(vec![
+            LinkInfo::Kind(InfoKind::Bridge),
+            LinkInfo::Data(InfoData::Bridge(vec![InfoBridge::VlanFiltering(
+                vlan_filtering,
+            )])),
+        ]));
+
+        // Now idea why this must use NewLink not SetLink, I strace'd ip route
+        // and they use newlink and which setlink here it does not error but also does not set the setting.
+        let result = self.make_netlink_request(RouteNetlinkMessage::NewLink(msg), NLM_F_ACK)?;
+        expect_netlink_result!(result, 0);
+        Ok(())
+    }
+
+    /// set the vlan id for an interface which is attached to the bridge with vlan_filtering
+    /// Performs the equivalent of "bridge vlan add dev test vid <num> [flags]"
+    pub fn set_vlan_id(
+        &mut self,
+        link_id: u32,
+        // vlan id
+        vid: u16,
+        // flags for the vlan config
+        flags: BridgeVlanInfoFlags,
+    ) -> NetavarkResult<()> {
+        let mut msg = LinkMessage::default();
+        msg.header.interface_family = AddressFamily::Bridge;
+        // msg.header.link_layer_type = LinkLayerType::Netrom;
+        msg.header.index = link_id;
+        msg.attributes
+            .push(LinkAttribute::AfSpecBridge(vec![AfSpecBridge::VlanInfo(
+                BridgeVlanInfo { flags, vid },
+            )]));
 
         let result = self.make_netlink_request(RouteNetlinkMessage::SetLink(msg), NLM_F_ACK)?;
         expect_netlink_result!(result, 0);
