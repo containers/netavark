@@ -3,7 +3,8 @@ use std::{collections::HashMap, net::IpAddr, os::fd::BorrowedFd, sync::Once};
 use ipnet::IpNet;
 use log::{debug, error};
 use netlink_packet_route::link::{
-    InfoData, InfoKind, InfoVeth, LinkAttribute, LinkInfo, LinkMessage,
+    BridgeVlanInfoFlags, InfoBridge, InfoData, InfoKind, InfoVeth, LinkAttribute, LinkInfo,
+    LinkMessage,
 };
 
 use crate::{
@@ -21,7 +22,7 @@ use super::{
     constants::{
         ISOLATE_OPTION_FALSE, ISOLATE_OPTION_STRICT, ISOLATE_OPTION_TRUE,
         NO_CONTAINER_INTERFACE_ERROR, OPTION_HOST_INTERFACE_NAME, OPTION_ISOLATE, OPTION_METRIC,
-        OPTION_MODE, OPTION_MTU, OPTION_NO_DEFAULT_ROUTE, OPTION_VRF,
+        OPTION_MODE, OPTION_MTU, OPTION_NO_DEFAULT_ROUTE, OPTION_VLAN, OPTION_VRF,
     },
     core_utils::{self, get_ipam_addresses, join_netns, parse_option, CoreUtils},
     driver::{self, DriverInfo},
@@ -66,7 +67,8 @@ struct InternalData {
     no_default_route: bool,
     /// sef vrf for bridge
     vrf: Option<String>,
-    // TODO: add vlan
+    /// vlan id of the interface attached to the bridge
+    vlan: Option<u16>,
 }
 
 pub struct Bridge<'a> {
@@ -99,6 +101,7 @@ impl driver::NetworkDriver for Bridge<'_> {
         let no_default_route: bool =
             parse_option(&self.info.network.options, OPTION_NO_DEFAULT_ROUTE)?.unwrap_or(false);
         let vrf: Option<String> = parse_option(&self.info.network.options, OPTION_VRF)?;
+        let vlan: Option<u16> = parse_option(&self.info.network.options, OPTION_VLAN)?;
         let host_interface_name = parse_option(
             &self.info.per_network_opts.options,
             OPTION_HOST_INTERFACE_NAME,
@@ -122,6 +125,7 @@ impl driver::NetworkDriver for Bridge<'_> {
             mode: get_bridge_mode_from_string(mode.as_deref())?,
             no_default_route,
             vrf,
+            vlan,
         });
         Ok(())
     }
@@ -549,9 +553,12 @@ fn create_interfaces(
         data.bridge_interface_name.to_string(),
     )) {
         Ok(bridge) => (
-            check_link_is_bridge(bridge, &data.bridge_interface_name)?
-                .header
-                .index,
+            validate_bridge_link(
+                bridge,
+                data.vlan.is_some(),
+                host,
+                &data.bridge_interface_name,
+            )?,
             None,
         ),
         Err(err) => match err.unwrap() {
@@ -572,6 +579,11 @@ fn create_interfaces(
                     InfoKind::Bridge,
                 );
                 create_link_opts.mtu = data.mtu;
+
+                if data.vlan.is_some() {
+                    create_link_opts.info_data =
+                        Some(InfoData::Bridge(vec![InfoBridge::VlanFiltering(true)]));
+                }
 
                 if let Some(vrf_name) = &data.vrf {
                     let vrf = match host.get_link(netlink::LinkID::Name(vrf_name.to_string())) {
@@ -720,6 +732,14 @@ fn create_veth_pair<'fd>(
         ));
     }
 
+    if let Some(vid) = data.vlan {
+        host.set_vlan_id(
+            host_link,
+            vid,
+            BridgeVlanInfoFlags::Pvid | BridgeVlanInfoFlags::Untagged,
+        )?;
+    }
+
     if let BridgeMode::Managed = data.mode {
         exec_netns!(hostns_fd, netns_fd, res, {
             disable_ipv6_autoconf(&data.container_interface_name)?;
@@ -801,14 +821,54 @@ fn create_veth_pair<'fd>(
     Ok(mac)
 }
 
-/// make sure the LinkMessage has the kind bridge
-fn check_link_is_bridge(msg: LinkMessage, br_name: &str) -> NetavarkResult<LinkMessage> {
+/// Make sure the LinkMessage is of type bridge and if vlan is set also checks
+/// that the bridge has vlan_filtering enabled and if not enables it. Returns
+/// the link id or errors when the link is not a bridge.
+fn validate_bridge_link(
+    msg: LinkMessage,
+    vlan: bool,
+    netlink: &mut netlink::Socket,
+    br_name: &str,
+) -> NetavarkResult<u32> {
     for nla in msg.attributes.iter() {
         if let LinkAttribute::LinkInfo(info) = nla {
+            // when vlan is requested also check the VlanFiltering attribute
+            if vlan {
+                for inf in info.iter() {
+                    if let LinkInfo::Data(data) = inf {
+                        match data {
+                            InfoData::Bridge(vec) => {
+                                // set the return value here based on the VlanFiltering state
+                                let vlan_enabled = vec
+                                    .iter()
+                                    .find_map(|a| {
+                                        if let InfoBridge::VlanFiltering(on) = a {
+                                            Some(*on)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .unwrap_or(false);
+                                if !vlan_enabled {
+                                    // vlan filtering not enabled, enable it now
+                                    netlink.set_vlan_filtering(msg.header.index, true)?;
+                                }
+                            }
+                            _ => {
+                                return Err(NetavarkError::Message(format!(
+                                    "bridge interface {br_name} doesn't contain any bridge data",
+                                )))
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
             for inf in info.iter() {
                 if let LinkInfo::Kind(kind) = inf {
                     if *kind == InfoKind::Bridge {
-                        return Ok(msg);
+                        return Ok(msg.header.index);
                     } else {
                         return Err(NetavarkError::Message(format!(
                             "bridge interface {br_name} already exists but is a {kind:?} interface"
