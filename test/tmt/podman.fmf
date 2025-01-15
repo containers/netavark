@@ -1,0 +1,13 @@
+summary: Podman tests dependent on netavark
+require:
+    - netavark
+    - podman-tests
+
+tag: [upstream, downstream]
+
+test: |
+  /usr/bin/bats -t /usr/share/podman/test/system/030-run.bats
+  /usr/bin/bats -t /usr/share/podman/test/system/075-exec.bats
+  /usr/bin/bats -t /usr/share/podman/test/system/500-networking.bats
+
+duration: 15m

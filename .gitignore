@@ -7,3 +7,6 @@ vendor/
 .idea/*
 contrib/systemd/*/*.service
 .vscode*
+rpm/RPMS
+rpm/SRPMS
+rpm/*.tar.gz

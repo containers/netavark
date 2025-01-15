@@ -88,6 +88,30 @@ Its features include:
 * Support for IPv4 and IPv6
 * Support for container DNS resolution via aardvark-dns.
 
+# Only intended to be used for gating tests
+# End user usecases not supported
+%package tests
+Summary: Tests for %{name}
+Requires: %{name} = %{epoch}:%{version}-%{release}
+%if %{defined bats_ofc}
+Requires: bats
+%else
+Recommends: bats
+%endif
+Requires: bind-utils
+Requires: bridge-utils
+Requires: dbus-daemon
+Requires: dnsmasq
+Requires: firewalld
+Requires: iptables
+Requires: jq
+Requires: net-tools
+Requires: nftables
+Requires: nmap-ncat
+
+%description tests
+%{summary}
+
 %prep
 %autosetup -Sgit %{name}-%{version}
 # Following steps are only required on environments like koji which have no
@@ -104,17 +128,29 @@ tar fx %{SOURCE1}
 
 %build
 NETAVARK_DEFAULT_FW=%{default_fw} %{__make} CARGO="%{__cargo}" build
+%{__make} CARGO="%{__cargo}" build_proxy_client
 %if (0%{?fedora} || 0%{?rhel} >= 10) && !%{defined copr_username}
 %cargo_license_summary
 %{cargo_license} > LICENSE.dependencies
 %cargo_vendor_manifest
 %endif
 
+# Build examples package for tests
+%{__make} CARGO="%{__cargo}" examples
+
 cd docs
 %{__make}
 
 %install
 %{__make} DESTDIR=%{buildroot} PREFIX=%{_prefix} install
+
+%{__install} -d -p %{buildroot}%{_datadir}/%{name}/{examples,test,test-dhcp}
+%{__cp} -rpav targets/release/examples/* %{buildroot}%{_datadir}/%{name}/examples
+%{__cp} -rpav test/* %{buildroot}%{_datadir}/%{name}/test
+%{__cp} -rpav test-dhcp/* %{buildroot}%{_datadir}/%{name}/test-dhcp
+
+%{__rm} -rf %{buildroot}%{_datadir}/%{name}/test/tmt
+%{__rm} -rf %{buildroot}%{_datadir}/%{name}/test-dhcp/tmt
 
 %preun
 %systemd_preun %{name}-dhcp-proxy.service
@@ -136,6 +172,15 @@ cd docs
 %{_unitdir}/%{name}-dhcp-proxy.service
 %{_unitdir}/%{name}-dhcp-proxy.socket
 %{_unitdir}/%{name}-firewalld-reload.service
+
+%files tests
+%dir %{_datadir}/%{name}
+%dir %{_datadir}/%{name}/examples
+%dir %{_datadir}/%{name}/test
+%dir %{_datadir}/%{name}/test-dhcp
+%{_datadir}/%{name}/examples/*
+%{_datadir}/%{name}/test/*
+%{_datadir}/%{name}/test-dhcp/*
 
 %changelog
 %autochangelog
