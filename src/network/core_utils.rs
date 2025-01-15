@@ -20,6 +20,8 @@ use sysctl::{Sysctl, SysctlError};
 
 use super::netlink;
 
+use netlink_packet_route::link::LinkAttribute;
+
 pub struct CoreUtils {
     pub networkns: String,
 }
@@ -434,4 +436,15 @@ pub fn disable_ipv6_autoconf(if_name: &str) -> NetavarkResult<()> {
         }
     };
     Ok(())
+}
+
+pub fn get_mac_address(v: Vec<LinkAttribute>) -> NetavarkResult<String> {
+    for nla in v.into_iter() {
+        if let LinkAttribute::Address(ref addr) = nla {
+            return Ok(CoreUtils::encode_address_to_hex(addr));
+        }
+    }
+    Err(NetavarkError::msg(
+        "failed to get the the container mac address",
+    ))
 }
