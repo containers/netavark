@@ -529,7 +529,7 @@ dependencies = [
  "hex",
  "ipnet",
  "rand",
- "thiserror",
+ "thiserror 1.0.69",
  "trust-dns-proto",
  "url",
 ]
@@ -692,7 +692,7 @@ dependencies = [
  "netlink-packet-utils",
  "netlink-proto",
  "netlink-sys",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
 ]
 
@@ -878,7 +878,7 @@ dependencies = [
  "netlink-packet-generic",
  "netlink-packet-utils",
  "netlink-proto",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1421,7 +1421,7 @@ dependencies = [
  "netlink-packet-utils",
  "netlink-proto",
  "netlink-sys",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
 ]
 
@@ -1535,7 +1535,7 @@ dependencies = [
  "anyhow",
  "byteorder",
  "paste",
- "thiserror",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -1549,7 +1549,7 @@ dependencies = [
  "log",
  "netlink-packet-core",
  "netlink-sys",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
 ]
 
@@ -1568,16 +1568,16 @@ dependencies = [
 
 [[package]]
 name = "nftables"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c7288de9ee11086e792d89ee45adf490a5a778ff0fddc7e086ce1521989e657"
+checksum = "1c6be621bdf37ddc047e99b037a97c7b7467c47e06622e07b1fdff569a45ef02"
 dependencies = [
  "serde",
  "serde_json",
  "serde_path_to_error",
  "strum",
  "strum_macros",
- "thiserror",
+ "thiserror 2.0.11",
 ]
 
 [[package]]
@@ -1925,7 +1925,7 @@ dependencies = [
  "netlink-proto",
  "netlink-sys",
  "nix 0.27.1",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
 ]
 
@@ -1971,9 +1971,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.215"
+version = "1.0.217"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6513c1ad0b11a9376da888e3e0baa0077f1aed55c17f50e7b2397136129fb88f"
+checksum = "02fc4265df13d6fa1d00ecff087228cc0a2b5f3c0e87e258d8b94a156e984c70"
 dependencies = [
  "serde_derive",
 ]
@@ -1990,9 +1990,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.215"
+version = "1.0.217"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad1e866f866923f252f05c889987993144fb74e722403468a4ebd70c3cd756c0"
+checksum = "5a9bf7cf98d04a2b28aead066b7496853d4779c9cc183c440dbac457641e19a0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2010,9 +2010,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.136"
+version = "1.0.137"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "336a0c23cf42a38d9eaa7cd22c7040d04e1228a19a933890805ffd00a16437d2"
+checksum = "930cfb6e6abf99298aaad7d29abbef7a9999a9a8806a40088f55f0dcec03146b"
 dependencies = [
  "itoa",
  "memchr",
@@ -2267,7 +2267,7 @@ dependencies = [
  "byteorder",
  "enum-as-inner 0.6.1",
  "libc",
- "thiserror",
+ "thiserror 1.0.69",
  "walkdir",
 ]
 
@@ -2291,7 +2291,16 @@ version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.69",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc"
+dependencies = [
+ "thiserror-impl 2.0.11",
 ]
 
 [[package]]
@@ -2299,6 +2308,17 @@ name = "thiserror-impl"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.90",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2538,7 +2558,7 @@ dependencies = [
  "lazy_static",
  "rand",
  "smallvec",
- "thiserror",
+ "thiserror 1.0.69",
  "tinyvec",
  "tracing",
  "url",
@@ -2893,7 +2913,7 @@ dependencies = [
  "netlink-packet-utils",
  "netlink-proto",
  "netlink-sys",
- "thiserror",
+ "thiserror 1.0.69",
  "tokio",
 ]
 
