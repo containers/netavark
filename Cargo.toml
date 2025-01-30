@@ -50,7 +50,7 @@ sha2 = "0.10.8"
 netlink-packet-utils = "0.5.2"
 netlink-packet-route = "0.21.0"
 netlink-packet-core = "0.7.0"
-nftables = "0.5.0"
+nftables = "0.6.0"
 fs2 = "0.4.3"
 netlink-sys = "0.8.7"
 tokio = { version = "1.43.0", features = ["rt", "rt-multi-thread", "signal", "fs"] }
