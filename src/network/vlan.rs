@@ -5,7 +5,7 @@ use std::{collections::HashMap, net::IpAddr};
 use netlink_packet_route::link::{
     InfoData, InfoIpVlan, InfoKind, InfoMacVlan, IpVlanMode, LinkAttribute, MacVlanMode,
 };
-use rand::distributions::{Alphanumeric, DistString};
+use rand::distr::{Alphanumeric, SampleString};
 
 use crate::network::dhcp::{dhcp_teardown, get_dhcp_lease};
 use crate::{
@@ -290,7 +290,7 @@ fn setup(
 
             Err(err) => match err {
                 NetavarkError::Netlink(ref e) if -e.raw_code() == libc::EEXIST => {
-                    let random = Alphanumeric.sample_string(&mut rand::thread_rng(), 10);
+                    let random = Alphanumeric.sample_string(&mut rand::rng(), 10);
                     let tmp_name = "mv-".to_string() + &random;
                     let mut opts = opts.clone();
                     opts.name.clone_from(&tmp_name);

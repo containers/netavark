@@ -176,31 +176,31 @@ mod cache_tests {
     use super::super::cache::LeaseCache;
     use super::super::lib::g_rpc::{Lease as NetavarkLease, Lease};
     use crate::network::core_utils;
-    use rand::{thread_rng, Rng};
+    use rand::{rng, Rng};
     use std::collections::HashMap;
     use std::io::Cursor;
 
     // Create a single random ipv4 addr
     fn random_ipv4() -> String {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         format!(
             "{:?}.{:?}.{:?}.{:?}.",
-            rng.gen_range(0..255),
-            rng.gen_range(0..255),
-            rng.gen_range(0..255),
-            rng.gen_range(0..255)
+            rng.random_range(0..255),
+            rng.random_range(0..255),
+            rng.random_range(0..255),
+            rng.random_range(0..255)
         )
     }
     // Create a single random mac address
     fn random_macaddr() -> String {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let bytes = vec![
-            rng.gen::<u8>(),
-            rng.gen::<u8>(),
-            rng.gen::<u8>(),
-            rng.gen::<u8>(),
-            rng.gen::<u8>(),
-            rng.gen::<u8>(),
+            rng.random::<u8>(),
+            rng.random::<u8>(),
+            rng.random::<u8>(),
+            rng.random::<u8>(),
+            rng.random::<u8>(),
+            rng.random::<u8>(),
         ];
         core_utils::CoreUtils::encode_address_to_hex(&bytes)
     }
@@ -243,9 +243,9 @@ mod cache_tests {
 
             // Create a random amount of randomized leases
             let macaddrs = Vec::new();
-            let mut rng = thread_rng();
+            let mut rng = rng();
             // Make a random amount of leases
-            let range: u8 = rng.gen_range(0..10);
+            let range: u8 = rng.random_range(0..10);
 
             CacheTestSetup {
                 cache,
