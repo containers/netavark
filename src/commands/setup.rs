@@ -50,10 +50,7 @@ impl Setup {
         debug!("Setting up...");
         let network_options = network::types::NetworkOptions::load(input_file)?;
 
-        let firewall_driver = match firewall::get_supported_firewall_driver(firewall_driver) {
-            Ok(driver) => driver,
-            Err(e) => return Err(e),
-        };
+        let firewall_driver = firewall::get_supported_firewall_driver(firewall_driver)?;
 
         let mut response: HashMap<String, types::StatusBlock> = HashMap::new();
 
