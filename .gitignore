@@ -3,6 +3,7 @@ target/
 targets/
 *.swp
 netavark.1
+netavark-firewalld.7
 vendor/
 .idea/*
 contrib/systemd/*/*.service

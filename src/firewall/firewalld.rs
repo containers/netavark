@@ -30,7 +30,11 @@ impl firewall::FirewallDriver for FirewallD {
         firewall::FIREWALLD
     }
 
-    fn setup_network(&self, network_setup: internal_types::SetupNetwork) -> NetavarkResult<()> {
+    fn setup_network(
+        &self,
+        network_setup: internal_types::SetupNetwork,
+        _dbus_con: &Option<Connection>,
+    ) -> NetavarkResult<()> {
         let mut need_reload = false;
 
         need_reload |= match create_zone_if_not_exist(&self.conn, ZONENAME) {
@@ -112,7 +116,11 @@ impl firewall::FirewallDriver for FirewallD {
         Ok(())
     }
 
-    fn setup_port_forward(&self, setup_portfw: PortForwardConfig) -> Result<(), NetavarkError> {
+    fn setup_port_forward(
+        &self,
+        setup_portfw: PortForwardConfig,
+        _dbus_con: &Option<Connection>,
+    ) -> Result<(), NetavarkError> {
         // NOTE: There is a serious TOCTOU risk in this function if netavark
         // is either run in parallel, or is not the only thing to edit this
         // policy.
@@ -658,17 +666,17 @@ pub fn is_firewalld_running(conn: &Connection) -> bool {
 /// Ignore all errors, beyond possibly logging them.
 /// Not used within the firewalld driver, but by other drivers that may need to
 /// interact with firewalld.
-pub fn add_firewalld_if_possible(net: &ipnet::IpNet) {
-    let conn = match Connection::system() {
-        Ok(conn) => conn,
-        Err(_) => return,
+pub fn add_firewalld_if_possible(dbus_conn: &Option<Connection>, net: &ipnet::IpNet) {
+    let conn = match dbus_conn {
+        Some(conn) => conn,
+        None => return,
     };
-    if !is_firewalld_running(&conn) {
+    if !is_firewalld_running(conn) {
         return;
     }
     debug!("Adding firewalld rules for network {}", net.to_string());
 
-    match add_source_subnets_to_zone(&conn, "trusted", &[*net]) {
+    match add_source_subnets_to_zone(conn, "trusted", &[*net]) {
         Ok(_) => {}
         Err(e) => warn!(
             "Error adding subnet {} from firewalld trusted zone: {}",
@@ -705,4 +713,55 @@ pub fn rm_firewalld_if_possible(net: &ipnet::IpNet) {
             e
         ),
     };
+}
+
+/// Check whether firewalld's StrictForwardPorts setting is enabled.
+/// Returns false if firewalld is not installed, not running, or there is any
+/// error with the process.
+pub fn is_firewalld_strict_forward_enabled(dbus_con: &Option<Connection>) -> bool {
+    let conn = match dbus_con {
+        Some(conn) => conn,
+        None => return false,
+    };
+    if !is_firewalld_running(conn) {
+        return false;
+    }
+
+    // Fetch current running config
+    match conn.call_method(
+        Some("org.fedoraproject.FirewallD1"),
+        "/org/fedoraproject/FirewallD1/config",
+        Some("org.freedesktop.DBus.Properties"),
+        "Get",
+        &("org.fedoraproject.FirewallD1.config", "StrictForwardPorts"),
+    ) {
+        Ok(b) => b.body().deserialize().unwrap_or(false),
+        Err(_) => {
+            // Assume any error is related to the property not existing
+            // (As it will not on older firewalld versions)
+            // Return false given that.
+            false
+        }
+    }
+}
+
+/// Check if firewalld's StrictForwardPorts setting is enabled and, if so,
+/// whether the container has requested any ports be forwarded. If both are true
+/// return a helpful error that port forwarding cannot be performed.
+pub fn check_can_forward_ports(
+    dbus_conn: &Option<Connection>,
+    setup_portfw: &PortForwardConfig,
+) -> NetavarkResult<()> {
+    if is_firewalld_strict_forward_enabled(dbus_conn) {
+        let mut portfw_used = setup_portfw.dns_port != 53;
+        if let Some(ports) = setup_portfw.port_mappings {
+            portfw_used = portfw_used || !ports.is_empty();
+        }
+        if portfw_used {
+            return Err(NetavarkError::msg(
+                "Port forwarding not possible as firewalld StrictForwardPorts enabled",
+            ));
+        }
+    }
+    Ok(())
 }

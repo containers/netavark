@@ -21,12 +21,20 @@ const NONE: &str = "none";
 /// and port mappings.
 pub trait FirewallDriver {
     /// Set up firewall rules for the given network,
-    fn setup_network(&self, network_setup: SetupNetwork) -> NetavarkResult<()>;
+    fn setup_network(
+        &self,
+        network_setup: SetupNetwork,
+        dbus_con: &Option<zbus::blocking::Connection>,
+    ) -> NetavarkResult<()>;
     /// Tear down firewall rules for the given network.
     fn teardown_network(&self, tear: TearDownNetwork) -> NetavarkResult<()>;
 
     /// Set up port-forwarding firewall rules for a given container.
-    fn setup_port_forward(&self, setup_pw: PortForwardConfig) -> NetavarkResult<()>;
+    fn setup_port_forward(
+        &self,
+        setup_pw: PortForwardConfig,
+        dbus_con: &Option<zbus::blocking::Connection>,
+    ) -> NetavarkResult<()>;
     /// Tear down port-forwarding firewall rules for a single container.
     fn teardown_port_forward(&self, teardown_pf: TeardownPortForward) -> NetavarkResult<()>;
 

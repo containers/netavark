@@ -456,7 +456,12 @@ impl<'a> Bridge<'a> {
             )?;
         }
 
-        self.info.firewall.setup_network(sn)?;
+        let system_dbus = match zbus::blocking::Connection::system() {
+            Ok(c) => Some(c),
+            Err(_) => None,
+        };
+
+        self.info.firewall.setup_network(sn, &system_dbus)?;
 
         if spf.port_mappings.is_some() {
             // Need to enable sysctl localnet so that traffic can pass
@@ -471,7 +476,7 @@ impl<'a> Bridge<'a> {
             )?;
         }
 
-        self.info.firewall.setup_port_forward(spf)?;
+        self.info.firewall.setup_port_forward(spf, &system_dbus)?;
         Ok(())
     }
 

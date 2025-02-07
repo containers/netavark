@@ -50,7 +50,11 @@ impl firewall::FirewallDriver for Nftables {
         firewall::NFTABLES
     }
 
-    fn setup_network(&self, network_setup: internal_types::SetupNetwork) -> NetavarkResult<()> {
+    fn setup_network(
+        &self,
+        network_setup: internal_types::SetupNetwork,
+        dbus_conn: &Option<zbus::blocking::Connection>,
+    ) -> NetavarkResult<()> {
         let mut batch = Batch::new();
 
         // Overall table
@@ -342,7 +346,7 @@ impl firewall::FirewallDriver for Nftables {
 
                 // Add us to firewalld if necessary.
                 // Do this first, as firewalld doesn't wipe our rules - so after a reload, we skip everything below.
-                firewalld::add_firewalld_if_possible(&subnet);
+                firewalld::add_firewalld_if_possible(dbus_conn, &subnet);
 
                 // Do we already have a chain for the subnet?
                 if get_chain(&existing_rules, &chain).is_some() {
@@ -557,7 +561,10 @@ impl firewall::FirewallDriver for Nftables {
     fn setup_port_forward(
         &self,
         setup_portfw: internal_types::PortForwardConfig,
+        dbus_conn: &Option<zbus::blocking::Connection>,
     ) -> NetavarkResult<()> {
+        firewalld::check_can_forward_ports(dbus_conn, &setup_portfw)?;
+
         let mut batch = Batch::new();
 
         let existing_rules = get_netavark_rules()?;

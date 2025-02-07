@@ -16,7 +16,11 @@ impl firewall::FirewallDriver for Fwnone {
         firewall::NONE
     }
 
-    fn setup_network(&self, _network_setup: SetupNetwork) -> NetavarkResult<()> {
+    fn setup_network(
+        &self,
+        _network_setup: SetupNetwork,
+        _dbus_conn: &Option<zbus::blocking::Connection>,
+    ) -> NetavarkResult<()> {
         Ok(())
     }
 
@@ -26,7 +30,11 @@ impl firewall::FirewallDriver for Fwnone {
         Ok(())
     }
 
-    fn setup_port_forward(&self, _setup_portfw: PortForwardConfig) -> NetavarkResult<()> {
+    fn setup_port_forward(
+        &self,
+        _setup_portfw: PortForwardConfig,
+        _dbus_conn: &Option<zbus::blocking::Connection>,
+    ) -> NetavarkResult<()> {
         Ok(())
     }
 
