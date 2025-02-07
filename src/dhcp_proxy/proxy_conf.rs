@@ -110,8 +110,8 @@ mod conf_tests {
     use std::sync::Mutex;
 
     use once_cell::sync::Lazy;
-    use rand::distributions::Alphanumeric;
-    use rand::{thread_rng, Rng};
+    use rand::distr::Alphanumeric;
+    use rand::{rng, Rng};
 
     /// Make sure that the environment isn't modified concurrently.
     static SERIAL_TEST: Lazy<Mutex<()>> = Lazy::new(Default::default);
@@ -207,7 +207,7 @@ mod conf_tests {
     }
 
     fn random_string(len: usize) -> String {
-        let rand_string: String = thread_rng()
+        let rand_string: String = rng()
             .sample_iter(&Alphanumeric)
             .take(len)
             .map(char::from)
