@@ -6,6 +6,7 @@
 load helpers
 
 fw_driver=firewalld
+export NETAVARK_FW=firewalld
 
 function setup() {
     basic_setup
@@ -13,7 +14,6 @@ function setup() {
 }
 
 @test "check firewalld driver is in use" {
-    skip "TODO: Firewalld driver swapped with iptables until firewalld 1.1.0"
     RUST_LOG=netavark=info run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
     assert "${lines[0]}" "==" "[INFO  netavark::firewall] Using firewalld firewall driver" "firewalld driver is in use"
 }
@@ -156,11 +156,10 @@ function setup() {
 }
 
 @test "$fw_driver - dual stack dns with alt port" {
-    skip "FIXME (#846): firewalld 2.0 broken port redirect"
     # get a random port directly to avoid low ports e.g. 53 would not create iptables
     dns_port=$((RANDOM+10000))
 
-    NETAVARK_FW=firewalld NETAVARK_DNS_PORT="$dns_port" \
+    NETAVARK_DNS_PORT="$dns_port" \
         run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
         setup $(get_container_netns_path)
 
@@ -190,7 +189,7 @@ function setup() {
     run_in_container_netns dig +short "somename.dns.podman" @fd10:88:a::1
     assert "${lines[0]}" =~ "10.89.3.2" "ipv6 dns resolution works"
 
-    NETAVARK_FW=firewalld NETAVARK_DNS_PORT="$dns_port" \
+    NETAVARK_DNS_PORT="$dns_port" \
         run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
         teardown $(get_container_netns_path)
 
@@ -212,117 +211,171 @@ function setup() {
 }
 
 @test "$fw_driver - port forwarding ipv4 - tcp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     test_port_fw
 }
 
 @test "$fw_driver - port forwarding ipv6 - tcp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     test_port_fw ip=6
 }
 
 @test "$fw_driver - port forwarding dualstack - tcp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     test_port_fw ip=dual
 }
 
 @test "$fw_driver - port forwarding ipv4 - udp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     test_port_fw proto=udp
 }
 
 @test "$fw_driver - port forwarding ipv6 - udp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     test_port_fw ip=6 proto=udp
 }
 
 @test "$fw_driver - port forwarding dualstack - udp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     test_port_fw ip=dual proto=udp
 }
 
 @test "$fw_driver - port forwarding ipv4 - sctp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     setup_sctp_kernel_module
     test_port_fw proto=sctp
 }
 
 @test "$fw_driver - port forwarding ipv6 - sctp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     setup_sctp_kernel_module
     test_port_fw ip=6 proto=sctp
 }
 
 @test "$fw_driver - port forwarding dualstack - sctp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     setup_sctp_kernel_module
     test_port_fw ip=dual proto=sctp
 }
 
 @test "$fw_driver - port range forwarding ipv4 - tcp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     test_port_fw range=3
 }
 
 @test "$fw_driver - port range forwarding ipv6 - tcp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     test_port_fw ip=6 range=3
 }
 
 @test "$fw_driver - port range forwarding ipv4 - udp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     test_port_fw proto=udp range=3
 }
 
 @test "$fw_driver - port range forwarding ipv6 - udp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     test_port_fw ip=6 proto=udp range=3
 }
 
 @test "$fw_driver - port range forwarding dual - udp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     test_port_fw ip=dual proto=udp range=3
 }
 
 @test "$fw_driver - port range forwarding dual - tcp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     test_port_fw ip=dual proto=tcp range=3
 }
 
 
 @test "$fw_driver - port forwarding with hostip ipv4 - tcp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     add_dummy_interface_on_host dummy0 "172.16.0.1/24"
     test_port_fw hostip="172.16.0.1"
 }
 
 @test "$fw_driver - port forwarding with hostip ipv4 dual stack - tcp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     add_dummy_interface_on_host dummy0 "172.16.0.1/24"
     test_port_fw ip=dual hostip="172.16.0.1"
 }
 
 @test "$fw_driver - port forwarding with hostip ipv6 - tcp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
     test_port_fw ip=6 hostip="fd65:8371:648b:0c06::1"
 }
 
 @test "$fw_driver - port forwarding with hostip ipv6 dual stack - tcp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
     test_port_fw ip=dual hostip="fd65:8371:648b:0c06::1"
 }
 
 @test "$fw_driver - port forwarding with hostip ipv4 - udp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     add_dummy_interface_on_host dummy0 "172.16.0.1/24"
     test_port_fw proto=udp hostip="172.16.0.1"
 }
 
 @test "$fw_driver - port forwarding with hostip ipv6 - udp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
     test_port_fw ip=6 proto=udp hostip="fd65:8371:648b:0c06::1"
 }
 
 @test "$fw_driver - port forwarding with wildcard hostip ipv4 - tcp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     add_dummy_interface_on_host dummy0 "172.16.0.1/24"
     test_port_fw hostip="0.0.0.0" connectip="172.16.0.1"
 }
 
 @test "$fw_driver - port forwarding with wildcard hostip ipv4 dual stack - tcp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     add_dummy_interface_on_host dummy0 "172.16.0.1/24"
     test_port_fw ip=dual hostip="0.0.0.0" connectip="172.16.0.1"
 }
 
 @test "$fw_driver - port forwarding with wildcard hostip ipv6 - tcp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
     test_port_fw ip=6 hostip="::" connectip="fd65:8371:648b:0c06::1"
 }
 
 @test "$fw_driver - port forwarding with wildcard hostip ipv6 dual stack - tcp" {
+    skip "test requires firewalld same-machine port forwarding for non-localhost IP"
+
     add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
     test_port_fw ip=dual hostip="::" connectip="fd65:8371:648b:0c06::1"
+}
+
+@test "$fw_driver - port forwarding with localhost - tcp" {
+    test_port_fw hostip="127.0.0.1"
 }
 
 @test "netavark error - invalid host_ip in port mappings" {
