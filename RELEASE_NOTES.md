@@ -1,5 +1,14 @@
 # Release Notes
 
+## v1.14.0
+
+* bridge: Add support for a new option called `mode`. When set to `unmanaged` only the veth pair and ip addresses are setup. The bridge must exist and no firewall or sysctl setting will be configured in this mode. ([#1090](https://github.com/containers/netavark/issues/1090))
+* bridge: Add support for DHCP when using unmanaged mode. ([#868](https://github.com/containers/netavark/issues/868))
+* bridge: Add support for the `vlan` option. ([#1028](https://github.com/containers/netavark/issues/1028))
+* When using DHCP netavark will now send the container hostname in the DHCP request and use the container id as client id. ([#676](https://github.com/containers/netavark/issues/676))
+* The firewalld driver was improved and major outstanding bugs were addressed but is still considered experimental. A new man page `netavark-firewalld(7)` has been added to document some of the firewalld interactions.
+* Dependency updates.
+
 ## v1.13.1
 
 * Fixed a bug where port forwarding rules might not be removed correctly on nftables when different host ips are used for the same port. ([#1129](https://github.com/containers/netavark/issues/1129))
