@@ -96,6 +96,7 @@ NV_UNIT_FILES = contrib/systemd/system/netavark-dhcp-proxy.service \
 .PHONY: install
 install: $(NV_UNIT_FILES)
 	install ${SELINUXOPT} -D -m0755 bin/netavark $(DESTDIR)$(LIBEXECPODMAN)/netavark
+	install ${SELINUXOPT} -D -m0755 bin/netavark-dhcp-proxy-client $(DESTDIR)$(LIBEXECPODMAN)/netavark-dhcp-proxy-client
 	$(MAKE) -C docs install
 	install ${SELINUXOPT} -m 755 -d ${DESTDIR}${SYSTEMDDIR}
 	install ${SELINUXOPT} -m 644 contrib/systemd/system/netavark-dhcp-proxy.socket ${DESTDIR}${SYSTEMDDIR}/netavark-dhcp-proxy.socket
