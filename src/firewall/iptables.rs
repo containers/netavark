@@ -62,6 +62,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                     network_setup.bridge_name.clone(),
                     network_setup.isolation,
                     network_setup.dns_port,
+                    network_setup.outbound_addr,
                 );
 
                 create_network_chains(chains)?;
@@ -91,6 +92,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                     tear.config.bridge_name.clone(),
                     tear.config.isolation,
                     tear.config.dns_port,
+                    tear.config.outbound_addr,
                 );
 
                 for c in &chains {

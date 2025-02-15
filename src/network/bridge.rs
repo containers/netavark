@@ -392,6 +392,7 @@ impl<'a> Bridge<'a> {
             network_hash_name: id_network_hash.clone(),
             isolation: isolate,
             dns_port: self.info.dns_port,
+            outbound_addr: self.info.network.outbound_addr,
         };
 
         let mut has_ipv4 = false;
