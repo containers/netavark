@@ -231,7 +231,10 @@ pub fn get_network_chains<'a>(
                 Some(TeardownPolicy::OnComplete),
             ));
         } else {
-            log::trace!("Outbound address {} is not IPv4, using default MASQUERADE rule", addr);
+            log::trace!(
+                "Outbound address {} is not IPv4, using default MASQUERADE rule",
+                addr
+            );
             hashed_network_chain.build_rule(VarkRule::new(
                 format!("! -d {multicast_dest} -j {MASQUERADE}"),
                 Some(TeardownPolicy::OnComplete),

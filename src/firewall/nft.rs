@@ -381,7 +381,11 @@ impl firewall::FirewallDriver for Nftables {
                             batch.add(make_rule(
                                 &chain,
                                 vec![
-                                    get_subnet_match(&multicast_address, "daddr", stmt::Operator::NEQ),
+                                    get_subnet_match(
+                                        &multicast_address,
+                                        "daddr",
+                                        stmt::Operator::NEQ,
+                                    ),
                                     stmt::Statement::SNAT(Some(stmt::NAT {
                                         addr: Some(expr::Expression::String(addr.to_string())),
                                         family: Some(stmt::NATFamily::IP),
@@ -391,11 +395,18 @@ impl firewall::FirewallDriver for Nftables {
                                 ],
                             ));
                         } else {
-                            log::trace!("Outbound address {} is not IPv4, using default MASQUERADE rule", addr);
+                            log::trace!(
+                                "Outbound address {} is not IPv4, using default MASQUERADE rule",
+                                addr
+                            );
                             batch.add(make_rule(
                                 &chain,
                                 vec![
-                                    get_subnet_match(&multicast_address, "daddr", stmt::Operator::NEQ),
+                                    get_subnet_match(
+                                        &multicast_address,
+                                        "daddr",
+                                        stmt::Operator::NEQ,
+                                    ),
                                     stmt::Statement::Masquerade(None),
                                 ],
                             ));
