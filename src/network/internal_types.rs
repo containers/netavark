@@ -26,6 +26,8 @@ pub struct SetupNetwork {
     pub isolation: IsolateOption,
     /// port used for the dns server
     pub dns_port: u16,
+    /// outbound address for SNAT
+    pub outbound_addr: Option<IpAddr>,
 }
 
 #[derive(Debug)]

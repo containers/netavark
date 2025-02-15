@@ -272,8 +272,9 @@ mod tests {
             network_hash_name: "hash".to_string(),
             isolation: IsolateOption::Never,
             dns_port: 53,
+            outbound_addr: None,
         };
-        let net_conf_json = r#"{"subnets":["10.0.0.0/24"],"bridge_name":"bridge","network_id":"c2c8a073252874648259997d53b0a1bffa491e21f04bc1bf8609266359931395","network_hash_name":"hash","isolation":"Never","dns_port":53}"#;
+        let net_conf_json = r#"{"subnets":["10.0.0.0/24"],"bridge_name":"bridge","network_id":"c2c8a073252874648259997d53b0a1bffa491e21f04bc1bf8609266359931395","network_hash_name":"hash","isolation":"Never","dns_port":53,"outbound_addr":null}"#;
 
         let port_conf = PortForwardConfig {
             container_id: container_id.to_string(),

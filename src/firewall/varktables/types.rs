@@ -200,6 +200,7 @@ pub fn get_network_chains<'a>(
     interface_name: String,
     isolation: IsolateOption,
     dns_port: u16,
+    outbound_addr: Option<IpAddr>,
 ) -> Vec<VarkChain<'a>> {
     let mut chains = Vec::new();
     let prefixed_network_hash_name = format!("{}-{}", "NETAVARK", network_hash_name);
@@ -222,10 +223,30 @@ pub fn get_network_chains<'a>(
     if is_ipv6 {
         multicast_dest = MULTICAST_NET_V6;
     }
-    hashed_network_chain.build_rule(VarkRule::new(
-        format!("! -d {multicast_dest} -j {MASQUERADE}"),
-        Some(TeardownPolicy::OnComplete),
-    ));
+    if let Some(addr) = outbound_addr {
+        if !is_ipv6 && addr.is_ipv4() {
+            log::trace!("Creating SNAT rule with outbound address {}", addr);
+            hashed_network_chain.build_rule(VarkRule::new(
+                format!("! -d {multicast_dest} -j SNAT --to-source {}", addr),
+                Some(TeardownPolicy::OnComplete),
+            ));
+        } else {
+            log::trace!(
+                "Outbound address {} is not IPv4, using default MASQUERADE rule",
+                addr
+            );
+            hashed_network_chain.build_rule(VarkRule::new(
+                format!("! -d {multicast_dest} -j {MASQUERADE}"),
+                Some(TeardownPolicy::OnComplete),
+            ));
+        }
+    } else {
+        log::trace!("No outbound address set, using default MASQUERADE rule");
+        hashed_network_chain.build_rule(VarkRule::new(
+            format!("! -d {multicast_dest} -j {MASQUERADE}"),
+            Some(TeardownPolicy::OnComplete),
+        ));
+    }
     chains.push(hashed_network_chain);
 
     // POSTROUTING
