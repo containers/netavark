@@ -192,6 +192,7 @@ pub fn create_network_chains(chains: Vec<VarkChain<'_>>) -> NetavarkResult<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn get_network_chains<'a>(
     conn: &'a IPTables,
     network: IpNet,
