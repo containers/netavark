@@ -27,6 +27,8 @@ pub struct SetupNetwork {
     /// port used for the dns server
     pub dns_port: u16,
     /// outbound address for SNAT
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub outbound_addr: Option<IpAddr>,
 }
 

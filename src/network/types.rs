@@ -57,10 +57,6 @@ pub struct Network {
     /// Network DNS servers for aardvark-dns.
     #[serde(rename = "network_dns_servers")]
     pub network_dns_servers: Option<Vec<IpAddr>>,
-
-    /// outbound addr for this network.
-    #[serde(rename = "outbound_addr")]
-    pub outbound_addr: Option<IpAddr>,
 }
 
 /// NetworkOptions for a given container.

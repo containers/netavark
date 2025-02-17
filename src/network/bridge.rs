@@ -23,7 +23,8 @@ use super::{
     constants::{
         ISOLATE_OPTION_FALSE, ISOLATE_OPTION_STRICT, ISOLATE_OPTION_TRUE,
         NO_CONTAINER_INTERFACE_ERROR, OPTION_HOST_INTERFACE_NAME, OPTION_ISOLATE, OPTION_METRIC,
-        OPTION_MODE, OPTION_MTU, OPTION_NO_DEFAULT_ROUTE, OPTION_VLAN, OPTION_VRF,
+        OPTION_MODE, OPTION_MTU, OPTION_NO_DEFAULT_ROUTE, OPTION_OUTBOUND_ADDR, OPTION_VLAN,
+        OPTION_VRF,
     },
     core_utils::{self, get_ipam_addresses, join_netns, parse_option, CoreUtils},
     driver::{self, DriverInfo},
@@ -392,7 +393,10 @@ impl<'a> Bridge<'a> {
             network_hash_name: id_network_hash.clone(),
             isolation: isolate,
             dns_port: self.info.dns_port,
-            outbound_addr: self.info.network.outbound_addr,
+            outbound_addr: parse_option::<IpAddr>(
+                &self.info.network.options,
+                OPTION_OUTBOUND_ADDR,
+            )?,
         };
 
         let mut has_ipv4 = false;
