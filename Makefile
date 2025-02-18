@@ -29,6 +29,8 @@ CARGO ?= cargo
 CARGO_TARGET_DIR ?= targets
 export CARGO_TARGET_DIR  # 'cargo' is sensitive to this env. var. value.
 
+SOURCES = src/** Cargo.toml Cargo.lock
+
 ifdef debug
 $(info debug is $(debug))
   # These affect both $(CARGO_TARGET_DIR) layout and contents
@@ -50,10 +52,13 @@ $(CARGO_TARGET_DIR):
 	mkdir -p $@
 
 .PHONY: build
-build: bin $(CARGO_TARGET_DIR)
+build: bin/netavark
+
+bin/netavark: $(SOURCES) bin $(CARGO_TARGET_DIR)
 	$(CARGO) build $(release)
-	cp $(CARGO_TARGET_DIR)/$(profile)/netavark bin/netavark$(if $(debug),.debug,)
-	cp $(CARGO_TARGET_DIR)/$(profile)/netavark-dhcp-proxy-client bin/netavark-dhcp-proxy-client$(if $(debug),.debug,)
+	cp $(CARGO_TARGET_DIR)/$(profile)/netavark bin/netavark
+	cp $(CARGO_TARGET_DIR)/$(profile)/netavark-dhcp-proxy-client bin/netavark-dhcp-proxy-client
+
 
 .PHONY: examples
 examples: bin $(CARGO_TARGET_DIR)
