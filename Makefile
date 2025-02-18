@@ -50,12 +50,10 @@ $(CARGO_TARGET_DIR):
 	mkdir -p $@
 
 .PHONY: build
-build: build_netavark build_proxy_client
-
-.PHONY: build_netavark
-build_netavark: bin $(CARGO_TARGET_DIR)
+build: bin $(CARGO_TARGET_DIR)
 	$(CARGO) build $(release)
 	cp $(CARGO_TARGET_DIR)/$(profile)/netavark bin/netavark$(if $(debug),.debug,)
+	cp $(CARGO_TARGET_DIR)/$(profile)/netavark-dhcp-proxy-client bin/netavark-dhcp-proxy-client$(if $(debug),.debug,)
 
 .PHONY: examples
 examples: bin $(CARGO_TARGET_DIR)
@@ -152,8 +150,3 @@ mock-rpm:
 .PHONY: help
 help:
 	@echo "usage: make $(prog) [debug=1]"
-
-.PHONY: build_proxy_client
-build_proxy_client: bin $(CARGO_TARGET_DIR)
-	$(CARGO) build --bin netavark-dhcp-proxy-client $(release)
-	cp $(CARGO_TARGET_DIR)/$(profile)/netavark-dhcp-proxy-client bin/netavark-dhcp-proxy-client$(if $(debug),.debug,)
