@@ -41,7 +41,7 @@ else
 endif
 
 .PHONY: all
-all: build
+all: build docs
 
 bin:
 	mkdir -p $@
