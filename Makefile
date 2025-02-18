@@ -107,6 +107,7 @@ uninstall:
 	rm -f $(PREFIX)/share/man/man1/netavark*.1
 	rm -f ${DESTDIR}${SYSTEMDDIR}/netavark-dhcp-proxy.service
 	rm -f ${DESTDIR}${SYSTEMDDIR}/netavark-dhcp-proxy.socket
+	rm -f ${DESTDIR}${SYSTEMDDIR}/netavark-firewalld-reload.service
 
 .PHONY: test
 test: unit integration
