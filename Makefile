@@ -102,6 +102,7 @@ install: $(NV_UNIT_FILES)
 
 .PHONY: uninstall
 uninstall:
+	$(MAKE) -C docs uninstall
 	rm -f $(DESTDIR)$(LIBEXECPODMAN)/netavark
 	rm -f $(PREFIX)/share/man/man1/netavark*.1
 	rm -f ${DESTDIR}${SYSTEMDDIR}/netavark-dhcp-proxy.service
