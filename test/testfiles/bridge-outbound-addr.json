@@ -6,7 +6,7 @@
             "interface_name": "eth0",
             "static_ips": [
                 "10.89.0.2"
-            ]        
+            ]
         }
     },
     "network_info": {

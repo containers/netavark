@@ -1037,7 +1037,7 @@ function check_simple_bridge_nftables() {
 
     # Check that the nftables rules were created with SNAT
     run_in_host_netns nft list chain inet netavark nv_2f259bab_10_89_0_0_nm24
-    assert "${lines[3]}" =~ "ip daddr != 224.0.0.0/4 snat ip to 100.1.100.1" "SNAT rule with outbound address"
+    assert "${lines[3]}" =~ "ip daddr != 224.0.0.0/4 snat ip to 100.1.100.1"
 
     run_netavark --file ${TESTSDIR}/testfiles/bridge-outbound-addr.json teardown $(get_container_netns_path)
 

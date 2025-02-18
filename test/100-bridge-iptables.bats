@@ -1097,13 +1097,13 @@ function check_simple_bridge_iptables() {
     run_netavark --file ${TESTSDIR}/testfiles/bridge-outbound-addr.json setup $(get_container_netns_path)
 
     # Check that the iptables rules were created with SNAT
-    run_in_host_netns iptables -t nat -S NETAVARK-2F259BAB93AAAAA
-    assert "${lines[2]}" == "-A NETAVARK-2F259BAB93AAAAA ! -d 224.0.0.0/4 -j SNAT --to-source 100.1.100.1" "SNAT rule with outbound address"
+    run_in_host_netns iptables -t nat -S NETAVARK-F11DC6A6D09CF
+    assert "${lines[2]}" == "-A NETAVARK-F11DC6A6D09CF ! -d 224.0.0.0/4 -j SNAT --to-source 100.1.100.1"
 
     run_netavark --file ${TESTSDIR}/testfiles/bridge-outbound-addr.json teardown $(get_container_netns_path)
 
     # Check that the chain is removed
-    expected_rc=1 run_in_host_netns iptables -t nat -nvL NETAVARK-2F259BAB93AAAAA
+    expected_rc=1 run_in_host_netns iptables -t nat -nvL NETAVARK-F11DC6A6D09CF
 }
 
 @test "$fw_driver - aardvark-dns error cleanup" {
