@@ -19,9 +19,9 @@ _run_noarg() {
 _run_build() {
     # Assume we're on a fast VM, compile everything needed by the
     # rest of CI since subsequent tasks may have limited resources.
-    make all debug=1
     make build_unit  # reuses some debug binaries
     make all  # optimized/non-debug binaries
+    make examples # build the examples binaries needed by the integration tests
     # This will get scooped up and become part of the artifact archive.
     # Identify where the binary came from to benefit downstream consumers.
     cat | tee bin/netavark.info << EOF
