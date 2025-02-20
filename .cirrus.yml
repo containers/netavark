@@ -257,10 +257,8 @@ success_task:
     API_URL_BASE: "https://api.cirrus-ci.com/v1/artifact/build/${CIRRUS_BUILD_ID}"
     EXP_BINS: >-
         netavark
-        netavark.debug
         netavark.info
         netavark.aarch64-unknown-linux-gnu
-        netavark.debug.aarch64-unknown-linux-gnu
         netavark.info.aarch64-unknown-linux-gnu
   clone_script: *noop
   bin_cache: *ro_bin_cache
