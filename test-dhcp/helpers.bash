@@ -11,7 +11,7 @@ TMP_TESTDIR=
 
 # Netavark binary to run
 NETAVARK=${NETAVARK:-./bin/netavark}
-
+NETAVARK_DHCP_PROXY_CLIENT=${NETAVARK_DHCP_PROXY_CLIENT:-./bin/netavark-dhcp-proxy-client}
 TESTSDIR=${TESTSDIR:-$(dirname ${BASH_SOURCE})}
 
 # export RUST_BACKTRACE so that we get a helpful stack trace
@@ -407,7 +407,7 @@ function run_teardown(){
 function run_client(){
   local verb=$1
   local conf=$2
-  run_in_container_netns "./bin/netavark-dhcp-proxy-client" --uds "$TMP_TESTDIR/nv-proxy.sock" -f "${conf}" "${verb}"
+  run_in_container_netns "$NETAVARK_DHCP_PROXY_CLIENT" --uds "$TMP_TESTDIR/nv-proxy.sock" -f "${conf}" "${verb}"
 }
 
 ###################
