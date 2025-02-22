@@ -191,9 +191,9 @@ impl firewall::FirewallDriver for FirewallD {
                 ))
             }
         };
-        let mut port_forwarding_rules: Array = Array::new(sig_ssss);
-        let mut rich_rules: Array = Array::new(sig_s.clone());
-        let mut localhost_rich_rules: Array = Array::new(sig_s);
+        let mut port_forwarding_rules: Array = Array::new(&sig_ssss);
+        let mut rich_rules: Array = Array::new(&sig_s.clone());
+        let mut localhost_rich_rules: Array = Array::new(&sig_s);
 
         // Create any necessary port forwarding rule(s) and add them to the
         // policy config we grabbed above.
@@ -408,7 +408,7 @@ impl firewall::FirewallDriver for FirewallD {
                     ))
                 }
             };
-            let mut port_forwarding_rules = Array::new(sig);
+            let mut port_forwarding_rules = Array::new(&sig);
 
             let ipv4 = teardown_pf.config.container_ip_v4.map(|i| i.to_string());
             let ipv6 = teardown_pf.config.container_ip_v6.map(|i| i.to_string());
@@ -481,7 +481,7 @@ impl firewall::FirewallDriver for FirewallD {
                     ))
                 }
             };
-            let mut new_rich_rules = Array::new(sig);
+            let mut new_rich_rules = Array::new(&sig);
 
             let ipv4 = teardown_pf.config.container_ip_v4.map(|i| i.to_string());
             let ipv6 = teardown_pf.config.container_ip_v6.map(|i| i.to_string());
@@ -564,7 +564,7 @@ impl firewall::FirewallDriver for FirewallD {
                     ))
                 }
             };
-            let mut new_rich_rules = Array::new(sig);
+            let mut new_rich_rules = Array::new(&sig);
 
             let ipv4 = teardown_pf.config.container_ip_v4.map(|i| i.to_string());
 

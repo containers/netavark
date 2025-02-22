@@ -3,7 +3,7 @@ use std::{
     path::Path,
 };
 
-use zbus::{blocking::Connection, proxy, CacheProperties};
+use zbus::{blocking::Connection, proxy, proxy::CacheProperties};
 
 use crate::{
     error::{ErrorWrap, NetavarkResult},
