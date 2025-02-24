@@ -192,6 +192,14 @@ impl From<zbus::zvariant::Error> for NetavarkError {
     }
 }
 
+// map the new zvariant::signature::Error to a
+// NetavarkError::DbusVariant, like zvariant::Error
+impl From<zbus::zvariant::signature::Error> for NetavarkError {
+    fn from(err: zbus::zvariant::signature::Error) -> NetavarkError {
+        NetavarkError::DbusVariant(err.into())
+    }
+}
+
 impl From<sysctl::SysctlError> for NetavarkError {
     fn from(err: sysctl::SysctlError) -> NetavarkError {
         NetavarkError::Sysctl(err)

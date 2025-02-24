@@ -233,7 +233,7 @@ msrv_build_task:
         cpu: 2 # Do not increase, will result in scheduling delays
         memory: "8Gb"
         # When bumping the image always remember to update the README MSRV as well.
-        image: quay.io/libpod/nv-rust:1.76
+        image: quay.io/libpod/nv-rust:1.77
     script:
         - make build
 
