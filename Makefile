@@ -29,6 +29,8 @@ CARGO ?= cargo
 CARGO_TARGET_DIR ?= targets
 export CARGO_TARGET_DIR  # 'cargo' is sensitive to this env. var. value.
 
+SOURCES = src/** Cargo.toml Cargo.lock
+
 ifdef debug
 $(info debug is $(debug))
   # These affect both $(CARGO_TARGET_DIR) layout and contents
@@ -41,7 +43,7 @@ else
 endif
 
 .PHONY: all
-all: build
+all: build docs
 
 bin:
 	mkdir -p $@
@@ -50,12 +52,13 @@ $(CARGO_TARGET_DIR):
 	mkdir -p $@
 
 .PHONY: build
-build: build_netavark build_proxy_client
+build: bin/netavark
 
-.PHONY: build_netavark
-build_netavark: bin $(CARGO_TARGET_DIR)
+bin/netavark: $(SOURCES) bin $(CARGO_TARGET_DIR)
 	$(CARGO) build $(release)
-	cp $(CARGO_TARGET_DIR)/$(profile)/netavark bin/netavark$(if $(debug),.debug,)
+	cp $(CARGO_TARGET_DIR)/$(profile)/netavark bin/netavark
+	cp $(CARGO_TARGET_DIR)/$(profile)/netavark-dhcp-proxy-client bin/netavark-dhcp-proxy-client
+
 
 .PHONY: examples
 examples: bin $(CARGO_TARGET_DIR)
@@ -104,10 +107,12 @@ install: $(NV_UNIT_FILES)
 
 .PHONY: uninstall
 uninstall:
+	$(MAKE) -C docs uninstall
 	rm -f $(DESTDIR)$(LIBEXECPODMAN)/netavark
 	rm -f $(PREFIX)/share/man/man1/netavark*.1
 	rm -f ${DESTDIR}${SYSTEMDDIR}/netavark-dhcp-proxy.service
 	rm -f ${DESTDIR}${SYSTEMDDIR}/netavark-dhcp-proxy.socket
+	rm -f ${DESTDIR}${SYSTEMDDIR}/netavark-firewalld-reload.service
 
 .PHONY: test
 test: unit integration
@@ -152,8 +157,3 @@ mock-rpm:
 .PHONY: help
 help:
 	@echo "usage: make $(prog) [debug=1]"
-
-.PHONY: build_proxy_client
-build_proxy_client: bin $(CARGO_TARGET_DIR)
-	$(CARGO) build --bin netavark-dhcp-proxy-client $(release)
-	cp $(CARGO_TARGET_DIR)/$(profile)/netavark-dhcp-proxy-client bin/netavark-dhcp-proxy-client$(if $(debug),.debug,)

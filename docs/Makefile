@@ -17,12 +17,17 @@ docs: $(patsubst %.md,%,$(wildcard *.[0-9].md))
 	$(GO) install github.com/cpuguy83/go-md2man/v2@latest
 
 .PHONY: install
-install:
+install: docs
 	install -d ${DESTDIR}/${MANDIR}/man1
 	install -m 0644 *.1 ${DESTDIR}/${MANDIR}/man1
 	install -d ${DESTDIR}/${MANDIR}/man7
 	install -m 0644 *.7 ${DESTDIR}/${MANDIR}/man7
 
+.PHONY: uninstall
+uninstall:
+	rm -f ${DESTDIR}/${MANDIR}/man1/*.1
+	rm -f ${DESTDIR}/${MANDIR}/man7/*.7
+
 .PHONY: clean
 clean:
-	$(RM) *.1
+	$(RM) *.1 *.7
