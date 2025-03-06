@@ -12,7 +12,9 @@ load helpers
     run_netavark version
     json="$output"
     assert_json "$json" ".version" =~ "^1\.[0-9]+\.[0-9]+(-rc[0-9]|-dev)?" "correct version"
-    assert_json "$json" ".commit" =~ "[0-9a-f]{40}" "shows commit sha"
+    if [ -n "$NETAVARK_UPSTREAM" ]; then
+        assert_json "$json" ".commit" =~ "[0-9a-f]{40}" "shows commit sha"
+    fi
     assert_json "$json" ".build_time" =~ "20.*" "show build date"
     assert_json "$json" ".target" =~ ".*" "contains target string"
 }
