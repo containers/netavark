@@ -1265,9 +1265,9 @@ dependencies = [
 
 [[package]]
 name = "iptables"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43b627935a2f5d654613bea2bcd677cc760b03ecf224ced0f1970c0d174813b9"
+checksum = "587f29670d67df4c7af1631928dcc592e24e897e961f89b06b142b95702ce21f"
 dependencies = [
  "lazy_static",
  "nix 0.29.0",
