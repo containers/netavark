@@ -66,6 +66,7 @@ impl VarkRule {
         &self.rule
     }
 }
+
 // Varkchain is an iptable chain with extra info
 pub struct VarkChain<'a> {
     // name of chain
@@ -192,17 +193,23 @@ pub fn create_network_chains(chains: Vec<VarkChain<'_>>) -> NetavarkResult<()> {
     Ok(())
 }
 
-pub fn get_network_chains<'a>(
-    conn: &'a IPTables,
-    network: IpNet,
-    network_hash_name: &'a str,
-    is_ipv6: bool,
-    interface_name: String,
-    isolation: IsolateOption,
-    dns_port: u16,
-) -> Vec<VarkChain<'a>> {
+pub struct NetworkChainConfig {
+    pub network: IpNet,
+    pub network_hash_name: String,
+    pub interface_name: String,
+    pub isolation: IsolateOption,
+    pub dns_port: u16,
+    pub outbound_addr: Option<IpAddr>,
+}
+
+pub fn get_network_chains(conn: &IPTables, config: NetworkChainConfig) -> Vec<VarkChain<'_>> {
     let mut chains = Vec::new();
-    let prefixed_network_hash_name = format!("{}-{}", "NETAVARK", network_hash_name);
+    let prefixed_network_hash_name = format!("{}-{}", "NETAVARK", config.network_hash_name);
+
+    let is_ipv6 = match config.network {
+        IpNet::V4(_) => false,
+        IpNet::V6(_) => true,
+    };
 
     // NETAVARK-HASH
     let mut hashed_network_chain = VarkChain::new(
@@ -214,7 +221,7 @@ pub fn get_network_chains<'a>(
     hashed_network_chain.create = true;
 
     hashed_network_chain.build_rule(VarkRule::new(
-        format!("-d {network} -j {ACCEPT}"),
+        format!("-d {} -j {}", config.network, ACCEPT),
         Some(TeardownPolicy::OnComplete),
     ));
 
@@ -222,17 +229,37 @@ pub fn get_network_chains<'a>(
     if is_ipv6 {
         multicast_dest = MULTICAST_NET_V6;
     }
-    hashed_network_chain.build_rule(VarkRule::new(
-        format!("! -d {multicast_dest} -j {MASQUERADE}"),
-        Some(TeardownPolicy::OnComplete),
-    ));
+    if let Some(addr) = config.outbound_addr {
+        if !is_ipv6 && addr.is_ipv4() {
+            log::trace!("Creating SNAT rule with outbound address {}", addr);
+            hashed_network_chain.build_rule(VarkRule::new(
+                format!("! -d {multicast_dest} -j SNAT --to-source {}", addr),
+                Some(TeardownPolicy::OnComplete),
+            ));
+        } else {
+            log::trace!(
+                "Outbound address {} is not IPv4, using default MASQUERADE rule",
+                addr
+            );
+            hashed_network_chain.build_rule(VarkRule::new(
+                format!("! -d {multicast_dest} -j {MASQUERADE}"),
+                Some(TeardownPolicy::OnComplete),
+            ));
+        }
+    } else {
+        log::trace!("No outbound address set, using default MASQUERADE rule");
+        hashed_network_chain.build_rule(VarkRule::new(
+            format!("! -d {multicast_dest} -j {MASQUERADE}"),
+            Some(TeardownPolicy::OnComplete),
+        ));
+    }
     chains.push(hashed_network_chain);
 
     // POSTROUTING
     let mut postrouting_chain =
         VarkChain::new(conn, NAT.to_string(), POSTROUTING.to_string(), None);
     postrouting_chain.build_rule(VarkRule::new(
-        format!("-s {network} -j {prefixed_network_hash_name}"),
+        format!("-s {} -j {}", config.network, prefixed_network_hash_name),
         Some(TeardownPolicy::OnComplete),
     ));
     chains.push(postrouting_chain);
@@ -272,7 +299,7 @@ pub fn get_network_chains<'a>(
     );
     netavark_isolation_chain_3.create = true;
 
-    if let IsolateOption::Normal | IsolateOption::Strict = isolation {
+    if let IsolateOption::Normal | IsolateOption::Strict = config.isolation {
         debug!("Add extra isolate rules");
         // NETAVARK_ISOLATION_1
         let mut netavark_isolation_chain_1 = VarkChain::new(
@@ -290,7 +317,7 @@ pub fn get_network_chains<'a>(
             td_policy: Some(TeardownPolicy::OnComplete),
         });
 
-        let netavark_isolation_1_target = if let IsolateOption::Strict = isolation {
+        let netavark_isolation_1_target = if let IsolateOption::Strict = config.isolation {
             // NETAVARK_ISOLATION_1 -i bridge_name ! -o bridge_name -j NETAVARK_ISOLATION_3
             NETAVARK_ISOLATION_3
         } else {
@@ -299,7 +326,8 @@ pub fn get_network_chains<'a>(
         };
         netavark_isolation_chain_1.build_rule(VarkRule {
             rule: format!(
-                "-i {interface_name} ! -o {interface_name} -j {netavark_isolation_1_target}"
+                "-i {} ! -o {} -j {}",
+                config.interface_name, config.interface_name, netavark_isolation_1_target
             ),
             position: Some(ind),
             td_policy: Some(TeardownPolicy::OnComplete),
@@ -307,7 +335,7 @@ pub fn get_network_chains<'a>(
 
         // NETAVARK_ISOLATION_2 -o bridge_name -j DROP
         netavark_isolation_chain_2.build_rule(VarkRule {
-            rule: format!("-o {} -j {}", interface_name, "DROP"),
+            rule: format!("-o {} -j {}", config.interface_name, "DROP"),
             position: Some(ind),
             td_policy: Some(TeardownPolicy::OnComplete),
         });
@@ -328,7 +356,7 @@ pub fn get_network_chains<'a>(
 
         // NETAVARK_ISOLATION_3 -o bridge_name -j DROP
         netavark_isolation_chain_3.build_rule(VarkRule {
-            rule: format!("-o {} -j {}", interface_name, "DROP"),
+            rule: format!("-o {} -j {}", config.interface_name, "DROP"),
             position: Some(ind),
             td_policy: Some(TeardownPolicy::OnComplete),
         });
@@ -377,7 +405,7 @@ pub fn get_network_chains<'a>(
         netavark_input_chain.build_rule(VarkRule::new(
             format!(
                 "-p {} -s {} --dport {} -j {}",
-                proto, network, dns_port, ACCEPT
+                proto, config.network, config.dns_port, ACCEPT
             ),
             Some(TeardownPolicy::OnComplete),
         ));
@@ -395,14 +423,17 @@ pub fn get_network_chains<'a>(
     // Create incoming traffic rule
     // CNI did this by IP address, this is implemented per subnet
     netavark_forward_chain.build_rule(VarkRule::new(
-        format!("-d {network} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT"),
+        format!(
+            "-d {} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT",
+            config.network
+        ),
         Some(TeardownPolicy::OnComplete),
     ));
 
     // Create outgoing traffic rule
     // CNI did this by IP address, this is implemented per subnet
     netavark_forward_chain.build_rule(VarkRule::new(
-        format!("-s {network} -j ACCEPT"),
+        format!("-s {} -j ACCEPT", config.network),
         Some(TeardownPolicy::OnComplete),
     ));
     chains.push(netavark_forward_chain);

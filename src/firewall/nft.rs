@@ -367,18 +367,69 @@ impl firewall::FirewallDriver for Nftables {
                     ],
                 ));
 
-                // Subnet chain: ip daddr != 224.0.0.0/4 masquerade
+                // Subnet chain: ip daddr != 224.0.0.0/4 snat/masquerade
                 let multicast_address: IpNet = match subnet {
                     IpNet::V4(_) => "224.0.0.0/4".parse()?,
                     IpNet::V6(_) => "ff::00/8".parse()?,
                 };
-                batch.add(make_rule(
-                    &chain,
-                    vec![
-                        get_subnet_match(&multicast_address, "daddr", stmt::Operator::NEQ),
-                        stmt::Statement::Masquerade(None),
-                    ],
-                ));
+
+                // If outbound_addr is set and valid IPv4, use SNAT, otherwise use MASQUERADE
+                if let Some(addr) = network_setup.outbound_addr {
+                    if let IpNet::V4(_) = subnet {
+                        if addr.is_ipv4() {
+                            log::trace!("Creating SNAT rule with outbound address {}", addr);
+                            batch.add(make_rule(
+                                &chain,
+                                vec![
+                                    get_subnet_match(
+                                        &multicast_address,
+                                        "daddr",
+                                        stmt::Operator::NEQ,
+                                    ),
+                                    stmt::Statement::SNAT(Some(stmt::NAT {
+                                        addr: Some(expr::Expression::String(addr.to_string())),
+                                        family: Some(stmt::NATFamily::IP),
+                                        port: None,
+                                        flags: None,
+                                    })),
+                                ],
+                            ));
+                        } else {
+                            log::trace!(
+                                "Outbound address {} is not IPv4, using default MASQUERADE rule",
+                                addr
+                            );
+                            batch.add(make_rule(
+                                &chain,
+                                vec![
+                                    get_subnet_match(
+                                        &multicast_address,
+                                        "daddr",
+                                        stmt::Operator::NEQ,
+                                    ),
+                                    stmt::Statement::Masquerade(None),
+                                ],
+                            ));
+                        }
+                    } else {
+                        batch.add(make_rule(
+                            &chain,
+                            vec![
+                                get_subnet_match(&multicast_address, "daddr", stmt::Operator::NEQ),
+                                stmt::Statement::Masquerade(None),
+                            ],
+                        ));
+                    }
+                } else {
+                    log::trace!("No outbound address set, using default MASQUERADE rule");
+                    batch.add(make_rule(
+                        &chain,
+                        vec![
+                            get_subnet_match(&multicast_address, "daddr", stmt::Operator::NEQ),
+                            stmt::Statement::Masquerade(None),
+                        ],
+                    ));
+                }
 
                 // Next, populate basic chains with forwarding rules
                 // Input chain: ip saddr <subnet> udp dport 53 accept
