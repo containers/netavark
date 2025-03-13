@@ -54,3 +54,7 @@ and [PRs](https://github.com/containers/netavark/pulls) tracking system.
 ## Plugins
 
 Netavark also supports executing external plugins, see [./plugin-API.md](./plugin-API.md).
+
+## [Contributing](https://github.com/containers/common/blob/main/CONTRIBUTING.md)
+
+Learn [here](https://github.com/containers/common/blob/main/CONTRIBUTING.md) how to contribute to the Containers Group Projects.
