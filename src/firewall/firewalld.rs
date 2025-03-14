@@ -1062,7 +1062,35 @@ pub fn is_firewalld_strict_forward_enabled(dbus_con: &Option<Connection>) -> boo
         "Get",
         &("org.fedoraproject.FirewallD1.config", "StrictForwardPorts"),
     ) {
-        Ok(b) => b.body().deserialize().unwrap_or(false),
+        Ok(b) => {
+            let variant_str: String = match b.body().deserialize::<Value>() {
+                Ok(v) => match v.downcast::<String>() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        warn!(
+                            "couldn't downcast StrictForwardPorts value to string: {}",
+                            e
+                        );
+                        return false;
+                    }
+                },
+                Err(e) => {
+                    warn!("couldn't retrieve StrictForwardPorts property: {}", e);
+                    return false;
+                }
+            };
+            match variant_str.to_lowercase().as_str() {
+                "yes" => true,
+                "no" => false,
+                other => {
+                    warn!(
+                        "unexpected value from StrictForwardPorts property: {}",
+                        other
+                    );
+                    false
+                }
+            }
+        }
         Err(_) => {
             // Assume any error is related to the property not existing
             // (As it will not on older firewalld versions)
