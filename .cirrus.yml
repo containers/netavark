@@ -22,6 +22,7 @@ env:
     AARDVARK_DNS_URL: "https://api.cirrus-ci.com/v1/artifact/github/containers/aardvark-dns/success/binary.zip?branch=${AARDVARK_DNS_BRANCH}"
     FEDORA_NETAVARK_AARCH64_AMI: "fedora-netavark-aws-arm64-${IMAGE_SUFFIX}"
     EC2_INST_TYPE: "t4g.xlarge"
+    NETAVARK_UPSTREAM: "1"
 
 
 gcp_credentials: ENCRYPTED[d6efdb7d6d4c61e3831df2193ca6348bb02f26cd931695f69d41930b1965f7dab72a838ca0902f6ed8cde66c7deddae2]
@@ -257,10 +258,8 @@ success_task:
     API_URL_BASE: "https://api.cirrus-ci.com/v1/artifact/build/${CIRRUS_BUILD_ID}"
     EXP_BINS: >-
         netavark
-        netavark.debug
         netavark.info
         netavark.aarch64-unknown-linux-gnu
-        netavark.debug.aarch64-unknown-linux-gnu
         netavark.info.aarch64-unknown-linux-gnu
   clone_script: *noop
   bin_cache: *ro_bin_cache

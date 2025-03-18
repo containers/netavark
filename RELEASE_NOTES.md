@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.14.1
+
+* Fixed an issue where the Makefile did not install the `netavark-firewalld(7)` man page. ([#1179](https://github.com/containers/netavark/issues/1179))
+* Fixed the detection of Firewalld's StrictForwardPorts property.
+* Upstream tests no longer check for the commit sha in the version output by default so downstream tests on packaged versions without the commit info can pass.
+
 ## v1.14.0
 
 * bridge: Add support for a new option called `mode`. When set to `unmanaged` only the veth pair and ip addresses are setup. The bridge must exist and no firewall or sysctl setting will be configured in this mode. ([#1090](https://github.com/containers/netavark/issues/1090))
