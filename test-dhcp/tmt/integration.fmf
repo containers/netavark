@@ -1,0 +1,17 @@
+# Only common dependencies that are NOT required to run test_integration.sh are
+# specified here. Everything else is in test_integration.sh.
+require:
+    - iptables
+    - netavark-tests
+
+adjust:
+    duration: 10m
+    when: arch == aarch64
+
+tag: [ upstream, downstream ]
+summary: Integration tests
+test: bash integration.sh
+environment:
+    NETAVARK: /usr/libexec/podman/netavark
+    NETAVARK_DHCP_PROXY_CLIENT: /usr/libexec/podman/netavark-dhcp-proxy-client
+    TEST_PLUGINS: /usr/share/netavark/examples
