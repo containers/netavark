@@ -68,13 +68,13 @@ impl<W: Write + Clear> NetavarkProxyService<W> {
         let locked_sender = match sender.lock() {
             Ok(v) => v,
             Err(e) => {
-                log::error!("{}", e.to_string());
+                log::error!("{}", e);
                 return;
             }
         };
         match locked_sender.try_send(1) {
             Ok(..) => {}
-            Err(e) => log::error!("{}", e.to_string()),
+            Err(e) => log::error!("{}", e),
         }
     }
 }
@@ -372,11 +372,11 @@ async fn handle_wakeup<W: Write + Clear>(
 fn is_catch_empty<W: Write + Clear>(current_cache: Arc<Mutex<LeaseCache<W>>>) -> bool {
     match current_cache.lock() {
         Ok(v) => {
-            debug!("cache_len is {}", v.len().to_string());
+            debug!("cache_len is {}", v.len());
             v.is_empty()
         }
         Err(e) => {
-            log::error!("{}", e.to_string());
+            log::error!("{}", e);
             false
         }
     }
