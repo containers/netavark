@@ -16,7 +16,7 @@ use crate::{
         iptables::MAX_HASH_SIZE,
         state::{remove_fw_config, write_fw_config},
     },
-    network::{constants, core_utils::disable_ipv6_autoconf, types},
+    network::{core_utils::disable_ipv6_autoconf, types},
 };
 
 use super::{
@@ -226,11 +226,6 @@ impl driver::NetworkDriver for Bridge<'_> {
             let _ = response
                 .dns_server_ips
                 .insert(data.ipam.nameservers.clone());
-            // Note: this is being added so podman setup is backward compatible with the design
-            // which we had with dnsname/dnsmasq. I believe this can be fixed in later releases.
-            let _ = response
-                .dns_search_domains
-                .insert(vec![constants::PODMAN_DEFAULT_SEARCH_DOMAIN.to_string()]);
 
             let mut ipv4 = Vec::new();
             let mut ipv6 = Vec::new();
