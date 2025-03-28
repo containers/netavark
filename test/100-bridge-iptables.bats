@@ -316,6 +316,8 @@ fw_driver=iptables
 
     NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
         setup $(get_container_netns_path)
+    config="$output"
+    assert_json "$config" ".podman1.dns_search_domains" == "[]" "empty search domains"
 
     # check iptables
     run_in_host_netns iptables -t nat -S NETAVARK-HOSTPORT-DNAT

@@ -162,6 +162,8 @@ function setup() {
     NETAVARK_DNS_PORT="$dns_port" \
         run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
         setup $(get_container_netns_path)
+    config="$output"
+    assert_json "$config" ".podman1.dns_search_domains" == "[]" "empty search domains"
 
     # check iptables
     # firewall-cmd --list-rich-rules does not guarantee order, use sort
