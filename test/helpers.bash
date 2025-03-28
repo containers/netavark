@@ -645,7 +645,7 @@ function run_nc_test() {
     fi
 
     nsenter -n -t "${CONTAINER_NS_PIDS[$container_ns]}" timeout --foreground -v --kill=10 5 \
-        nc $nc_common_args -l -p $container_port &>"$NETAVARK_TMPDIR/nc-out" <&$stdin &
+        ncat $nc_common_args -l -p $container_port &>"$NETAVARK_TMPDIR/nc-out" <&$stdin &
 
     # make sure to wait until port is bound otherwise test can flake
     # https://github.com/containers/netavark/issues/433
@@ -658,7 +658,7 @@ function run_nc_test() {
     fi
 
     data=$(random_string)
-    run_in_host_netns nc $nc_common_args $connect_ip $host_port <<<"$data"
+    run_in_host_netns ncat $nc_common_args $connect_ip $host_port <<<"$data"
 
     got=$(cat "$NETAVARK_TMPDIR/nc-out")
     assert "$got" == "$data" "ncat received data"
