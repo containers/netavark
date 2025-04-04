@@ -141,3 +141,28 @@ jobs:
             $RC \
             $LATEST \
             release-artifacts/*
+
+  publish-crate:
+    name: Publish Crate
+    if: needs.check.outputs.buildonly == 'false'
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+    - name: Update Rust
+      run: |
+        rustup update stable
+        rustc --version
+        cargo --version
+    - name: Install Protoc
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install protobuf-compiler libprotobuf-dev
+    - name: Checkout Version
+      uses: actions/checkout@v4
+      with:
+        ref: ${{needs.check.outputs.version}}
+    - name: Publish crate
+      run: make crate-publish
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
