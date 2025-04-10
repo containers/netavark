@@ -451,10 +451,7 @@ impl<'a> Bridge<'a> {
             )?;
         }
 
-        let system_dbus = match zbus::blocking::Connection::system() {
-            Ok(c) => Some(c),
-            Err(_) => None,
-        };
+        let system_dbus = zbus::blocking::Connection::system().ok();
 
         self.info.firewall.setup_network(sn, &system_dbus)?;
 
