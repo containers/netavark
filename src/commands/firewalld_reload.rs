@@ -60,10 +60,7 @@ fn reload_rules_inner(config_dir: &Path) -> NetavarkResult<()> {
     if let Some(conf) = conf {
         let fw_driver = get_supported_firewall_driver(Some(conf.driver))?;
 
-        let dbus_conn = match zbus::blocking::Connection::system() {
-            Ok(c) => Some(c),
-            Err(_) => None,
-        };
+        let dbus_conn = zbus::blocking::Connection::system().ok();
 
         for net in conf.net_confs {
             fw_driver.setup_network(net, &dbus_conn)?;
