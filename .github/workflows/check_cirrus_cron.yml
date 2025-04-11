@@ -8,7 +8,7 @@ on:
   schedule:
     # N/B: This should correspond to a period slightly after
     # the last job finishes running.  See job defs. at:
-    # https://cirrus-ci.com/settings/repository/5138144844840960
+    # https://cirrus-ci.com/settings/repository/5268168076689408
     - cron:  '03 03 * * 1-5'
   # Debug: Allow triggering job manually in github-actions WebUI
   workflow_dispatch: {}
@@ -17,4 +17,9 @@ jobs:
   # Ref: https://docs.github.com/en/actions/using-workflows/reusing-workflows
   call_cron_failures:
     uses: containers/podman/.github/workflows/check_cirrus_cron.yml@main
-    secrets: inherit
+    secrets:
+      SECRET_CIRRUS_API_KEY: ${{secrets.SECRET_CIRRUS_API_KEY}}
+      ACTION_MAIL_SERVER: ${{secrets.ACTION_MAIL_SERVER}}
+      ACTION_MAIL_USERNAME: ${{secrets.ACTION_MAIL_USERNAME}}
+      ACTION_MAIL_PASSWORD: ${{secrets.ACTION_MAIL_PASSWORD}}
+      ACTION_MAIL_SENDER: ${{secrets.ACTION_MAIL_SENDER}}
