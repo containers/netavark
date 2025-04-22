@@ -509,11 +509,7 @@ impl firewall::FirewallDriver for FirewallD {
                         // Remove any rule using our IPv4 or IPv6 as daddr.
                         if let Some(v4) = &ipv4 {
                             let daddr = format!("to-addr=\"{}\"", v4);
-                            debug!(
-                                "Checking if {} contains string {}",
-                                old_rule.to_string(),
-                                daddr
-                            );
+                            debug!("Checking if {} contains string {}", old_rule, daddr);
                             if old_rule.to_string().contains(&daddr) {
                                 is_match = true;
                             }
@@ -577,11 +573,7 @@ impl firewall::FirewallDriver for FirewallD {
                         // We don't do IPv6 localhost forwarding.
                         if let Some(v4) = &ipv4 {
                             let daddr = format!("to-addr=\"{}\"", v4);
-                            debug!(
-                                "Checking if {} contains string {}",
-                                old_rule.to_string(),
-                                daddr
-                            );
+                            debug!("Checking if {} contains string {}", old_rule, daddr);
                             if old_rule.to_string().contains(&daddr) {
                                 is_match = true;
                             }
@@ -1001,14 +993,13 @@ pub fn add_firewalld_if_possible(dbus_conn: &Option<Connection>, net: &ipnet::Ip
     if !is_firewalld_running(conn) {
         return;
     }
-    debug!("Adding firewalld rules for network {}", net.to_string());
+    debug!("Adding firewalld rules for network {}", net);
 
     match add_source_subnets_to_zone(conn, "trusted", &[*net]) {
         Ok(_) => {}
         Err(e) => warn!(
             "Error adding subnet {} from firewalld trusted zone: {}",
-            net.to_string(),
-            e
+            net, e
         ),
     }
 }
@@ -1025,7 +1016,7 @@ pub fn rm_firewalld_if_possible(net: &ipnet::IpNet) {
     if !is_firewalld_running(&conn) {
         return;
     }
-    debug!("Removing firewalld rules for IPs {}", net.to_string());
+    debug!("Removing firewalld rules for IPs {}", net);
     match conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1",
@@ -1036,8 +1027,7 @@ pub fn rm_firewalld_if_possible(net: &ipnet::IpNet) {
         Ok(_) => {}
         Err(e) => warn!(
             "Error removing subnet {} from firewalld trusted zone: {}",
-            net.to_string(),
-            e
+            net, e
         ),
     };
 }
@@ -1062,7 +1052,35 @@ pub fn is_firewalld_strict_forward_enabled(dbus_con: &Option<Connection>) -> boo
         "Get",
         &("org.fedoraproject.FirewallD1.config", "StrictForwardPorts"),
     ) {
-        Ok(b) => b.body().deserialize().unwrap_or(false),
+        Ok(b) => {
+            let variant_str: String = match b.body().deserialize::<Value>() {
+                Ok(v) => match v.downcast::<String>() {
+                    Ok(s) => s,
+                    Err(e) => {
+                        warn!(
+                            "couldn't downcast StrictForwardPorts value to string: {}",
+                            e
+                        );
+                        return false;
+                    }
+                },
+                Err(e) => {
+                    warn!("couldn't retrieve StrictForwardPorts property: {}", e);
+                    return false;
+                }
+            };
+            match variant_str.to_lowercase().as_str() {
+                "yes" => true,
+                "no" => false,
+                other => {
+                    warn!(
+                        "unexpected value from StrictForwardPorts property: {}",
+                        other
+                    );
+                    false
+                }
+            }
+        }
         Err(_) => {
             // Assume any error is related to the property not existing
             // (As it will not on older firewalld versions)

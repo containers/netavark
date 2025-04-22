@@ -9,6 +9,7 @@ use crate::{firewall, network};
 use clap::builder::NonEmptyStringValueParser;
 use clap::Parser;
 use log::debug;
+use nix::sys::signal;
 use std::ffi::OsString;
 use std::os::fd::AsFd;
 use std::path::Path;
@@ -38,6 +39,15 @@ impl Teardown {
         rootless: bool,
     ) -> NetavarkResult<()> {
         debug!("Tearing down..");
+
+        // SAFETY:  signal handlers are considered unsafe due to the care that must
+        //          taken when running code inside the handler function. We however
+        //          only ignore the signal so this is safe without having to worry
+        //          about any code restrictions.
+        // Also we ignore the returned error, this is best effort anyway and can only error when we would pass a invalid signal number.
+        let _ = unsafe { signal::signal(signal::SIGTERM, signal::SigHandler::SigIgn) };
+        let _ = unsafe { signal::signal(signal::SIGINT, signal::SigHandler::SigIgn) };
+
         let network_options = network::types::NetworkOptions::load(input_file)?;
 
         let mut error_list = NetavarkErrorList::new();
