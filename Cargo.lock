@@ -400,7 +400,6 @@ dependencies = [
  "android-tzdata",
  "iana-time-zone",
  "num-traits",
- "serde",
  "windows-link",
 ]
 
@@ -656,7 +655,7 @@ dependencies = [
  "log",
  "netlink-packet-core",
  "netlink-packet-generic",
- "netlink-packet-utils 0.5.2",
+ "netlink-packet-utils",
  "netlink-proto",
  "netlink-sys",
  "thiserror 1.0.69",
@@ -843,7 +842,7 @@ dependencies = [
  "log",
  "netlink-packet-core",
  "netlink-packet-generic",
- "netlink-packet-utils 0.5.2",
+ "netlink-packet-utils",
  "netlink-proto",
  "thiserror 1.0.69",
 ]
@@ -1403,7 +1402,7 @@ dependencies = [
  "log",
  "netlink-packet-core",
  "netlink-packet-generic",
- "netlink-packet-utils 0.5.2",
+ "netlink-packet-utils",
  "netlink-proto",
  "netlink-sys",
  "thiserror 1.0.69",
@@ -1436,7 +1435,6 @@ dependencies = [
  "mozim",
  "netlink-packet-core",
  "netlink-packet-route",
- "netlink-packet-utils 0.6.0",
  "netlink-sys",
  "nftables",
  "nispor",
@@ -1445,7 +1443,6 @@ dependencies = [
  "prost",
  "rand 0.9.1",
  "serde",
- "serde-value",
  "serde_json",
  "sha2",
  "sysctl",
@@ -1455,7 +1452,6 @@ dependencies = [
  "tonic",
  "tonic-build",
  "tower",
- "url",
  "zbus",
 ]
 
@@ -1467,7 +1463,7 @@ checksum = "72724faf704479d67b388da142b186f916188505e7e0b26719019c525882eda4"
 dependencies = [
  "anyhow",
  "byteorder",
- "netlink-packet-utils 0.5.2",
+ "netlink-packet-utils",
 ]
 
 [[package]]
@@ -1479,7 +1475,7 @@ dependencies = [
  "anyhow",
  "byteorder",
  "netlink-packet-core",
- "netlink-packet-utils 0.5.2",
+ "netlink-packet-utils",
 ]
 
 [[package]]
@@ -1494,7 +1490,7 @@ dependencies = [
  "libc",
  "log",
  "netlink-packet-core",
- "netlink-packet-utils 0.5.2",
+ "netlink-packet-utils",
 ]
 
 [[package]]
@@ -1507,17 +1503,6 @@ dependencies = [
  "byteorder",
  "paste",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "netlink-packet-utils"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3176f18d11a1ae46053e59ec89d46ba318ae1343615bd3f8c908bfc84edae35c"
-dependencies = [
- "byteorder",
- "pastey",
- "thiserror 2.0.11",
 ]
 
 [[package]]
@@ -1628,15 +1613,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
 
 [[package]]
-name = "ordered-float"
-version = "2.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68f19d67e5a2795c94e73e0bb1cc1a7edeb2e28efd39e2e1c9b7a40c1108b11c"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
 name = "ordered-stream"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1657,12 +1633,6 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
-
-[[package]]
-name = "pastey"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3a8cb46bdc156b1c90460339ae6bfd45ba0394e5effbaa640badb4987fdc261"
 
 [[package]]
 name = "percent-encoding"
@@ -1950,7 +1920,7 @@ dependencies = [
  "log",
  "netlink-packet-core",
  "netlink-packet-route",
- "netlink-packet-utils 0.5.2",
+ "netlink-packet-utils",
  "netlink-proto",
  "netlink-sys",
  "nix 0.29.0",
@@ -2013,28 +1983,18 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.217"
+version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02fc4265df13d6fa1d00ecff087228cc0a2b5f3c0e87e258d8b94a156e984c70"
+checksum = "5f0e2c6ed6606019b4e29e69dbaba95b11854410e5347d525002456dbbb786b6"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
-name = "serde-value"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3a1a3341211875ef120e117ea7fd5228530ae7e7036a779fdc9117be6b3282c"
-dependencies = [
- "ordered-float",
- "serde",
-]
-
-[[package]]
 name = "serde_derive"
-version = "1.0.217"
+version = "1.0.219"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a9bf7cf98d04a2b28aead066b7496853d4779c9cc183c440dbac457641e19a0"
+checksum = "5b0276cf7f2c73365f7157c8123c21cd9a50fbbd844757af28ca1f5925fc2a00"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2043,9 +2003,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.138"
+version = "1.0.140"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d434192e7da787e94a6ea7e9670b26a036d0ca41e0b7efb2676dd32bae872949"
+checksum = "20068b6e96dc6c9bd23e01df8827e6c7e1f2fddd43c21810382803c136b99373"
 dependencies = [
  "itoa",
  "memchr",
@@ -2544,7 +2504,6 @@ dependencies = [
  "form_urlencoded",
  "idna 1.0.3",
  "percent-encoding",
- "serde",
 ]
 
 [[package]]
@@ -2823,7 +2782,7 @@ dependencies = [
  "log",
  "netlink-packet-core",
  "netlink-packet-generic",
- "netlink-packet-utils 0.5.2",
+ "netlink-packet-utils",
  "netlink-proto",
  "netlink-sys",
  "thiserror 1.0.69",
