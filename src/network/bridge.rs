@@ -239,9 +239,18 @@ impl driver::NetworkDriver for Bridge<'_> {
                     }
                 }
             }
-            let mut names = vec![self.info.container_name.to_string()];
+
+            // get size so we can preallocate the vector which is more efficient
+            let len = match &self.info.per_network_opts.aliases {
+                Some(n) => n.len() + 1,
+                None => 1,
+            };
+            let mut names = Vec::with_capacity(len);
+            names.push(self.info.container_name.as_str());
             if let Some(n) = &self.info.per_network_opts.aliases {
-                names.extend(n.clone());
+                for name in n {
+                    names.push(name);
+                }
             }
 
             let gw = data

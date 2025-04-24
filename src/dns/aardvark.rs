@@ -27,7 +27,7 @@ pub struct AardvarkEntry<'a> {
     pub container_id: &'a str,
     pub container_ips_v4: Vec<Ipv4Addr>,
     pub container_ips_v6: Vec<Ipv6Addr>,
-    pub container_names: Vec<String>,
+    pub container_names: Vec<&'a str>,
     pub container_dns_servers: &'a Option<Vec<IpAddr>>,
     pub is_internal: bool,
 }
