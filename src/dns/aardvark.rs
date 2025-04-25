@@ -20,15 +20,38 @@ const SYSTEMD_CHECK_PATH: &str = "/run/systemd/system";
 const SYSTEMD_RUN: &str = "systemd-run";
 const AARDVARK_COMMIT_LOCK: &str = "aardvark.lock";
 
-#[derive(Clone, Debug)]
+/// For better safety we wrap &str in our own custom type here
+/// where we can enforce that the caller can only construct it
+/// via the TryFrom trait. With that we can guarantee via the
+/// type system that we never get invalid chars here when we
+/// write the config file.
+#[derive(Debug)]
+pub struct SafeString<'a>(&'a str);
+
+impl<'a> TryFrom<&'a str> for SafeString<'a> {
+    type Error = &'static str;
+
+    fn try_from(value: &'a str) -> std::result::Result<Self, Self::Error> {
+        if value.is_empty() {
+            return Err("name is empty");
+        }
+        if value.contains([',', '\n', ' ']) {
+            Err("name contains invalid chars")
+        } else {
+            Ok(SafeString(value))
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct AardvarkEntry<'a> {
     pub network_name: &'a str,
     pub network_gateways: Vec<IpAddr>,
     pub network_dns_servers: &'a Option<Vec<IpAddr>>,
-    pub container_id: &'a str,
+    pub container_id: SafeString<'a>,
     pub container_ips_v4: Vec<Ipv4Addr>,
     pub container_ips_v6: Vec<Ipv6Addr>,
-    pub container_names: Vec<&'a str>,
+    pub container_names: Vec<SafeString<'a>>,
     pub container_dns_servers: &'a Option<Vec<IpAddr>>,
     pub is_internal: bool,
 }
@@ -306,7 +329,7 @@ impl Aardvark {
 
         // The line is space separated keys and then for the ips/names they are comma separated
         // Format: ID ipv4s ipv6s names[ dns-servers]
-        buf.push_str(entry.container_id);
+        buf.push_str(entry.container_id.0);
 
         buf.push(' ');
         write_comma_separated_list(
@@ -321,7 +344,7 @@ impl Aardvark {
         );
 
         buf.push(' ');
-        write_comma_separated_list(&mut buf, entry.container_names.iter());
+        write_comma_separated_list(&mut buf, entry.container_names.iter().map(|n| n.0));
 
         if let Some(dns_servers) = &entry.container_dns_servers {
             if !dns_servers.is_empty() {
@@ -456,7 +479,7 @@ impl Aardvark {
 
     pub fn delete_from_netavark_entries(&self, entries: &[AardvarkEntry]) -> NetavarkResult<()> {
         for entry in entries {
-            self.delete_entry(entry.container_id, entry.network_name)?;
+            self.delete_entry(entry.container_id.0, entry.network_name)?;
         }
         self.notify(false, false)
     }

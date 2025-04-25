@@ -1042,3 +1042,24 @@ function check_simple_bridge_nftables() {
     assert "$output" !~ "10.89.3.0/24" "leaked network nft rules after setup error"
     assert "$output" !~ "fd10:88:a::/64" "leaked network nft rules after setup error"
 }
+
+# https://github.com/containers/netavark/issues/1019
+@test "$fw_driver - invalid dns names" {
+    RUST_LOG=netavark=warn run_netavark --file ${TESTSDIR}/testfiles/dns-invalid-names.json \
+        setup $(get_container_netns_path)
+    assert "${#lines[@]}" = 4 "4 output lines, three warnings + result"
+    assert "${lines[0]}" =~ 'invalid network alias "space 1"' "space triggers warning"
+    assert "${lines[1]}" =~ 'invalid network alias "comma,1"' "comma triggers warning"
+    assert "${lines[2]}" =~ 'invalid network alias "newline\\n2"' "newline triggers warning"
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2  somename,valid$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
+
+    aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
+    run_helper ps "$aardvark_pid"
+    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p 53 run" "aardvark not running or bad options"
+}

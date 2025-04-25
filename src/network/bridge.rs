@@ -7,6 +7,7 @@ use netlink_packet_route::link::{
     LinkMessage,
 };
 
+use crate::dns::aardvark::SafeString;
 use crate::network::dhcp::{dhcp_teardown, get_dhcp_lease};
 use crate::{
     dns::aardvark::AardvarkEntry,
@@ -246,10 +247,10 @@ impl driver::NetworkDriver for Bridge<'_> {
                 None => 1,
             };
             let mut names = Vec::with_capacity(len);
-            names.push(self.info.container_name.as_str());
-            if let Some(n) = &self.info.per_network_opts.aliases {
-                for name in n {
-                    names.push(name);
+            maybe_add_alias(&mut names, self.info.container_name);
+            if let Some(aliases) = &self.info.per_network_opts.aliases {
+                for name in aliases {
+                    maybe_add_alias(&mut names, name);
                 }
             }
 
@@ -260,17 +261,23 @@ impl driver::NetworkDriver for Bridge<'_> {
                 .map(|ipnet| ipnet.addr())
                 .collect();
 
-            Some(AardvarkEntry {
-                network_name: &self.info.network.name,
-                container_id: self.info.container_id,
-                network_gateways: gw,
-                network_dns_servers: &self.info.network.network_dns_servers,
-                container_ips_v4: ipv4,
-                container_ips_v6: ipv6,
-                container_names: names,
-                container_dns_servers: self.info.container_dns_servers,
-                is_internal: self.info.network.internal,
-            })
+            match self.info.container_id.as_str().try_into() {
+                Ok(id) => Some(AardvarkEntry {
+                    network_name: &self.info.network.name,
+                    container_id: id,
+                    network_gateways: gw,
+                    network_dns_servers: &self.info.network.network_dns_servers,
+                    container_ips_v4: ipv4,
+                    container_ips_v6: ipv6,
+                    container_names: names,
+                    container_dns_servers: self.info.container_dns_servers,
+                    is_internal: self.info.network.internal,
+                }),
+                Err(err) => {
+                    log::warn!("invalid container id {}: {err}", &self.info.container_id);
+                    None
+                }
+            }
         } else {
             // If --dns-enable=false and --dns was set then return following DNS servers
             // in status_block so podman can use these and populate resolv.conf
@@ -1003,5 +1010,15 @@ fn get_bridge_mode_from_string(mode: Option<&str>) -> NetavarkResult<BridgeMode>
         Some(name) => Err(NetavarkError::msg(format!(
             "invalid bridge mode \"{name}\""
         ))),
+    }
+}
+
+fn maybe_add_alias<'a>(names: &mut Vec<SafeString<'a>>, name: &'a str) {
+    match name.try_into() {
+        Ok(name) => names.push(name),
+        Err(err) => log::warn!(
+            "invalid network alias {:?}: {err}, ignoring this name",
+            name
+        ),
     }
 }
