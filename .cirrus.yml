@@ -69,6 +69,7 @@ build_task:
     reupload_on_changes: true
   setup_script: &setup "$SCRIPT_BASE/setup.sh"
   main_script: &main "$SCRIPT_BASE/runner.sh $CIRRUS_TASK_NAME"
+  postbuild_script: &postbuild hack/tree_status.sh
   cache_grooming_script: &groom bash "$SCRIPT_BASE/cache_groom.sh"
   upload_caches: [ "cargo", "targets", "bin" ]
 
@@ -99,6 +100,7 @@ build_aarch64_task:
     reupload_on_changes: true
   setup_script: *setup
   main_script: *main
+  postbuild_script: *postbuild
   cache_grooming_script: *groom
   upload_caches: [ "cargo", "targets", "bin" ]
   # Downstream CI needs the aarch64 binaries from this CI system.

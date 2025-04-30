@@ -19,8 +19,8 @@ GIT_TAG ?= $(shell git describe --tags)
 # build w/ debugging features.
 debug ?=
 
-# Set path to cargo executable
-CARGO ?= cargo
+# Set path to cargo executable, when running under CI make sure to add --locked so Cargo.lock is not modified
+CARGO ?= cargo $(if $(CI),--locked,)
 
 # All complication artifacts, including dependencies and intermediates
 # will be stored here, for all architectures.  Use a non-default name
