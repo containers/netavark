@@ -29,7 +29,7 @@ CARGO ?= cargo $(if $(CI),--locked,)
 CARGO_TARGET_DIR ?= targets
 export CARGO_TARGET_DIR  # 'cargo' is sensitive to this env. var. value.
 
-SOURCES = src/** Cargo.toml Cargo.lock
+SOURCES = $(shell find src/ -type f) Cargo.toml Cargo.lock Makefile
 
 ifdef debug
 $(info debug is $(debug))
