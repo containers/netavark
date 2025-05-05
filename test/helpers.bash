@@ -2,6 +2,7 @@
 
 # Netavark binary to run
 NETAVARK=${NETAVARK:-./bin/netavark}
+TEST_PLUGINS=${TEST_PLUGINS:-./targets/release/examples}
 
 TESTSDIR=${TESTSDIR:-$(dirname ${BASH_SOURCE})}
 
