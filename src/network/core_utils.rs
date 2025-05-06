@@ -2,15 +2,14 @@ use crate::error::{ErrorWrap, NetavarkError, NetavarkResult};
 use crate::network::{constants, internal_types, types};
 use crate::wrap;
 use ipnet::IpNet;
-use log::debug;
 use netlink_packet_route::link::{IpVlanMode, MacVlanMode};
 use nix::sched;
 use sha2::{Digest, Sha512};
 use std::collections::HashMap;
 use std::env;
 use std::fmt::Display;
-use std::fs::{File, OpenOptions};
-use std::io::{self, Error, ErrorKind, Read as _, Write};
+use std::fs::File;
+use std::io::{self, Error};
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
@@ -254,38 +253,6 @@ impl CoreUtils {
         let response = &hash_string[0..length];
         response.to_string()
     }
-
-    pub fn apply_sysctl_value(
-        ns_value: impl AsRef<str>,
-        val: impl AsRef<str>,
-    ) -> Result<(), NetavarkError> {
-        Self::_apply_sysctl_value(&ns_value, val)
-            .map_err(|e| NetavarkError::wrap(format!("set sysctl {}", ns_value.as_ref()), e.into()))
-    }
-
-    /// Set a sysctl value by value's namespace.
-    /// ns_value is the path of the sysctl (using slashes not dots!) and without the "/proc/sys/" prefix.
-    fn _apply_sysctl_value(ns_value: impl AsRef<str>, val: impl AsRef<str>) -> Result<(), Error> {
-        const PREFIX: &str = "/proc/sys/";
-        let ns_value = ns_value.as_ref();
-        let mut path = String::with_capacity(PREFIX.len() + ns_value.len());
-        path.push_str(PREFIX);
-        path.push_str(ns_value);
-        let val = val.as_ref();
-
-        debug!("Setting sysctl value for {} to {}", ns_value, val);
-
-        let mut f = File::open(&path)?;
-        let mut buf = String::with_capacity(1);
-        f.read_to_string(&mut buf)?;
-
-        if buf.trim() == val {
-            return Ok(());
-        }
-
-        let mut f = OpenOptions::new().write(true).open(&path)?;
-        f.write_all(val.as_bytes())
-    }
 }
 
 pub fn join_netns<Fd: AsFd>(fd: Fd) -> NetavarkResult<()> {
@@ -422,31 +389,6 @@ pub fn create_route_list(
             .collect(),
         None => Ok(vec![]),
     }
-}
-
-pub fn disable_ipv6_autoconf(if_name: &str) -> NetavarkResult<()> {
-    // make sure autoconf is off, we want manual config only
-    if let Err(err) =
-        CoreUtils::_apply_sysctl_value(format!("net/ipv6/conf/{if_name}/autoconf"), "0")
-    {
-        match err.kind() {
-            ErrorKind::NotFound => {
-                // if the sysctl is not found we likely run on a system without ipv6
-                // just ignore that case
-            }
-
-            // if we have a read only /proc we ignore it as well
-            ErrorKind::ReadOnlyFilesystem => {}
-
-            _ => {
-                return Err(NetavarkError::wrap(
-                    "failed to set autoconf sysctl",
-                    err.into(),
-                ));
-            }
-        }
-    };
-    Ok(())
 }
 
 pub fn get_mac_address(v: Vec<LinkAttribute>) -> NetavarkResult<String> {
