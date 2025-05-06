@@ -58,17 +58,25 @@ impl Teardown {
         let mut aardvark_entries = Vec::new();
         for (key, network) in &network_options.network_info {
             if network.dns_enabled && network.driver == DRIVER_BRIDGE {
-                aardvark_entries.push(AardvarkEntry {
-                    network_name: key,
-                    network_gateways: Vec::new(),
-                    network_dns_servers: &None,
-                    container_id: &network_options.container_id,
-                    container_ips_v4: Vec::new(),
-                    container_ips_v6: Vec::new(),
-                    container_names: Vec::new(),
-                    container_dns_servers: &None,
-                    is_internal: network.internal,
-                });
+                match network_options.container_id.as_str().try_into() {
+                    Ok(id) => {
+                        aardvark_entries.push(AardvarkEntry {
+                            network_name: key,
+                            network_gateways: Vec::new(),
+                            network_dns_servers: &None,
+                            container_id: id,
+                            container_ips_v4: Vec::new(),
+                            container_ips_v6: Vec::new(),
+                            container_names: Vec::new(),
+                            container_dns_servers: &None,
+                            is_internal: network.internal,
+                        });
+                    }
+                    Err(err) => log::warn!(
+                        "invalid container id {}: {err}",
+                        network_options.container_id
+                    ),
+                }
             }
         }
 

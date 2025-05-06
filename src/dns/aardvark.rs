@@ -8,8 +8,9 @@ use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::fs::File;
 use std::fs::OpenOptions;
+use std::io::ErrorKind;
 use std::io::Result;
-use std::io::{prelude::*, ErrorKind};
+use std::io::Write;
 use std::net::Ipv4Addr;
 use std::net::{IpAddr, Ipv6Addr};
 use std::path::{Path, PathBuf};
@@ -19,15 +20,38 @@ const SYSTEMD_CHECK_PATH: &str = "/run/systemd/system";
 const SYSTEMD_RUN: &str = "systemd-run";
 const AARDVARK_COMMIT_LOCK: &str = "aardvark.lock";
 
-#[derive(Clone, Debug)]
+/// For better safety we wrap &str in our own custom type here
+/// where we can enforce that the caller can only construct it
+/// via the TryFrom trait. With that we can guarantee via the
+/// type system that we never get invalid chars here when we
+/// write the config file.
+#[derive(Debug)]
+pub struct SafeString<'a>(&'a str);
+
+impl<'a> TryFrom<&'a str> for SafeString<'a> {
+    type Error = &'static str;
+
+    fn try_from(value: &'a str) -> std::result::Result<Self, Self::Error> {
+        if value.is_empty() {
+            return Err("name is empty");
+        }
+        if value.contains([',', '\n', ' ']) {
+            Err("name contains invalid chars")
+        } else {
+            Ok(SafeString(value))
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct AardvarkEntry<'a> {
     pub network_name: &'a str,
     pub network_gateways: Vec<IpAddr>,
     pub network_dns_servers: &'a Option<Vec<IpAddr>>,
-    pub container_id: &'a str,
+    pub container_id: SafeString<'a>,
     pub container_ips_v4: Vec<Ipv4Addr>,
     pub container_ips_v6: Vec<Ipv6Addr>,
-    pub container_names: Vec<String>,
+    pub container_names: Vec<SafeString<'a>>,
     pub container_dns_servers: &'a Option<Vec<IpAddr>>,
     pub is_internal: bool,
 }
@@ -301,43 +325,36 @@ impl Aardvark {
     }
 
     fn commit_entry(entry: &AardvarkEntry, mut file: File) -> Result<()> {
-        let container_names = entry.container_names.join(",");
+        let mut buf = String::with_capacity(4096);
 
-        let ipv4s = entry
-            .container_ips_v4
-            .iter()
-            .map(|g| g.to_string())
-            .collect::<Vec<String>>()
-            .join(",");
+        // The line is space separated keys and then for the ips/names they are comma separated
+        // Format: ID ipv4s ipv6s names[ dns-servers]
+        buf.push_str(entry.container_id.0);
 
-        let ipv6s = entry
-            .container_ips_v6
-            .iter()
-            .map(|g| g.to_string())
-            .collect::<Vec<String>>()
-            .join(",");
-
-        let dns_server = if let Some(dns_servers) = &entry.container_dns_servers {
-            if !dns_servers.is_empty() {
-                let dns_server_collected = dns_servers
-                    .iter()
-                    .map(|g| g.to_string())
-                    .collect::<Vec<String>>()
-                    .join(",");
-                format!(" {dns_server_collected}")
-            } else {
-                "".to_string()
-            }
-        } else {
-            "".to_string()
-        };
-
-        let data = format!(
-            "{} {} {} {}{}\n",
-            entry.container_id, ipv4s, ipv6s, container_names, dns_server
+        buf.push(' ');
+        write_comma_separated_list(
+            &mut buf,
+            entry.container_ips_v4.iter().map(|g| g.to_string()),
         );
 
-        file.write_all(data.as_bytes())?; // return error if write fails
+        buf.push(' ');
+        write_comma_separated_list(
+            &mut buf,
+            entry.container_ips_v6.iter().map(|g| g.to_string()),
+        );
+
+        buf.push(' ');
+        write_comma_separated_list(&mut buf, entry.container_names.iter().map(|n| n.0));
+
+        if let Some(dns_servers) = &entry.container_dns_servers {
+            if !dns_servers.is_empty() {
+                buf.push(' ');
+                write_comma_separated_list(&mut buf, dns_servers.iter().map(|g| g.to_string()));
+            }
+        }
+        buf.push('\n');
+
+        file.write_all(buf.as_bytes())?; // return error if write fails
 
         Ok(())
     }
@@ -462,8 +479,25 @@ impl Aardvark {
 
     pub fn delete_from_netavark_entries(&self, entries: &[AardvarkEntry]) -> NetavarkResult<()> {
         for entry in entries {
-            self.delete_entry(entry.container_id, entry.network_name)?;
+            self.delete_entry(entry.container_id.0, entry.network_name)?;
         }
         self.notify(false, false)
+    }
+}
+
+fn write_comma_separated_list<I, T>(buf: &mut String, mut iter: I)
+where
+    T: AsRef<str>,
+    I: Iterator<Item = T>,
+{
+    // first one write without comma
+    match iter.next() {
+        Some(el) => buf.push_str(el.as_ref()),
+        None => return,
+    };
+
+    for el in iter {
+        buf.push(',');
+        buf.push_str(el.as_ref());
     }
 }
