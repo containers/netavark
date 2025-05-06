@@ -298,18 +298,12 @@ impl driver::NetworkDriver for Bridge<'_> {
             // if the network is internal block routing and do not setup firewall rules
             if self.info.network.internal {
                 CoreUtils::apply_sysctl_value(
-                    format!(
-                        "/proc/sys/net/ipv4/conf/{}/forwarding",
-                        data.bridge_interface_name
-                    ),
+                    format!("net/ipv4/conf/{}/forwarding", data.bridge_interface_name),
                     "0",
                 )?;
                 if data.ipam.ipv6_enabled {
                     CoreUtils::apply_sysctl_value(
-                        format!(
-                            "/proc/sys/net/ipv6/conf/{}/forwarding",
-                            data.bridge_interface_name
-                        ),
+                        format!("net/ipv6/conf/{}/forwarding", data.bridge_interface_name),
                         "0",
                     )?;
                 }
@@ -482,7 +476,7 @@ impl<'a> Bridge<'a> {
 
             CoreUtils::apply_sysctl_value(
                 format!(
-                    "net.ipv4.conf.{}.route_localnet",
+                    "net/ipv4/conf/{}/route_localnet",
                     data.bridge_interface_name
                 ),
                 "1",
@@ -566,11 +560,11 @@ impl<'a> Bridge<'a> {
 static IPV4_FORWARD_ONCE: Once = Once::new();
 static IPV6_FORWARD_ONCE: Once = Once::new();
 
-const IPV4_FORWARD: &str = "net.ipv4.ip_forward";
-const IPV6_FORWARD: &str = "net.ipv6.conf.all.forwarding";
+const IPV4_FORWARD: &str = "net/ipv4/ip_forward";
+const IPV6_FORWARD: &str = "net/ipv6/conf/all/forwarding";
 
 fn setup_ipv4_fw_sysctl() -> NetavarkResult<()> {
-    let mut result = Ok("".to_string());
+    let mut result = Ok(());
 
     IPV4_FORWARD_ONCE.call_once(|| {
         result = CoreUtils::apply_sysctl_value(IPV4_FORWARD, "1");
@@ -584,7 +578,7 @@ fn setup_ipv4_fw_sysctl() -> NetavarkResult<()> {
 }
 
 fn setup_ipv6_fw_sysctl() -> NetavarkResult<()> {
-    let mut result = Ok("".to_string());
+    let mut result = Ok(());
 
     IPV6_FORWARD_ONCE.call_once(|| {
         result = CoreUtils::apply_sysctl_value(IPV6_FORWARD, "1");
@@ -655,10 +649,8 @@ fn create_interfaces(
                 if data.ipam.ipv6_enabled {
                     // Disable duplicate address detection if ipv6 enabled
                     // Do not accept Router Advertisements if ipv6 is enabled
-                    let br_accept_dad = format!(
-                        "/proc/sys/net/ipv6/conf/{}/accept_dad",
-                        &data.bridge_interface_name
-                    );
+                    let br_accept_dad =
+                        format!("net/ipv6/conf/{}/accept_dad", &data.bridge_interface_name);
                     let br_accept_ra =
                         format!("net/ipv6/conf/{}/accept_ra", &data.bridge_interface_name);
                     CoreUtils::apply_sysctl_value(br_accept_dad, "0")?;
@@ -670,10 +662,8 @@ fn create_interfaces(
                 // may be routed over a different interface on the reverse path.
                 // As documented for the sysctl for complicated or asymmetric routing loose mode (2)
                 // is recommended.
-                let br_rp_filter = format!(
-                    "/proc/sys/net/ipv4/conf/{}/rp_filter",
-                    &data.bridge_interface_name
-                );
+                let br_rp_filter =
+                    format!("net/ipv4/conf/{}/rp_filter", &data.bridge_interface_name);
                 CoreUtils::apply_sysctl_value(br_rp_filter, "2")?;
 
                 let link = host
@@ -803,22 +793,19 @@ fn create_veth_pair<'fd>(
             if data.ipam.ipv6_enabled {
                 //  Disable dad inside the container too
                 let disable_dad_in_container = format!(
-                    "/proc/sys/net/ipv6/conf/{}/accept_dad",
+                    "net/ipv6/conf/{}/accept_dad",
                     &data.container_interface_name
                 );
                 core_utils::CoreUtils::apply_sysctl_value(disable_dad_in_container, "0")?;
             }
             let enable_arp_notify = format!(
-                "/proc/sys/net/ipv4/conf/{}/arp_notify",
+                "net/ipv4/conf/{}/arp_notify",
                 &data.container_interface_name
             );
             core_utils::CoreUtils::apply_sysctl_value(enable_arp_notify, "1")?;
 
             // disable strict reverse path search validation
-            let rp_filter = format!(
-                "/proc/sys/net/ipv4/conf/{}/rp_filter",
-                &data.container_interface_name
-            );
+            let rp_filter = format!("net/ipv4/conf/{}/rp_filter", &data.container_interface_name);
             CoreUtils::apply_sysctl_value(rp_filter, "2")?;
             Ok::<(), NetavarkError>(())
         });
@@ -831,8 +818,7 @@ fn create_veth_pair<'fd>(
             for nla in host_veth.attributes.into_iter() {
                 if let LinkAttribute::IfName(name) = nla {
                     //  Disable dad inside on the host too
-                    let disable_dad_in_container =
-                        format!("/proc/sys/net/ipv6/conf/{name}/accept_dad");
+                    let disable_dad_in_container = format!("net/ipv6/conf/{name}/accept_dad");
                     core_utils::CoreUtils::apply_sysctl_value(disable_dad_in_container, "0")?;
                 }
             }

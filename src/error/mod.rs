@@ -72,8 +72,6 @@ pub enum NetavarkError {
     Dbus(zbus::Error),
     DbusVariant(zbus::zvariant::Error),
 
-    Sysctl(sysctl::SysctlError),
-
     Serde(serde_json::Error),
 
     Netlink(netlink_packet_core::error::ErrorMessage),
@@ -150,7 +148,6 @@ impl fmt::Display for NetavarkError {
             NetavarkError::Io(e) => write!(f, "IO error: {e}"),
             NetavarkError::Dbus(e) => write!(f, "DBus error: {e}"),
             NetavarkError::DbusVariant(e) => write!(f, "DBus Variant Error: {e}"),
-            NetavarkError::Sysctl(e) => write!(f, "Sysctl error: {e}"),
             NetavarkError::Serde(e) => write!(f, "JSON Decoding error: {e}"),
             NetavarkError::Netlink(e) => write!(f, "Netlink error: {e}"),
             NetavarkError::DHCPProxy(e) => write!(f, "dhcp proxy error: {e}"),
@@ -197,12 +194,6 @@ impl From<zbus::zvariant::Error> for NetavarkError {
 impl From<zbus::zvariant::signature::Error> for NetavarkError {
     fn from(err: zbus::zvariant::signature::Error) -> NetavarkError {
         NetavarkError::DbusVariant(err.into())
-    }
-}
-
-impl From<sysctl::SysctlError> for NetavarkError {
-    fn from(err: sysctl::SysctlError) -> NetavarkError {
-        NetavarkError::Sysctl(err)
     }
 }
 
