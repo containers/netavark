@@ -725,7 +725,7 @@ EOF
     run_in_host_netns mount -t proc -o remount,ro /proc
 
     expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
-    assert_json ".error" "IO Error: Read-only file system (os error 30)" "Sysctl error because fs is read only"
+    assert_json ".error" "set sysctl net/ipv4/ip_forward: IO error: Read-only file system (os error 30)" "Sysctl error because fs is read only"
 }
 
 

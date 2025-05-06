@@ -255,12 +255,17 @@ impl CoreUtils {
         response.to_string()
     }
 
-    /// Set a sysctl value by value's namespace.
-    /// ns_value is the path of the sysctl (using slashes not dots!) and without the "/proc/sys/" prefix.
     pub fn apply_sysctl_value(
         ns_value: impl AsRef<str>,
         val: impl AsRef<str>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), NetavarkError> {
+        Self::_apply_sysctl_value(&ns_value, val)
+            .map_err(|e| NetavarkError::wrap(format!("set sysctl {}", ns_value.as_ref()), e.into()))
+    }
+
+    /// Set a sysctl value by value's namespace.
+    /// ns_value is the path of the sysctl (using slashes not dots!) and without the "/proc/sys/" prefix.
+    fn _apply_sysctl_value(ns_value: impl AsRef<str>, val: impl AsRef<str>) -> Result<(), Error> {
         const PREFIX: &str = "/proc/sys/";
         let ns_value = ns_value.as_ref();
         let mut path = String::with_capacity(PREFIX.len() + ns_value.len());
@@ -422,7 +427,7 @@ pub fn create_route_list(
 pub fn disable_ipv6_autoconf(if_name: &str) -> NetavarkResult<()> {
     // make sure autoconf is off, we want manual config only
     if let Err(err) =
-        CoreUtils::apply_sysctl_value(format!("net/ipv6/conf/{if_name}/autoconf"), "0")
+        CoreUtils::_apply_sysctl_value(format!("net/ipv6/conf/{if_name}/autoconf"), "0")
     {
         match err.kind() {
             ErrorKind::NotFound => {

@@ -569,12 +569,7 @@ fn setup_ipv4_fw_sysctl() -> NetavarkResult<()> {
     IPV4_FORWARD_ONCE.call_once(|| {
         result = CoreUtils::apply_sysctl_value(IPV4_FORWARD, "1");
     });
-
-    match result {
-        Ok(_) => {}
-        Err(e) => return Err(e.into()),
-    };
-    Ok(())
+    result
 }
 
 fn setup_ipv6_fw_sysctl() -> NetavarkResult<()> {
@@ -583,12 +578,7 @@ fn setup_ipv6_fw_sysctl() -> NetavarkResult<()> {
     IPV6_FORWARD_ONCE.call_once(|| {
         result = CoreUtils::apply_sysctl_value(IPV6_FORWARD, "1");
     });
-
-    match result {
-        Ok(_) => {}
-        Err(e) => return Err(e.into()),
-    };
-    Ok(())
+    result
 }
 
 /// returns the container veth mac address
