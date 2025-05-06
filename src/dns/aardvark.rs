@@ -1,4 +1,5 @@
 use crate::error::{NetavarkError, NetavarkResult};
+use crate::network::core_utils::is_using_systemd;
 
 use fs2::FileExt;
 use libc::pid_t;
@@ -16,7 +17,6 @@ use std::net::{IpAddr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-const SYSTEMD_CHECK_PATH: &str = "/run/systemd/system";
 const SYSTEMD_RUN: &str = "systemd-run";
 const AARDVARK_COMMIT_LOCK: &str = "aardvark.lock";
 
@@ -112,8 +112,8 @@ impl Aardvark {
         log::debug!("Spawning aardvark server");
 
         let mut aardvark_args = vec![];
-        // only use systemd when it is booted, see sd_booted(3)
-        if Path::new(SYSTEMD_CHECK_PATH).exists() && Aardvark::is_executable_in_path(SYSTEMD_RUN) {
+        // only use systemd when it is booted
+        if is_using_systemd() && Aardvark::is_executable_in_path(SYSTEMD_RUN) {
             // TODO: This could be replaced by systemd-api.
             aardvark_args = vec![
                 OsStr::new(SYSTEMD_RUN),

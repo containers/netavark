@@ -14,6 +14,7 @@ use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
 use std::os::unix::prelude::*;
+use std::path::Path;
 use std::str::FromStr;
 
 use super::netlink;
@@ -400,4 +401,9 @@ pub fn get_mac_address(v: Vec<LinkAttribute>) -> NetavarkResult<String> {
     Err(NetavarkError::msg(
         "failed to get the the container mac address",
     ))
+}
+
+/// check if systemd is booted, see sd_booted(3)
+pub fn is_using_systemd() -> bool {
+    Path::new("/run/systemd/system").exists()
 }
