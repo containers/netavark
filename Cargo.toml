@@ -48,7 +48,7 @@ fs2 = "0.4.3"
 netlink-sys = "0.8.7"
 tokio = { version = "1.44.2", features = ["rt", "rt-multi-thread", "signal", "fs"] }
 tokio-stream = { version = "0.1.17", features = ["net"] }
-tonic = "0.13.0"
+tonic = "0.13.1"
 mozim = "0.2.5"
 prost = "0.13.5"
 futures-channel = "0.3.31"
@@ -60,7 +60,7 @@ hyper-util = "0.1.11"
 
 [build-dependencies]
 chrono = { version = "0.4.40", default-features = false, features = ["clock"] }
-tonic-build = "0.13.0"
+tonic-build = "0.13.1"
 
 [dev-dependencies]
 once_cell = "1.21.3"
