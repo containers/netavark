@@ -1,5 +1,4 @@
-use std::fs;
-use std::{collections::HashMap, net::IpAddr, os::fd::BorrowedFd, sync::Once};
+use std::{collections::HashMap, fs, net::IpAddr, os::fd::BorrowedFd};
 
 use ipnet::IpNet;
 use log::{debug, error};
@@ -164,15 +163,6 @@ impl driver::NetworkDriver for Bridge<'_> {
             data.bridge_interface_name, data.ipam.gateway_addresses
         );
 
-        if let BridgeMode::Managed = data.mode {
-            if !self.info.network.internal {
-                setup_ipv4_fw_sysctl()?;
-                if data.ipam.ipv6_enabled {
-                    setup_ipv6_fw_sysctl()?;
-                }
-            }
-        }
-
         let (host_sock, netns_sock) = netlink_sockets;
 
         // Create sysctl writer, when using systemd and running as root it is possible that the
@@ -306,19 +296,16 @@ impl driver::NetworkDriver for Bridge<'_> {
         };
 
         if let BridgeMode::Managed = data.mode {
-            // if the network is internal block routing and do not setup firewall rules
-            if self.info.network.internal {
-                sysctl::apply_sysctl_value(
-                    format!("net/ipv4/conf/{}/forwarding", data.bridge_interface_name),
-                    "0",
+            // if the network is internal do not setup firewall rules
+            if !self.info.network.internal {
+                sysctl::apply_sysctl_value_with_writer(
+                    format!(
+                        "net/ipv4/conf/{}/route_localnet",
+                        data.bridge_interface_name
+                    ),
+                    "1",
+                    &mut sysctl_writer,
                 )?;
-                if data.ipam.ipv6_enabled {
-                    sysctl::apply_sysctl_value(
-                        format!("net/ipv6/conf/{}/forwarding", data.bridge_interface_name),
-                        "0",
-                    )?;
-                }
-            } else {
                 self.setup_firewall(data)?
             }
         }
@@ -497,19 +484,6 @@ impl<'a> Bridge<'a> {
 
         self.info.firewall.setup_network(sn, &system_dbus)?;
 
-        if spf.port_mappings.is_some() {
-            // Need to enable sysctl localnet so that traffic can pass
-            // through localhost to containers
-
-            sysctl::apply_sysctl_value(
-                format!(
-                    "net/ipv4/conf/{}/route_localnet",
-                    data.bridge_interface_name
-                ),
-                "1",
-            )?;
-        }
-
         self.info.firewall.setup_port_forward(spf, &system_dbus)?;
         Ok(())
     }
@@ -583,30 +557,8 @@ impl<'a> Bridge<'a> {
 }
 
 // sysctl forward
-
-static IPV4_FORWARD_ONCE: Once = Once::new();
-static IPV6_FORWARD_ONCE: Once = Once::new();
-
 const IPV4_FORWARD: &str = "net/ipv4/ip_forward";
 const IPV6_FORWARD: &str = "net/ipv6/conf/all/forwarding";
-
-fn setup_ipv4_fw_sysctl() -> NetavarkResult<()> {
-    let mut result = Ok(());
-
-    IPV4_FORWARD_ONCE.call_once(|| {
-        result = sysctl::apply_sysctl_value(IPV4_FORWARD, "1");
-    });
-    result
-}
-
-fn setup_ipv6_fw_sysctl() -> NetavarkResult<()> {
-    let mut result = Ok(());
-
-    IPV6_FORWARD_ONCE.call_once(|| {
-        result = sysctl::apply_sysctl_value(IPV6_FORWARD, "1");
-    });
-    result
-}
 
 /// returns the container veth mac address
 fn create_interfaces(
@@ -664,7 +616,27 @@ fn create_interfaces(
 
                 host.create_link(create_link_opts).wrap("create bridge")?;
 
+                // if internal block routing on the bridge otherwise enable routing globally
+                if internal {
+                    sysctl::apply_sysctl_value_with_writer(
+                        format!("net/ipv4/conf/{}/forwarding", data.bridge_interface_name),
+                        "0",
+                        sysctl_writer,
+                    )?;
+                } else {
+                    sysctl::apply_sysctl_value_with_writer(IPV4_FORWARD, "1", sysctl_writer)?;
+                }
+
                 if data.ipam.ipv6_enabled {
+                    if internal {
+                        sysctl::apply_sysctl_value_with_writer(
+                            format!("net/ipv6/conf/{}/forwarding", data.bridge_interface_name),
+                            "0",
+                            sysctl_writer,
+                        )?;
+                    } else {
+                        sysctl::apply_sysctl_value_with_writer(IPV6_FORWARD, "1", sysctl_writer)?;
+                    }
                     // Disable duplicate address detection if ipv6 enabled
                     // Do not accept Router Advertisements if ipv6 is enabled
                     let br_accept_dad =
