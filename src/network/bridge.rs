@@ -1,4 +1,4 @@
-use std::{collections::HashMap, net::IpAddr, os::fd::BorrowedFd, sync::Once};
+use std::{collections::HashMap, fs, net::IpAddr, os::fd::BorrowedFd};
 
 use ipnet::IpNet;
 use log::{debug, error};
@@ -17,7 +17,7 @@ use crate::{
         iptables::MAX_HASH_SIZE,
         state::{remove_fw_config, write_fw_config},
     },
-    network::{core_utils::disable_ipv6_autoconf, types},
+    network::{sysctl::disable_ipv6_autoconf, types},
 };
 
 use super::{
@@ -26,13 +26,13 @@ use super::{
         NO_CONTAINER_INTERFACE_ERROR, OPTION_HOST_INTERFACE_NAME, OPTION_ISOLATE, OPTION_METRIC,
         OPTION_MODE, OPTION_MTU, OPTION_NO_DEFAULT_ROUTE, OPTION_VLAN, OPTION_VRF,
     },
-    core_utils::{self, get_ipam_addresses, join_netns, parse_option, CoreUtils},
+    core_utils::{self, get_ipam_addresses, is_using_systemd, join_netns, parse_option, CoreUtils},
     driver::{self, DriverInfo},
     internal_types::{
         IPAMAddresses, IsolateOption, PortForwardConfig, SetupNetwork, TearDownNetwork,
         TeardownPortForward,
     },
-    netlink,
+    netlink, sysctl,
     types::StatusBlock,
 };
 
@@ -163,16 +163,21 @@ impl driver::NetworkDriver for Bridge<'_> {
             data.bridge_interface_name, data.ipam.gateway_addresses
         );
 
-        if let BridgeMode::Managed = data.mode {
-            if !self.info.network.internal {
-                setup_ipv4_fw_sysctl()?;
-                if data.ipam.ipv6_enabled {
-                    setup_ipv6_fw_sysctl()?;
-                }
-            }
-        }
-
         let (host_sock, netns_sock) = netlink_sockets;
+
+        // Create sysctl writer, when using systemd and running as root it is possible that the
+        // global configured sysctl.d config conflict with the values we write. In such cases
+        // systemd-sysctl might overright the value causing hard to find errors:
+        // https://issues.redhat.com/browse/RHEL-89477
+        // This writer is used to generate a matching sysctl.d config file for our values so systemd is aware of them.
+        let mut sysctl_writer = if is_using_systemd() && !self.info.rootless {
+            let _ = fs::create_dir("/run/sysctl.d");
+            sysctl::SysctlDWriter::new(sysctl::get_bridge_sysctl_d_path(
+                &data.bridge_interface_name,
+            ))
+        } else {
+            None
+        };
 
         let container_veth_mac = create_interfaces(
             host_sock,
@@ -181,6 +186,7 @@ impl driver::NetworkDriver for Bridge<'_> {
             self.info.network.internal,
             self.info.netns_host,
             self.info.netns_container,
+            &mut sysctl_writer,
         )?;
 
         //  StatusBlock response
@@ -290,27 +296,21 @@ impl driver::NetworkDriver for Bridge<'_> {
         };
 
         if let BridgeMode::Managed = data.mode {
-            // if the network is internal block routing and do not setup firewall rules
-            if self.info.network.internal {
-                CoreUtils::apply_sysctl_value(
+            // if the network is internal do not setup firewall rules
+            if !self.info.network.internal {
+                sysctl::apply_sysctl_value_with_writer(
                     format!(
-                        "/proc/sys/net/ipv4/conf/{}/forwarding",
+                        "net/ipv4/conf/{}/route_localnet",
                         data.bridge_interface_name
                     ),
-                    "0",
+                    "1",
+                    &mut sysctl_writer,
                 )?;
-                if data.ipam.ipv6_enabled {
-                    CoreUtils::apply_sysctl_value(
-                        format!(
-                            "/proc/sys/net/ipv6/conf/{}/forwarding",
-                            data.bridge_interface_name
-                        ),
-                        "0",
-                    )?;
-                }
-            } else {
                 self.setup_firewall(data)?
             }
+        }
+        if let Some(w) = sysctl_writer {
+            w.commit();
         }
 
         Ok((response, aardvark_entry))
@@ -352,6 +352,19 @@ impl driver::NetworkDriver for Bridge<'_> {
         };
 
         if !self.info.network.internal && mode == BridgeMode::Managed {
+            if complete_teardown {
+                // delete sysctl file as well
+                let path = sysctl::get_bridge_sysctl_d_path(&bridge_name);
+                if let Err(e) = fs::remove_file(&path) {
+                    if e.kind() != std::io::ErrorKind::NotFound {
+                        error_list.push(NetavarkError::wrap(
+                            format!("failed to remove {path}"),
+                            e.into(),
+                        ));
+                    }
+                };
+            }
+
             match self.teardown_firewall(complete_teardown, bridge_name) {
                 Ok(_) => {}
                 Err(err) => {
@@ -471,19 +484,6 @@ impl<'a> Bridge<'a> {
 
         self.info.firewall.setup_network(sn, &system_dbus)?;
 
-        if spf.port_mappings.is_some() {
-            // Need to enable sysctl localnet so that traffic can pass
-            // through localhost to containers
-
-            CoreUtils::apply_sysctl_value(
-                format!(
-                    "net.ipv4.conf.{}.route_localnet",
-                    data.bridge_interface_name
-                ),
-                "1",
-            )?;
-        }
-
         self.info.firewall.setup_port_forward(spf, &system_dbus)?;
         Ok(())
     }
@@ -557,40 +557,8 @@ impl<'a> Bridge<'a> {
 }
 
 // sysctl forward
-
-static IPV4_FORWARD_ONCE: Once = Once::new();
-static IPV6_FORWARD_ONCE: Once = Once::new();
-
-const IPV4_FORWARD: &str = "net.ipv4.ip_forward";
-const IPV6_FORWARD: &str = "net.ipv6.conf.all.forwarding";
-
-fn setup_ipv4_fw_sysctl() -> NetavarkResult<()> {
-    let mut result = Ok("".to_string());
-
-    IPV4_FORWARD_ONCE.call_once(|| {
-        result = CoreUtils::apply_sysctl_value(IPV4_FORWARD, "1");
-    });
-
-    match result {
-        Ok(_) => {}
-        Err(e) => return Err(e.into()),
-    };
-    Ok(())
-}
-
-fn setup_ipv6_fw_sysctl() -> NetavarkResult<()> {
-    let mut result = Ok("".to_string());
-
-    IPV6_FORWARD_ONCE.call_once(|| {
-        result = CoreUtils::apply_sysctl_value(IPV6_FORWARD, "1");
-    });
-
-    match result {
-        Ok(_) => {}
-        Err(e) => return Err(e.into()),
-    };
-    Ok(())
-}
+const IPV4_FORWARD: &str = "net/ipv4/ip_forward";
+const IPV6_FORWARD: &str = "net/ipv6/conf/all/forwarding";
 
 /// returns the container veth mac address
 fn create_interfaces(
@@ -600,6 +568,7 @@ fn create_interfaces(
     internal: bool,
     hostns_fd: BorrowedFd<'_>,
     netns_fd: BorrowedFd<'_>,
+    sysctl_writer: &mut Option<sysctl::SysctlDWriter<String>>,
 ) -> NetavarkResult<String> {
     let (bridge_index, mac) = match host.get_link(netlink::LinkID::Name(
         data.bridge_interface_name.to_string(),
@@ -647,17 +616,35 @@ fn create_interfaces(
 
                 host.create_link(create_link_opts).wrap("create bridge")?;
 
+                // if internal block routing on the bridge otherwise enable routing globally
+                if internal {
+                    sysctl::apply_sysctl_value_with_writer(
+                        format!("net/ipv4/conf/{}/forwarding", data.bridge_interface_name),
+                        "0",
+                        sysctl_writer,
+                    )?;
+                } else {
+                    sysctl::apply_sysctl_value_with_writer(IPV4_FORWARD, "1", sysctl_writer)?;
+                }
+
                 if data.ipam.ipv6_enabled {
+                    if internal {
+                        sysctl::apply_sysctl_value_with_writer(
+                            format!("net/ipv6/conf/{}/forwarding", data.bridge_interface_name),
+                            "0",
+                            sysctl_writer,
+                        )?;
+                    } else {
+                        sysctl::apply_sysctl_value_with_writer(IPV6_FORWARD, "1", sysctl_writer)?;
+                    }
                     // Disable duplicate address detection if ipv6 enabled
                     // Do not accept Router Advertisements if ipv6 is enabled
-                    let br_accept_dad = format!(
-                        "/proc/sys/net/ipv6/conf/{}/accept_dad",
-                        &data.bridge_interface_name
-                    );
+                    let br_accept_dad =
+                        format!("net/ipv6/conf/{}/accept_dad", &data.bridge_interface_name);
                     let br_accept_ra =
                         format!("net/ipv6/conf/{}/accept_ra", &data.bridge_interface_name);
-                    CoreUtils::apply_sysctl_value(br_accept_dad, "0")?;
-                    CoreUtils::apply_sysctl_value(br_accept_ra, "0")?;
+                    sysctl::apply_sysctl_value_with_writer(br_accept_dad, "0", sysctl_writer)?;
+                    sysctl::apply_sysctl_value_with_writer(br_accept_ra, "0", sysctl_writer)?;
                 }
 
                 // Disable strict reverse path search validation. On RHEL it is set to strict mode
@@ -665,11 +652,9 @@ fn create_interfaces(
                 // may be routed over a different interface on the reverse path.
                 // As documented for the sysctl for complicated or asymmetric routing loose mode (2)
                 // is recommended.
-                let br_rp_filter = format!(
-                    "/proc/sys/net/ipv4/conf/{}/rp_filter",
-                    &data.bridge_interface_name
-                );
-                CoreUtils::apply_sysctl_value(br_rp_filter, "2")?;
+                let br_rp_filter =
+                    format!("net/ipv4/conf/{}/rp_filter", &data.bridge_interface_name);
+                sysctl::apply_sysctl_value_with_writer(br_rp_filter, "2", sysctl_writer)?;
 
                 let link = host
                     .get_link(netlink::LinkID::Name(
@@ -798,23 +783,20 @@ fn create_veth_pair<'fd>(
             if data.ipam.ipv6_enabled {
                 //  Disable dad inside the container too
                 let disable_dad_in_container = format!(
-                    "/proc/sys/net/ipv6/conf/{}/accept_dad",
+                    "net/ipv6/conf/{}/accept_dad",
                     &data.container_interface_name
                 );
-                core_utils::CoreUtils::apply_sysctl_value(disable_dad_in_container, "0")?;
+                sysctl::apply_sysctl_value(disable_dad_in_container, "0")?;
             }
             let enable_arp_notify = format!(
-                "/proc/sys/net/ipv4/conf/{}/arp_notify",
+                "net/ipv4/conf/{}/arp_notify",
                 &data.container_interface_name
             );
-            core_utils::CoreUtils::apply_sysctl_value(enable_arp_notify, "1")?;
+            sysctl::apply_sysctl_value(enable_arp_notify, "1")?;
 
             // disable strict reverse path search validation
-            let rp_filter = format!(
-                "/proc/sys/net/ipv4/conf/{}/rp_filter",
-                &data.container_interface_name
-            );
-            CoreUtils::apply_sysctl_value(rp_filter, "2")?;
+            let rp_filter = format!("net/ipv4/conf/{}/rp_filter", &data.container_interface_name);
+            sysctl::apply_sysctl_value(rp_filter, "2")?;
             Ok::<(), NetavarkError>(())
         });
         // check the result and return error
@@ -826,9 +808,8 @@ fn create_veth_pair<'fd>(
             for nla in host_veth.attributes.into_iter() {
                 if let LinkAttribute::IfName(name) = nla {
                     //  Disable dad inside on the host too
-                    let disable_dad_in_container =
-                        format!("/proc/sys/net/ipv6/conf/{name}/accept_dad");
-                    core_utils::CoreUtils::apply_sysctl_value(disable_dad_in_container, "0")?;
+                    let disable_dad_in_container = format!("net/ipv6/conf/{name}/accept_dad");
+                    sysctl::apply_sysctl_value(disable_dad_in_container, "0")?;
                 }
             }
         }
