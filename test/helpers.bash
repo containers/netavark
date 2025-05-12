@@ -113,7 +113,10 @@ function teardown() {
 function create_netns() {
     # create a new netns and mountns and run a sleep process to keep it alive
     # we have to redirect stdout/err to /dev/null otherwise bats will hang
-    unshare -nm sleep inf &>/dev/null &
+    unshare -nm --propagation private sleep inf &>/dev/null &
+    # netavark writes to /run/sysctl.d, mount a tmpfs to not leak stuff on the host
+    mkdir -p /run/sysctl.d
+    nsenter -n -m -w -t $! mount -t tmpfs none /run/sysctl.d
     echo $!
 }
 

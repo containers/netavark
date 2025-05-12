@@ -18,6 +18,7 @@ pub mod driver;
 pub mod internal_types;
 pub mod netlink;
 pub mod plugin;
+pub mod sysctl;
 pub mod vlan;
 
 impl types::NetworkOptions {

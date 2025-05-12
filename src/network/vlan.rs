@@ -12,7 +12,8 @@ use crate::{
     dns::aardvark::AardvarkEntry,
     error::{ErrorWrap, NetavarkError, NetavarkResult},
     exec_netns,
-    network::core_utils::{disable_ipv6_autoconf, join_netns},
+    network::core_utils::join_netns,
+    network::sysctl::disable_ipv6_autoconf,
 };
 
 use super::{
