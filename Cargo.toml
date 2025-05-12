@@ -43,9 +43,9 @@ rand = "0.9.1"
 sha2 = "0.10.9"
 netlink-packet-route = "0.22.0"
 netlink-packet-core = "0.7.0"
-nftables = "0.5.0"
-fs2 = "0.4.3"
 netlink-sys = "0.8.7"
+nftables = "0.6.2"
+fs2 = "0.4.3"
 tokio = { version = "1.45.0", features = ["rt", "rt-multi-thread", "signal", "fs"] }
 tokio-stream = { version = "0.1.17", features = ["net"] }
 tonic = "0.13.1"
