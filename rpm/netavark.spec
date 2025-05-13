@@ -82,8 +82,7 @@ Its features include:
     including MACVLAN networks
 * All required firewall configuration to perform NAT and port
     forwarding as required for containers
-* Support for iptables and firewalld at present, with support
-    for nftables planned in a future release
+* Support for iptables, firewalld and nftables
 * Support for rootless containers
 * Support for IPv4 and IPv6
 * Support for container DNS resolution via aardvark-dns.
