@@ -1095,6 +1095,19 @@ function check_simple_bridge_iptables() {
     assert "${#lines[@]}" = 4 "too many NETAVARK_FORWARD rules"
 }
 
+@test "$fw_driver - bridge with outbound addr" {
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-outbound-addr.json setup $(get_container_netns_path)
+
+    # Check that the iptables rules were created with SNAT
+    run_in_host_netns iptables -t nat -S NETAVARK-F11DC6A6D09CF
+    assert "${lines[2]}" == "-A NETAVARK-F11DC6A6D09CF ! -d 224.0.0.0/4 -j SNAT --to-source 100.1.100.1"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-outbound-addr.json teardown $(get_container_netns_path)
+
+    # Check that the chain is removed
+    expected_rc=1 run_in_host_netns iptables -t nat -nvL NETAVARK-F11DC6A6D09CF
+}
+
 @test "$fw_driver - aardvark-dns error cleanup" {
     expected_rc=1 run_netavark -a /usr/bin/false --file ${TESTSDIR}/testfiles/dualstack-bridge-custom-dns-server.json setup $(get_container_netns_path)
     assert_json ".error" "error while applying dns entries: IO error: aardvark-dns exited unexpectedly without error message" "aardvark-dns error"
