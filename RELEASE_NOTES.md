@@ -1,5 +1,19 @@
 # Release Notes
 
+## v1.15.0
+
+* Fixed an issue where invalid dns names that included a space would cause aardvark-dns to crash. Instead such names are now ignored and generate a warning. ([#1019](https://github.com/containers/netavark/issues/1019))
+* Netavark teardown now ignores SIGTERM and SIGINT signals to prevent interfaces/firewall rules from leaking during teardown. ([#1223](https://github.com/containers/netavark/issues/1223))
+* Netavark no longer set the dns.podman search domain in the response. Aardvark-dns sill uses that name and resolves it but it will no longer be added to the containers resolv.conf because of that. ([#1133](https://github.com/containers/netavark/issues/1133))
+* The MSRV has been bumped to v1.77.
+* Dependency updates.
+
+## v1.14.1
+
+* Fixed an issue where the Makefile did not install the `netavark-firewalld(7)` man page. ([#1179](https://github.com/containers/netavark/issues/1179))
+* Fixed the detection of Firewalld's StrictForwardPorts property.
+* Upstream tests no longer check for the commit sha in the version output by default so downstream tests on packaged versions without the commit info can pass.
+
 ## v1.14.0
 
 * bridge: Add support for a new option called `mode`. When set to `unmanaged` only the veth pair and ip addresses are setup. The bridge must exist and no firewall or sysctl setting will be configured in this mode. ([#1090](https://github.com/containers/netavark/issues/1090))
