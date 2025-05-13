@@ -1583,6 +1583,18 @@ dependencies = [
  "cfg-if",
  "cfg_aliases",
  "libc",
+]
+
+[[package]]
+name = "nix"
+version = "0.30.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
  "memoffset",
 ]
 
@@ -2909,9 +2921,9 @@ dependencies = [
 
 [[package]]
 name = "zbus"
-version = "5.6.0"
+version = "5.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2522b82023923eecb0b366da727ec883ace092e7887b61d3da5139f26b44da58"
+checksum = "88232b74ba057a0c85472ec1bae8a17569960be17da2d5e5ad30d5efe7ea6719"
 dependencies = [
  "async-broadcast",
  "async-executor",
@@ -2927,7 +2939,7 @@ dependencies = [
  "futures-core",
  "futures-lite",
  "hex",
- "nix 0.29.0",
+ "nix 0.30.1",
  "ordered-stream",
  "serde",
  "serde_repr",
@@ -2942,9 +2954,9 @@ dependencies = [
 
 [[package]]
 name = "zbus_macros"
-version = "5.6.0"
+version = "5.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05d2e12843c75108c00c618c2e8ef9675b50b6ec095b36dc965f2e5aed463c15"
+checksum = "6969c06899233334676e60da1675740539cf034ee472a6c5b5c54e50a0a554c9"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -3032,9 +3044,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant"
-version = "5.5.1"
+version = "5.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "557e89d54880377a507c94cd5452f20e35d14325faf9d2958ebeadce0966c1b2"
+checksum = "e34d60a2cff1bfddd0d4a73791fd0a4255a59e349aa0cec437cb0df7776f2450"
 dependencies = [
  "endi",
  "enumflags2",
@@ -3046,9 +3058,9 @@ dependencies = [
 
 [[package]]
 name = "zvariant_derive"
-version = "5.5.1"
+version = "5.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "757779842a0d242061d24c28be589ce392e45350dfb9186dfd7a042a2e19870c"
+checksum = "0604376d86f838e0c3f4fe6d6ee1f861a04dac9015cbbb25c25d336996c91423"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
