@@ -41,7 +41,7 @@ zbus = { version = "5.7.1" }
 nix = { version = "0.30.1", features = ["sched", "signal", "user"] }
 rand = "0.9.1"
 sha2 = "0.10.9"
-netlink-packet-route = "0.22.0"
+netlink-packet-route = "0.23.0"
 netlink-packet-core = "0.7.0"
 netlink-sys = "0.8.7"
 nftables = "0.6.2"
