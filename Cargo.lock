@@ -1434,7 +1434,6 @@ dependencies = [
  "netlink-packet-route",
  "netlink-sys",
  "nftables",
- "nispor",
  "nix 0.29.0",
  "once_cell",
  "prost",
