@@ -1431,11 +1431,10 @@ dependencies = [
  "log",
  "mozim",
  "netlink-packet-core",
- "netlink-packet-route",
+ "netlink-packet-route 0.23.0",
  "netlink-sys",
  "nftables",
- "nispor",
- "nix 0.29.0",
+ "nix 0.30.1",
  "once_cell",
  "prost",
  "rand 0.9.1",
@@ -1480,6 +1479,21 @@ name = "netlink-packet-route"
 version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc0e7987b28514adf555dc1f9a5c30dfc3e50750bbaffb1aec41ca7b23dcd8e4"
+dependencies = [
+ "anyhow",
+ "bitflags",
+ "byteorder",
+ "libc",
+ "log",
+ "netlink-packet-core",
+ "netlink-packet-utils",
+]
+
+[[package]]
+name = "netlink-packet-route"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0800eae8638a299eaa67476e1c6b6692922273e0f7939fd188fc861c837b9cd2"
 dependencies = [
  "anyhow",
  "bitflags",
@@ -1934,7 +1948,7 @@ dependencies = [
  "futures",
  "log",
  "netlink-packet-core",
- "netlink-packet-route",
+ "netlink-packet-route 0.22.0",
  "netlink-packet-utils",
  "netlink-proto",
  "netlink-sys",

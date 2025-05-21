@@ -38,10 +38,10 @@ serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 sysctl = "0.6.0"
 zbus = { version = "5.7.1" }
-nix = { version = "0.29.0", features = ["sched", "signal", "user"] }
+nix = { version = "0.30.1", features = ["sched", "signal", "user"] }
 rand = "0.9.1"
 sha2 = "0.10.9"
-netlink-packet-route = "0.22.0"
+netlink-packet-route = "0.23.0"
 netlink-packet-core = "0.7.0"
 netlink-sys = "0.8.7"
 nftables = "0.6.2"
@@ -54,7 +54,6 @@ prost = "0.13.5"
 futures-channel = "0.3.31"
 futures-core = "0.3.31"
 futures-util = "0.3.31"
-nispor = "1.2.23"
 tower = { version = "0.5.2", features = ["util"] }
 hyper-util = "0.1.12"
 
