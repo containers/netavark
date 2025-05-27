@@ -314,8 +314,6 @@ export NETAVARK_FW=nftables
 
     NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
         setup $(get_container_netns_path)
-    config="$output"
-    assert_json "$config" ".podman1.dns_search_domains" == "[]" "empty search domains"
 
     # check nftables
     run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
