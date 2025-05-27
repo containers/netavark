@@ -1,5 +1,9 @@
 # Release Notes
 
+## v1.15.1
+
+* Fixed a regression that caused container name lookups to get the wrong ip address when the host's search domain responded for the same name. ([containers/podman#26198](https://github.com/containers/podman/issues/26198))
+
 ## v1.15.0
 
 * Fixed an issue where invalid dns names that included a space would cause aardvark-dns to crash. Instead such names are now ignored and generate a warning. ([#1019](https://github.com/containers/netavark/issues/1019))
