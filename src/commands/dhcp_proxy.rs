@@ -56,7 +56,7 @@ struct NetavarkProxyService<W: Write + Clear> {
     // the timeout for the dora operation
     dora_timeout: u32,
     // channel send-side for resetting the inactivity timeout
-    timeout_sender: Arc<Mutex<Sender<i32>>>,
+    timeout_sender: Option<Arc<Mutex<Sender<i32>>>>,
     // All dhcp poll will be spawned on a new task, keep track of it so
     // we can remove it on teardown. The key is the container mac.
     task_map: Arc<Mutex<HashMap<String, AbortHandle>>>,
@@ -64,17 +64,19 @@ struct NetavarkProxyService<W: Write + Clear> {
 
 impl<W: Write + Clear> NetavarkProxyService<W> {
     fn reset_inactivity_timeout(&self) {
-        let sender = self.timeout_sender.clone();
-        let locked_sender = match sender.lock() {
-            Ok(v) => v,
-            Err(e) => {
-                log::error!("{}", e);
-                return;
+        if let Some(sender) = &self.timeout_sender {
+            let sender_clone = sender.clone();
+            let locked_sender = match sender_clone.lock() {
+                Ok(v) => v,
+                Err(e) => {
+                    log::error!("{}", e);
+                    return;
+                }
+            };
+            match locked_sender.try_send(1) {
+                Ok(..) => {}
+                Err(e) => log::error!("{}", e),
             }
-        };
-        match locked_sender.try_send(1) {
-            Ok(..) => {}
-            Err(e) => log::error!("{}", e),
         }
     }
 }
@@ -285,11 +287,18 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
 
     // Create send and receive channels for activity timeout. If anything is
     // sent by the tx side, the inactivity timeout is reset
-    let (activity_timeout_tx, activity_timeout_rx) = mpsc::channel(5);
+    let (activity_timeout_tx, activity_timeout_rx) = if inactivity_timeout.as_secs() > 0 {
+        let (tx, rx) = mpsc::channel(5);
+        (Some(tx), Some(rx))
+    } else {
+        (None, None)
+    };
     let netavark_proxy_service = NetavarkProxyService {
         cache: cache.clone(),
         dora_timeout,
-        timeout_sender: Arc::new(Mutex::new(activity_timeout_tx.clone())),
+        timeout_sender: activity_timeout_tx
+            .clone()
+            .map(|tx| Arc::new(Mutex::new(tx))),
         task_map: Arc::new(Mutex::new(HashMap::new())),
     };
 
@@ -328,28 +337,30 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
 ///
 /// ```
 async fn handle_wakeup<W: Write + Clear>(
-    mut rx: mpsc::Receiver<i32>,
+    rx: Option<mpsc::Receiver<i32>>,
     timeout_duration: Duration,
     current_cache: Arc<Mutex<LeaseCache<W>>>,
 ) {
-    loop {
-        match timeout(timeout_duration, rx.recv()).await {
-            Ok(Some(_)) => {
-                debug!("timeout timer reset")
-            }
-            Ok(None) => {
-                println!("timeout channel closed");
-                break;
-            }
-            Err(_) => {
-                // only 'exit' if the timeout is met AND there are no leases
-                // if we do not exit, the activity_timeout is reset
-                if is_catch_empty(current_cache.clone()) {
-                    println!(
-                        "timeout met: exiting after {} secs of inactivity",
-                        timeout_duration.as_secs()
-                    );
+    if let Some(mut rx) = rx {
+        loop {
+            match timeout(timeout_duration, rx.recv()).await {
+                Ok(Some(_)) => {
+                    debug!("timeout timer reset")
+                }
+                Ok(None) => {
+                    println!("timeout channel closed");
                     break;
+                }
+                Err(_) => {
+                    // only 'exit' if the timeout is met AND there are no leases
+                    // if we do not exit, the activity_timeout is reset
+                    if is_catch_empty(current_cache.clone()) {
+                        println!(
+                            "timeout met: exiting after {} secs of inactivity",
+                            timeout_duration.as_secs()
+                        );
+                        break;
+                    }
                 }
             }
         }
