@@ -273,7 +273,18 @@ impl CoreUtils {
             }
             Err(e) => return Err(e),
         }
-        ctl.set_value_string(val)
+        let result = ctl.set_value_string(val);
+        // if we have a read only /proc we ignore it as well
+        match result {
+            Ok(_) => result,
+            Err(SysctlError::IoError(e)) => {
+                if e.raw_os_error() == Some(libc::EROFS) {
+                    return Ok(String::from(""));
+                }
+                return Err(e.into());
+            },
+            Err(err) => return Err(err),
+        }
     }
 }
 
@@ -423,9 +434,6 @@ pub fn disable_ipv6_autoconf(if_name: &str) -> NetavarkResult<()> {
                 // if the sysctl is not found we likely run on a system without ipv6
                 // just ignore that case
             }
-
-            // if we have a read only /proc we ignore it as well
-            SysctlError::IoError(ref e) if e.raw_os_error() == Some(libc::EROFS) => {}
 
             _ => {
                 return Err(NetavarkError::wrap(
