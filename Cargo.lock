@@ -487,9 +487,9 @@ checksum = "2a2330da5de22e8a3cb63252ce2abb30116bf5265e89c0e01bc17015ce30a476"
 
 [[package]]
 name = "dhcproto"
-version = "0.9.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcee045385d5f7819022821f41209b9945d17550760b0b2349aaef4ecfa14bc3"
+checksum = "f6794294f2c4665aae452e950c2803a1e487c5672dc8448f0bfa3f52ff67e270"
 dependencies = [
  "dhcproto-macros",
  "hex",
@@ -1372,9 +1372,9 @@ dependencies = [
 
 [[package]]
 name = "mozim"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "610e34113d007c3588631f879854c14fbf291f3ab7853b833220f7cbf6ece8ad"
+checksum = "8232b853f83a0c76331d934627aeec172e9d5f2c82d1f9e7f86caa0df72cb304"
 dependencies = [
  "byteorder",
  "dhcproto",
@@ -1383,7 +1383,7 @@ dependencies = [
  "libc",
  "log",
  "nispor",
- "nix 0.27.1",
+ "nix 0.29.0",
  "rand 0.8.5",
 ]
 
@@ -1575,17 +1575,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "wl-nl80211",
-]
-
-[[package]]
-name = "nix"
-version = "0.27.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
-dependencies = [
- "bitflags",
- "cfg-if",
- "libc",
 ]
 
 [[package]]
