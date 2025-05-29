@@ -1,0 +1,33 @@
+require:
+    - cargo
+    - clippy
+    - go-md2man
+    - git-core
+    - iptables
+    - make
+    - protobuf-compiler
+    - rustfmt
+
+adjust+:
+    - duration: 10m
+      when: arch == aarch64
+
+/validate:
+    tag: no-rpm
+    summary: Validate test
+    test: make -C $TMT_TREE validate
+
+/unit:
+    tag: no-rpm
+    summary: Unit test
+    test: make -C $TMT_TREE unit
+
+/integration:
+    tag: rpm
+    summary: Integration tests
+    test: bash integration.sh
+    environment:
+        NETAVARK: /usr/libexec/podman/netavark
+        TEST_PLUGINS: /usr/share/netavark/examples
+    require+:
+        - netavark-tests
