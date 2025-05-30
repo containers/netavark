@@ -2,7 +2,6 @@ use crate::error::{ErrorWrap, NetavarkError, NetavarkResult};
 use crate::network::{constants, internal_types, types};
 use crate::wrap;
 use ipnet::IpNet;
-use log::debug;
 use netlink_packet_route::link::{IpVlanMode, MacVlanMode};
 use nix::sched;
 use sha2::{Digest, Sha512};
@@ -15,8 +14,8 @@ use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
 use std::os::unix::prelude::*;
+use std::path::Path;
 use std::str::FromStr;
-use sysctl::{Sysctl, SysctlError};
 
 use super::netlink;
 
@@ -255,26 +254,6 @@ impl CoreUtils {
         let response = &hash_string[0..length];
         response.to_string()
     }
-
-    /// Set a sysctl value by value's namespace.
-    pub fn apply_sysctl_value(
-        ns_value: impl AsRef<str>,
-        val: impl AsRef<str>,
-    ) -> Result<String, SysctlError> {
-        let ns_value = ns_value.as_ref();
-        let val = val.as_ref();
-        debug!("Setting sysctl value for {} to {}", ns_value, val);
-        let ctl = sysctl::Ctl::new(ns_value)?;
-        match ctl.value_string() {
-            Ok(result) => {
-                if result == val {
-                    return Ok(result);
-                }
-            }
-            Err(e) => return Err(e),
-        }
-        ctl.set_value_string(val)
-    }
 }
 
 pub fn join_netns<Fd: AsFd>(fd: Fd) -> NetavarkResult<()> {
@@ -413,31 +392,6 @@ pub fn create_route_list(
     }
 }
 
-pub fn disable_ipv6_autoconf(if_name: &str) -> NetavarkResult<()> {
-    // make sure autoconf is off, we want manual config only
-    if let Err(err) =
-        CoreUtils::apply_sysctl_value(format!("/proc/sys/net/ipv6/conf/{if_name}/autoconf"), "0")
-    {
-        match err {
-            SysctlError::NotFound(_) => {
-                // if the sysctl is not found we likely run on a system without ipv6
-                // just ignore that case
-            }
-
-            // if we have a read only /proc we ignore it as well
-            SysctlError::IoError(ref e) if e.raw_os_error() == Some(libc::EROFS) => {}
-
-            _ => {
-                return Err(NetavarkError::wrap(
-                    "failed to set autoconf sysctl",
-                    NetavarkError::Sysctl(err),
-                ));
-            }
-        }
-    };
-    Ok(())
-}
-
 pub fn get_mac_address(v: Vec<LinkAttribute>) -> NetavarkResult<String> {
     for nla in v.into_iter() {
         if let LinkAttribute::Address(ref addr) = nla {
@@ -447,4 +401,9 @@ pub fn get_mac_address(v: Vec<LinkAttribute>) -> NetavarkResult<String> {
     Err(NetavarkError::msg(
         "failed to get the the container mac address",
     ))
+}
+
+/// check if systemd is booted, see sd_booted(3)
+pub fn is_using_systemd() -> bool {
+    Path::new("/run/systemd/system").exists()
 }

@@ -829,6 +829,7 @@ EOF
     run_in_host_netns sh -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
     run_in_container_netns sh -c "echo 1 > /proc/sys/net/ipv4/conf/default/arp_notify"
     run_in_host_netns sh -c "echo 2 > /proc/sys/net/ipv4/conf/default/rp_filter"
+    run_in_host_netns sh -c "echo 1 > /proc/sys/net/ipv4/conf/default/route_localnet"
     run_in_container_netns sh -c "echo 2 > /proc/sys/net/ipv4/conf/default/rp_filter"
     run_in_host_netns mount -t proc -o ro,nosuid,nodev,noexec proc /proc
 
@@ -840,7 +841,7 @@ EOF
     run_in_host_netns mount -t proc -o remount,ro /proc
 
     expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
-    assert_json ".error" "Sysctl error: IO Error: Read-only file system (os error 30)" "Sysctl error because fs is read only"
+    assert_json ".error" "set sysctl net/ipv4/ip_forward: IO error: Read-only file system (os error 30)" "Sysctl error because fs is read only"
 }
 
 
