@@ -1423,7 +1423,7 @@ dependencies = [
  "netlink-packet-route 0.23.0",
  "netlink-sys",
  "nftables",
- "nix 0.29.0",
+ "nix 0.30.1",
  "once_cell",
  "prost",
  "rand 0.9.1",
