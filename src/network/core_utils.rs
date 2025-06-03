@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::env;
 use std::fmt::Display;
 use std::fs::File;
-use std::io::{self, Error};
+use std::io;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
@@ -63,7 +63,7 @@ where
 pub fn get_ipam_addresses<'a>(
     per_network_opts: &'a types::PerNetworkOptions,
     network: &'a types::Network,
-) -> Result<internal_types::IPAMAddresses, std::io::Error> {
+) -> NetavarkResult<internal_types::IPAMAddresses> {
     let addresses = match network
         .ipam_options
         .as_ref()
@@ -85,12 +85,7 @@ pub fn get_ipam_addresses<'a>(
             let mut nameservers: Vec<IpAddr> = Vec::new();
 
             let static_ips = match per_network_opts.static_ips.as_ref() {
-                None => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "no static ips provided",
-                    ))
-                }
+                None => return Err(NetavarkError::msg("no static ips provided")),
                 Some(i) => i,
             };
 
@@ -101,10 +96,9 @@ pub fn get_ipam_addresses<'a>(
                     let gw_net = match ipnet::IpNet::new(gw, subnet_mask_cidr) {
                         Ok(dest) => dest,
                         Err(err) => {
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::Other,
-                                format!("failed to parse address {gw}/{subnet_mask_cidr}: {err}"),
-                            ))
+                            return Err(NetavarkError::msg(format!(
+                                "failed to parse address {gw}/{subnet_mask_cidr}: {err}"
+                            )))
                         }
                     };
                     gateway_addresses.push(gw_net);
@@ -121,7 +115,7 @@ pub fn get_ipam_addresses<'a>(
                     match format!("{}/{}", static_ips[idx], subnet_mask_cidr).parse() {
                         Ok(i) => i,
                         Err(e) => {
-                            return Err(Error::new(std::io::ErrorKind::Other, e));
+                            return Err(NetavarkError::SubnetParse(e));
                         }
                     };
                 // Add the IP to the address_vector
@@ -135,7 +129,7 @@ pub fn get_ipam_addresses<'a>(
             let routes: Vec<netlink::Route> = match create_route_list(&network.routes) {
                 Ok(r) => r,
                 Err(e) => {
-                    return Err(Error::new(std::io::ErrorKind::Other, e));
+                    return Err(e);
                 }
             };
 
@@ -171,10 +165,9 @@ pub fn get_ipam_addresses<'a>(
             nameservers: vec![],
         },
         Some(driver) => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("unsupported ipam driver {driver}"),
-            ));
+            return Err(NetavarkError::msg(format!(
+                "unsupported ipam driver {driver}"
+            )));
         }
     };
 
@@ -192,7 +185,7 @@ impl CoreUtils {
         address
     }
 
-    pub fn decode_address_from_hex(input: &str) -> Result<Vec<u8>, std::io::Error> {
+    pub fn decode_address_from_hex(input: &str) -> NetavarkResult<Vec<u8>> {
         let bytes: Result<Vec<u8>, _> = input
             .split([':', '-'])
             .map(|b| u8::from_str_radix(b, 16))
@@ -201,18 +194,16 @@ impl CoreUtils {
         let result = match bytes {
             Ok(bytes) => {
                 if bytes.len() != 6 {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("invalid mac length for address: {input}"),
-                    ));
+                    return Err(NetavarkError::msg(format!(
+                        "invalid mac length for address: {input}"
+                    )));
                 }
                 bytes
             }
             Err(e) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("unable to parse mac address {input}: {e}"),
-                ));
+                return Err(NetavarkError::msg(format!(
+                    "unable to parse mac address {input}: {e}"
+                )));
             }
         };
 
