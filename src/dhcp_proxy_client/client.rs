@@ -1,11 +1,9 @@
 use clap::{Parser, Subcommand};
 use commands::{setup, teardown};
 use std::process;
-use tonic::{Code, Status};
 
-use netavark::dhcp_proxy::lib::g_rpc::{Lease, NetworkConfig};
+use netavark::dhcp_proxy::lib::g_rpc::NetworkConfig;
 use netavark::dhcp_proxy::proxy_conf::{DEFAULT_NETWORK_CONFIG, DEFAULT_UDS_PATH};
-use netavark::error::NetavarkError;
 
 pub mod commands;
 
@@ -53,10 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(r) => r,
         Err(e) => {
             eprintln!("Error: {e}");
-            match e {
-                NetavarkError::DHCPProxy(status) => process_failure(status),
-                _ => process::exit(1),
-            }
+            process::exit(1);
         }
     };
 
@@ -65,27 +60,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // don't soil themselves
     println!("{}", pp.unwrap_or_else(|_| "".to_string()));
     Ok(())
-}
-
-//
-// process_failure makes the client exit with a specific
-// error code
-//
-fn process_failure(status: Status) -> Lease {
-    let mut rc: i32 = 1;
-
-    match status.code() {
-        Code::Unknown => {
-            rc = 155;
-        }
-        Code::InvalidArgument => {
-            rc = 156;
-        }
-        Code::DeadlineExceeded => {}
-        Code::NotFound => {
-            rc = 6;
-        }
-        _ => {}
-    }
-    process::exit(rc)
 }
