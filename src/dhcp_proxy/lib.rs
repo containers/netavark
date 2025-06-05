@@ -237,7 +237,12 @@ impl NetworkConfig {
         let mut client = NetworkConfig::get_client(p.to_string()).await?;
         let lease = match client.setup(Request::new(self)).await {
             Ok(l) => l.into_inner(),
-            Err(s) => return Err(s.into()),
+            Err(e) => {
+                return Err(NetavarkError::msg(format!(
+                    "get DHCP lease: {}",
+                    e.message()
+                )))
+            }
         };
         Ok(lease)
     }
@@ -261,7 +266,12 @@ impl NetworkConfig {
         let mut client = NetworkConfig::get_client(p.to_string()).await?;
         let lease = match client.teardown(Request::new(self)).await {
             Ok(l) => l.into_inner(),
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                return Err(NetavarkError::msg(format!(
+                    "drop DHCP lease: {}",
+                    e.message()
+                )))
+            }
         };
         Ok(lease)
     }

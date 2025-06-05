@@ -49,7 +49,7 @@ EOF
         assert `grep -c "client provides name" "$TMP_TESTDIR/dnsmasq.log"` == 0
 }
 
-@test "empty interface should fail 155" {
+@test "empty interface should fail" {
       read -r -d '\0' input_config <<EOF
 {
   "container_iface": "",
@@ -63,12 +63,12 @@ EOF
 }
   \0
 EOF
-        # Not providing an interface in the config should result
-        # in an error and a return code of 156
-        expected_rc=155 run_setup "$input_config"
+
+        expected_rc=1 run_setup "$input_config"
+        assert "$output" =~ "No such device" "interface not found error"
 }
 
-@test "empty mac address should fail 156" {
+@test "empty mac address should fail" {
       read -r -d '\0' input_config <<EOF
 {
   "container_iface": "veth0",
@@ -82,17 +82,17 @@ EOF
 }
   \0
 EOF
-        # Not mac address should result in an error
-        # and return code of 156
-        expected_rc=156 run_setup "$input_config"
+
+        expected_rc=1 run_setup "$input_config"
+        assert "$output" =~ "unable to parse mac address : cannot parse integer from empty string" "empty mac error"
 }
 
-@test "invalid interface should fail 156" {
+@test "invalid interface should fail" {
       read -r -d '\0' input_config <<EOF
 {
   "container_iface": "veth990",
   "host_iface": "veth1",
-  "container_mac_addr": "",
+  "container_mac_addr": "$CONTAINER_MAC",
   "domain_name": "example.com",
   "host_name": "foobar",
   "version": 0,
@@ -101,12 +101,12 @@ EOF
 }
   \0
 EOF
-        # A non-existent interface should result in an
-        # error and return code of 156
-        expected_rc=156 run_setup "$input_config"
+
+        expected_rc=1 run_setup "$input_config"
+        assert "$output" =~ "No such device" "interface not found error"
 }
 
-@test "invalid mac address should fail 156" {
+@test "invalid mac address should fail" {
       read -r -d '\0' input_config <<EOF
 {
   "container_iface": "veth0",
@@ -121,7 +121,7 @@ EOF
   \0
 EOF
 
-        # An invalid mac address should result in an
-        # error and a return code of 156
-        expected_rc=156 run_setup "$input_config"
+
+        expected_rc=1 run_setup "$input_config"
+        assert "$output" =~ "unable to parse mac address 123" "mac address error"
 }

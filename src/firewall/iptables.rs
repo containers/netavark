@@ -126,11 +126,9 @@ impl firewall::FirewallDriver for IptablesDriver {
             let subnet_v4 = match setup_portfw.subnet_v4 {
                 Some(s) => s,
                 None => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
+                    return Err(NetavarkError::msg(
                         "ipv4 address but provided but no v4 subnet provided",
-                    )
-                    .into())
+                    ))
                 }
             };
             let chains =
@@ -141,11 +139,9 @@ impl firewall::FirewallDriver for IptablesDriver {
             let subnet_v6 = match setup_portfw.subnet_v6 {
                 Some(s) => s,
                 None => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
+                    return Err(NetavarkError::msg(
                         "ipv6 address but provided but no v6 subnet provided",
-                    )
-                    .into())
+                    ))
                 }
             };
             let chains =
@@ -160,11 +156,9 @@ impl firewall::FirewallDriver for IptablesDriver {
             let subnet_v4 = match tear.config.subnet_v4 {
                 Some(s) => s,
                 None => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
+                    return Err(NetavarkError::msg(
                         "ipv4 address but provided but no v4 subnet provided",
-                    )
-                    .into())
+                    ))
                 }
             };
 
@@ -193,11 +187,9 @@ impl firewall::FirewallDriver for IptablesDriver {
             let subnet_v6 = match tear.config.subnet_v6 {
                 Some(s) => s,
                 None => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
+                    return Err(NetavarkError::msg(
                         "ipv6 address but provided but no v6 subnet provided",
-                    )
-                    .into())
+                    ))
                 }
             };
 

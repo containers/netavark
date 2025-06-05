@@ -108,7 +108,7 @@ impl Aardvark {
         false
     }
 
-    pub fn start_aardvark_server(&self) -> Result<()> {
+    pub fn start_aardvark_server(&self) -> NetavarkResult<()> {
         log::debug!("Spawning aardvark server");
 
         let mut aardvark_args = vec![];
@@ -152,23 +152,19 @@ impl Aardvark {
             return Ok(());
         }
         if out.stderr.is_empty() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(NetavarkError::msg(
                 "aardvark-dns exited unexpectedly without error message",
             ));
         }
         // aardvark-dns failed capture stderr
         let msg = String::from_utf8(out.stderr).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("failed to parse aardvark-dns stderr message: {e}"),
-            )
+            NetavarkError::msg(format!("failed to parse aardvark-dns stderr message: {e}"))
         })?;
 
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("aardvark-dns failed to start: {}", msg.trim()),
-        ))
+        Err(NetavarkError::msg(format!(
+            "aardvark-dns failed to start: {}",
+            msg.trim()
+        )))
     }
 
     fn check_netns(&self, pid: pid_t) {
@@ -235,7 +231,7 @@ impl Aardvark {
         Ok(())
     }
 
-    pub fn commit_entries(&self, entries: &[AardvarkEntry]) -> Result<()> {
+    pub fn commit_entries(&self, entries: &[AardvarkEntry]) -> NetavarkResult<()> {
         // Acquire fs lock to ensure other instance of aardvark cannot commit
         // or start aardvark instance till already running instance has not
         // completed its `commit` phase.
@@ -251,17 +247,16 @@ impl Aardvark {
         {
             Ok(file) => file,
             Err(e) => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Failed to open/create lockfile {:?}: {}", &lockfile_path, e),
-                ));
+                return Err(NetavarkError::msg(format!(
+                    "Failed to open/create lockfile {:?}: {}",
+                    &lockfile_path, e
+                )));
             }
         };
         if let Err(er) = lockfile.lock_exclusive() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to acquire exclusive lock on {lockfile_path:?}: {er}"),
-            ));
+            return Err(NetavarkError::msg(format!(
+                "Failed to acquire exclusive lock on {lockfile_path:?}: {er}"
+            )));
         }
 
         for entry in entries {
@@ -307,15 +302,14 @@ impl Aardvark {
                     OpenOptions::new().append(true).open(&path)?
                 }
                 Err(e) => {
-                    return Err(e);
+                    return Err(NetavarkError::Io(e));
                 }
             };
             match Aardvark::commit_entry(entry, file) {
                 Err(er) => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Failed to commit entry {entry:?}: {er}"),
-                    ));
+                    return Err(NetavarkError::msg(format!(
+                        "Failed to commit entry {entry:?}: {er}"
+                    )));
                 }
                 Ok(_) => continue,
             }
