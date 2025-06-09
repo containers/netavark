@@ -552,7 +552,7 @@ EOF
 EOF
 
     expected_rc=1 run_netavark setup $(get_container_netns_path) <<<"$config"
-    assert_json ".error" "IO error: unsupported ipam driver someDriver" "Driver is not supported error"
+    assert_json ".error" "unsupported ipam driver someDriver" "Driver is not supported error"
 }
 
 @test "$fw_driver - isolate networks" {
@@ -1054,7 +1054,7 @@ function check_simple_bridge_nftables() {
 
 @test "$fw_driver - aardvark-dns error cleanup" {
     expected_rc=1 run_netavark -a /usr/bin/false --file ${TESTSDIR}/testfiles/dualstack-bridge-custom-dns-server.json setup $(get_container_netns_path)
-    assert_json ".error" "error while applying dns entries: IO error: aardvark-dns exited unexpectedly without error message" "aardvark-dns error"
+    assert_json ".error" "error while applying dns entries: aardvark-dns exited unexpectedly without error message" "aardvark-dns error"
 
     run_in_host_netns nft list table inet netavark
     assert "$output" !~ "10.89.3.0/24" "leaked network nft rules after setup error"
