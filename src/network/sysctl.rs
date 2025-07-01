@@ -21,7 +21,7 @@ fn _apply_sysctl_value(ns_value: impl AsRef<str>, val: impl AsRef<str>) -> Resul
     path.push_str(ns_value);
     let val = val.as_ref();
 
-    log::debug!("Setting sysctl value for {} to {}", ns_value, val);
+    log::debug!("Setting sysctl value for {ns_value} to {val}");
 
     let mut f = File::open(&path)?;
     let mut buf = String::with_capacity(1);

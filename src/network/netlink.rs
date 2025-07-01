@@ -337,7 +337,7 @@ impl Socket {
 
     pub fn add_route(&mut self, route: &Route) -> NetavarkResult<()> {
         let msg = Self::create_route_msg(route);
-        info!("Adding route {}", route);
+        info!("Adding route {route}");
 
         let result = self
             .make_netlink_request(RouteNetlinkMessage::NewRoute(msg), NLM_F_ACK | NLM_F_CREATE)?;
@@ -348,7 +348,7 @@ impl Socket {
 
     pub fn del_route(&mut self, route: &Route) -> NetavarkResult<()> {
         let msg = Self::create_route_msg(route);
-        info!("Deleting route {}", route);
+        info!("Deleting route {route}");
 
         let result = self.make_netlink_request(RouteNetlinkMessage::DelRoute(msg), NLM_F_ACK)?;
         expect_netlink_result!(result, 0);
@@ -486,7 +486,7 @@ impl Socket {
         packet.finalize();
 
         packet.serialize(&mut self.buffer[..]);
-        trace!("send netlink packet: {:?}", packet);
+        trace!("send netlink packet: {packet:?}");
 
         self.socket.send(&self.buffer[..packet.buffer_len()], 0)?;
         Ok(())
@@ -511,7 +511,7 @@ impl Socket {
                             "failed to deserialize netlink message: {e}",
                         ))
                     })?;
-                trace!("read netlink packet: {:?}", rx_packet);
+                trace!("read netlink packet: {rx_packet:?}");
 
                 if rx_packet.header.sequence_number != self.sequence_number {
                     return Err(NetavarkError::msg(format!(

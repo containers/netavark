@@ -26,7 +26,7 @@ pub fn listen(config_dir: Option<OsString>) -> NetavarkResult<()> {
             .as_deref()
             .unwrap_or(OsStr::new(constants::DEFAULT_CONFIG_DIR)),
     );
-    log::debug!("looking for firewall configs in {:?}", config_dir);
+    log::debug!("looking for firewall configs in {config_dir:?}");
 
     let conn = Connection::system()?;
     let proxy = FirewallDDbusProxyBlocking::builder(&conn)
@@ -43,7 +43,7 @@ pub fn listen(config_dir: Option<OsString>) -> NetavarkResult<()> {
 
     // This loops forever until the process is killed or there is some dbus error.
     for _ in proxy.0.receive_signal(SIGNAL_NAME)? {
-        log::debug!("got firewalld {} signal", SIGNAL_NAME);
+        log::debug!("got firewalld {SIGNAL_NAME} signal");
         reload_rules(config_dir, &conn_option);
     }
 

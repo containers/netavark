@@ -807,9 +807,9 @@ fn get_subnet_chain_name(subnet: IpNet, net_id: &str, dnat: bool) -> Cow<str> {
     };
 
     if dnat {
-        Cow::Owned(format!("nv_{}_{}_dnat", net_id_clean, subnet_clean))
+        Cow::Owned(format!("nv_{net_id_clean}_{subnet_clean}_dnat"))
     } else {
-        Cow::Owned(format!("nv_{}_{}", net_id_clean, subnet_clean))
+        Cow::Owned(format!("nv_{net_id_clean}_{subnet_clean}"))
     }
 }
 
@@ -1243,7 +1243,7 @@ fn get_matching_rules_in_chain<'a, F: Fn(&schema::Rule) -> bool>(
                     }
 
                     if rule_match(r) {
-                        log::debug!("Matched {:?}", r);
+                        log::debug!("Matched {r:?}");
                         rules.push(r.clone());
                     }
                 }
@@ -1263,7 +1263,7 @@ fn get_chain<'a>(base_rules: &schema::Nftables<'a>, chain: &str) -> Option<schem
             schema::NfObject::ListObject(obj) => match obj {
                 schema::NfListObject::Chain(c) => {
                     if c.name == *chain {
-                        log::debug!("Found chain {}", chain);
+                        log::debug!("Found chain {chain}");
                         return Some(c.clone());
                     }
                 }

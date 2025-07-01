@@ -152,7 +152,7 @@ impl Setup {
                 );
             }
         }
-        debug!("{:#?}", response);
+        debug!("{response:#?}");
         let response_json = serde_json::to_string(&response)?;
         println!("{response_json}");
         debug!("Setup complete");

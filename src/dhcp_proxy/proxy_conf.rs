@@ -119,7 +119,6 @@ mod conf_tests {
     ///
     /// The following stanzas of code should be attributed to https://github.com/vmx/temp-env
     ///
-
     /// The previous value is restored when the closure completes or panics, before unwinding the
     /// panic.
     ///

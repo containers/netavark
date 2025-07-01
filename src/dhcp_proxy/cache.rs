@@ -64,7 +64,7 @@ impl<W: Write + Clear> LeaseCache<W> {
     /// returns: Result<(), Error>
     ///
     pub fn add_lease(&mut self, mac_addr: &str, lease: &NetavarkLease) -> Result<(), io::Error> {
-        debug!("add lease: {:?}", mac_addr);
+        debug!("add lease: {mac_addr:?}");
         // Update cache memory with new lease
         let cache = &mut self.mem;
         cache.insert(mac_addr.to_string(), vec![lease.clone()]);
@@ -95,7 +95,7 @@ impl<W: Write + Clear> LeaseCache<W> {
     ///
     /// * `mac_addr`: Mac address of the container
     pub fn remove_lease(&mut self, mac_addr: &str) -> Result<Lease, io::Error> {
-        debug!("remove lease: {:?}", mac_addr);
+        debug!("remove lease: {mac_addr:?}");
         let mem = &mut self.mem;
         // Check and see if the lease exists, if not create an empty one
         let lease = match mem.get(mac_addr) {
@@ -150,10 +150,7 @@ impl<W: Write + Clear> LeaseCache<W> {
                 writer.flush()
             }
             Err(e) => {
-                error!(
-                    "Could not clear the writer. Not updating lease information: {:?}",
-                    e
-                );
+                error!("Could not clear the writer. Not updating lease information: {e:?}");
                 Ok(())
             }
         }

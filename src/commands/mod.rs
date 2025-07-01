@@ -12,8 +12,7 @@ pub mod version;
 fn get_config_dir(dir: Option<OsString>, cmd: &str) -> NetavarkResult<OsString> {
     dir.ok_or_else(|| {
         NetavarkError::msg(format!(
-            "--config not specified but required for netavark {}",
-            cmd
+            "--config not specified but required for netavark {cmd}"
         ))
     })
 }
