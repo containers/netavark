@@ -135,7 +135,7 @@ impl Aardvark {
             OsStr::new("run"),
         ]);
 
-        log::debug!("start aardvark-dns: {:?}", aardvark_args);
+        log::debug!("start aardvark-dns: {aardvark_args:?}");
 
         // After https://github.com/containers/aardvark-dns/pull/148 this command
         // will block till aardvark-dns's parent process returns back and let

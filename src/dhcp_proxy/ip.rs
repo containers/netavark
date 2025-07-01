@@ -84,7 +84,7 @@ fn test_handle_gws() {
 // IPV4 implementation
 impl Address<Ipv4Addr> for MacVLAN {
     fn new(l: &NetavarkLease, interface: &str) -> Result<MacVLAN, ProxyError> {
-        debug!("new ipv4 macvlan for {}", interface);
+        debug!("new ipv4 macvlan for {interface}");
         let address = match IpAddr::from_str(&l.yiaddr) {
             Ok(a) => a,
             Err(e) => {
@@ -94,7 +94,7 @@ impl Address<Ipv4Addr> for MacVLAN {
         let gateways = match handle_gws(l.gateways.clone(), &l.subnet_mask) {
             Ok(g) => g,
             Err(e) => {
-                return Err(ProxyError::new(format!("bad gateways: {}", e)));
+                return Err(ProxyError::new(format!("bad gateways: {e}")));
             }
         };
         let prefix_length = match get_prefix_length_v4(&l.subnet_mask) {
@@ -135,7 +135,7 @@ impl Address<Ipv4Addr> for MacVLAN {
 // setup takes the DHCP lease and some additional information and
 // applies the TCP/IP information to the namespace.
 pub fn setup(lease: &NetavarkLease, interface: &str, ns_path: &str) -> Result<(), ProxyError> {
-    debug!("setting up {}", interface);
+    debug!("setting up {interface}");
     let vlan = MacVLAN::new(lease, interface)?;
     let (_, mut netns) = core_utils::open_netlink_sockets(ns_path)?;
     vlan.add_ip(&mut netns.netlink)?;

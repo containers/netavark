@@ -485,7 +485,7 @@ impl<'a> Bridge<'a> {
             None => {
                 let isolate = get_isolate_option(&self.info.network.options).unwrap_or_else(|e| {
                     // just log we still try to do as much as possible for cleanup
-                    error!("failed to parse {} option: {}", OPTION_ISOLATE, e);
+                    error!("failed to parse {OPTION_ISOLATE} option: {e}");
                     IsolateOption::Never
                 });
 
@@ -494,7 +494,7 @@ impl<'a> Bridge<'a> {
                         Ok(i) => (i.container_addresses, i.nameservers),
                         Err(e) => {
                             // just log we still try to do as much as possible for cleanup
-                            error!("failed to parse ipam options: {}", e);
+                            error!("failed to parse ipam options: {e}");
                             (Vec::new(), Vec::new())
                         }
                     };
@@ -944,8 +944,7 @@ fn check_link_is_vrf(msg: LinkMessage, vrf_name: &str) -> NetavarkResult<LinkMes
                         return Ok(msg);
                     } else {
                         return Err(NetavarkError::Message(format!(
-                            "vrf {} already exists but is a {:?} interface",
-                            vrf_name, kind
+                            "vrf {vrf_name} already exists but is a {kind:?} interface"
                         )));
                     }
                 }
@@ -953,8 +952,7 @@ fn check_link_is_vrf(msg: LinkMessage, vrf_name: &str) -> NetavarkResult<LinkMes
         }
     }
     Err(NetavarkError::Message(format!(
-        "could not determine namespace link kind for vrf {}",
-        vrf_name
+        "could not determine namespace link kind for vrf {vrf_name}"
     )))
 }
 
@@ -981,7 +979,7 @@ fn remove_link(
     // no connected interfaces on that bridge we can remove it
     if links.is_empty() {
         if let BridgeMode::Managed = mode {
-            log::info!("removing bridge {}", br_name);
+            log::info!("removing bridge {br_name}");
             host.del_link(netlink::LinkID::ID(br.header.index))
                 .wrap(format!("failed to delete bridge {container_veth_name}"))?;
             return Ok(true);
@@ -1015,9 +1013,6 @@ fn get_bridge_mode_from_string(mode: Option<&str>) -> NetavarkResult<BridgeMode>
 fn maybe_add_alias<'a>(names: &mut Vec<SafeString<'a>>, name: &'a str) {
     match name.try_into() {
         Ok(name) => names.push(name),
-        Err(err) => log::warn!(
-            "invalid network alias {:?}: {err}, ignoring this name",
-            name
-        ),
+        Err(err) => log::warn!("invalid network alias {name:?}: {err}, ignoring this name"),
     }
 }

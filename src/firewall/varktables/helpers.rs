@@ -87,30 +87,21 @@ pub fn remove_if_rule_exists(
 }
 
 fn debug_chain_create(table: &str, chain: &str) {
-    debug!("chain {} created on table {}", chain, table);
+    debug!("chain {chain} created on table {table}");
 }
 
 fn debug_chain_exists(table: &str, chain: &str) {
-    debug!("chain {} exists on table {}", chain, table);
+    debug!("chain {chain} exists on table {table}");
 }
 
 pub fn debug_rule_create(table: &str, chain: &str, rule: String) {
-    debug!(
-        "rule {} created on table {} and chain {}",
-        rule, table, chain
-    );
+    debug!("rule {rule} created on table {table} and chain {chain}");
 }
 
 fn debug_rule_exists(table: &str, chain: &str, rule: String) {
-    debug!(
-        "rule {} exists on table {} and chain {}",
-        rule, table, chain
-    );
+    debug!("rule {rule} exists on table {table} and chain {chain}");
 }
 
 fn debug_rule_no_exists(table: &str, chain: &str, rule: String) {
-    debug!(
-        "no rule {} exists on table {} and chain {}",
-        rule, table, chain
-    );
+    debug!("no rule {rule} exists on table {table} and chain {chain}");
 }

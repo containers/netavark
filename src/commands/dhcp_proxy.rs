@@ -69,13 +69,13 @@ impl<W: Write + Clear> NetavarkProxyService<W> {
             let locked_sender = match sender_clone.lock() {
                 Ok(v) => v,
                 Err(e) => {
-                    log::error!("{}", e);
+                    log::error!("{e}");
                     return;
                 }
             };
             match locked_sender.try_send(1) {
                 Ok(..) => {}
-                Err(e) => log::error!("{}", e),
+                Err(e) => log::error!("{e}"),
             }
         }
     }
@@ -214,7 +214,7 @@ async fn handle_signal(uds_path: PathBuf) {
             }
         }
         if let Err(e) = fs::remove_file(uds_path) {
-            error!("Could not close uds socket: {}", e);
+            error!("Could not close uds socket: {e}");
         }
 
         std::process::exit(0x0100);
@@ -266,7 +266,7 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
     let fq_cache_path = get_cache_fqname(optional_run_dir);
     let file = match File::create(&fq_cache_path) {
         Ok(file) => {
-            debug!("Successfully created leases file: {:?}", fq_cache_path);
+            debug!("Successfully created leases file: {fq_cache_path:?}");
             file
         }
         Err(e) => {
@@ -387,7 +387,7 @@ fn is_catch_empty<W: Write + Clear>(current_cache: Arc<Mutex<LeaseCache<W>>>) ->
             v.is_empty()
         }
         Err(e) => {
-            log::error!("{}", e);
+            log::error!("{e}");
             false
         }
     }

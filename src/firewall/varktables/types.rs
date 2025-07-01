@@ -347,7 +347,7 @@ pub fn get_network_chains<'a>(
     chains.push(netavark_isolation_chain_3);
 
     forward_chain.build_rule(VarkRule {
-        rule: format!("{} {}", NETAVARK_FIREWALL_RULE_BUILDER, NETAVARK_FORWARD),
+        rule: format!("{NETAVARK_FIREWALL_RULE_BUILDER} {NETAVARK_FORWARD}"),
         position: Some(ind),
         td_policy: Some(TeardownPolicy::Never),
     });
@@ -360,7 +360,7 @@ pub fn get_network_chains<'a>(
 
     // Add NETAVARK_INPUT chain to INPUT chain
     input_chain.build_rule(VarkRule {
-        rule: format!("{} {}", NETAVARK_FIREWALL_RULE_BUILDER, NETAVARK_INPUT),
+        rule: format!("{NETAVARK_FIREWALL_RULE_BUILDER} {NETAVARK_INPUT}"),
         position: Some(1),
         td_policy: Some(TeardownPolicy::Never),
     });
@@ -375,10 +375,7 @@ pub fn get_network_chains<'a>(
     // to gateway when using bridge network with internal dns.
     for proto in ["udp", "tcp"] {
         netavark_input_chain.build_rule(VarkRule::new(
-            format!(
-                "-p {} -s {} --dport {} -j {}",
-                proto, network, dns_port, ACCEPT
-            ),
+            format!("-p {proto} -s {network} --dport {dns_port} -j {ACCEPT}"),
             Some(TeardownPolicy::OnComplete),
         ));
     }

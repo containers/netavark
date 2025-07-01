@@ -147,7 +147,7 @@ impl firewall::FirewallDriver for FirewallD {
 
         if let Some(subnets) = tear.config.subnets {
             for subnet in subnets {
-                debug!("Removing subnet {} from zone {}", subnet, ZONENAME);
+                debug!("Removing subnet {subnet} from zone {ZONENAME}");
                 let _ = self.conn.call_method(
                     Some("org.fedoraproject.FirewallD1"),
                     "/org/fedoraproject/FirewallD1",
@@ -208,7 +208,7 @@ impl firewall::FirewallDriver for FirewallD {
                     if port.host_ip == "127.0.0.1" {
                         if let Some(v4) = setup_portfw.container_ip_v4 {
                             let rule = get_localhost_pf_rich_rule(port, &v4);
-                            debug!("Adding localhost pf rule: {}", rule);
+                            debug!("Adding localhost pf rule: {rule}");
                             localhost_rich_rules.append(Value::new(rule))?;
                         }
                         continue;
@@ -247,7 +247,7 @@ impl firewall::FirewallDriver for FirewallD {
                             port_forwarding_rules
                                 .append(Value::new(make_port_tuple(port, &v4.to_string())))?;
                             let localhost_rule = get_localhost_pf_rich_rule(port, &v4);
-                            debug!("Adding localhost pf rule: {}", localhost_rule);
+                            debug!("Adding localhost pf rule: {localhost_rule}");
                             localhost_rich_rules.append(Value::new(localhost_rule))?;
                         }
                     }
@@ -430,13 +430,13 @@ impl firewall::FirewallDriver for FirewallD {
                         };
                         let mut is_match = false;
                         if let Some(v4) = &ipv4 {
-                            debug!("Checking firewalld IP {} against our IP {}", port_ip, v4);
+                            debug!("Checking firewalld IP {port_ip} against our IP {v4}");
                             if *v4 == port_ip {
                                 is_match = true;
                             }
                         }
                         if let Some(v6) = &ipv6 {
-                            debug!("Checking firewalld IP {} against our IP {}", port_ip, v6);
+                            debug!("Checking firewalld IP {port_ip} against our IP {v6}");
                             if *v6 == port_ip {
                                 is_match = true;
                             }
@@ -508,14 +508,14 @@ impl firewall::FirewallDriver for FirewallD {
 
                         // Remove any rule using our IPv4 or IPv6 as daddr.
                         if let Some(v4) = &ipv4 {
-                            let daddr = format!("to-addr=\"{}\"", v4);
-                            debug!("Checking if {} contains string {}", old_rule, daddr);
+                            let daddr = format!("to-addr=\"{v4}\"");
+                            debug!("Checking if {old_rule} contains string {daddr}");
                             if old_rule.to_string().contains(&daddr) {
                                 is_match = true;
                             }
                         }
                         if let Some(v6) = &ipv6 {
-                            let daddr = format!("to-addr=\"{}\"", v6);
+                            let daddr = format!("to-addr=\"{v6}\"");
                             if old_rule.to_string().contains(&daddr) {
                                 is_match = true;
                             }
@@ -572,8 +572,8 @@ impl firewall::FirewallDriver for FirewallD {
                         // Remove any rule using our IPv4 as daddr.
                         // We don't do IPv6 localhost forwarding.
                         if let Some(v4) = &ipv4 {
-                            let daddr = format!("to-addr=\"{}\"", v4);
-                            debug!("Checking if {} contains string {}", old_rule, daddr);
+                            let daddr = format!("to-addr=\"{v4}\"");
+                            debug!("Checking if {old_rule} contains string {daddr}");
                             if old_rule.to_string().contains(&daddr) {
                                 is_match = true;
                             }
@@ -623,7 +623,7 @@ impl firewall::FirewallDriver for FirewallD {
 
 /// Create a firewalld zone to hold all our interfaces.
 fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> NetavarkResult<bool> {
-    debug!("Creating firewall zone {}", zone_name);
+    debug!("Creating firewall zone {zone_name}");
 
     // First, double-check if the zone exists in the running config.
     let zones_msg = conn.call_method(
@@ -701,11 +701,11 @@ pub fn add_source_subnets_to_zone(
             "Error decoding DBus message for zone of subnet"
         )?;
         if zone_string == zone_name {
-            debug!("Subnet {} already exists in zone {}", net, zone_name);
+            debug!("Subnet {net} already exists in zone {zone_name}");
             return Ok(());
         }
 
-        debug!("Adding subnet {} to zone {} as source", net, zone_name);
+        debug!("Adding subnet {net} to zone {zone_name} as source");
 
         let _ = conn.call_method(
             Some("org.fedoraproject.FirewallD1"),
@@ -730,8 +730,7 @@ fn add_policy_if_not_exist(
     priority: Option<i16>,
 ) -> NetavarkResult<bool> {
     debug!(
-        "Adding firewalld policy {} (ingress zone {}, egress zone {})",
-        policy_name, ingress_zone_name, egress_zone_name
+        "Adding firewalld policy {policy_name} (ingress zone {ingress_zone_name}, egress zone {egress_zone_name})"
     );
 
     // Does policy exist in running policies?
@@ -829,7 +828,7 @@ fn make_port_tuple(port: &PortMapping, addr: &str) -> (String, String, String, S
             port.container_port.to_string(),
             addr.to_string(),
         );
-        debug!("Port is {:?}", to_return);
+        debug!("Port is {to_return:?}");
         to_return
     }
 }
@@ -882,10 +881,7 @@ fn update_policy_config(
         Ok(_) => {}
         Err(e) => {
             return Err(NetavarkError::wrap(
-                format!(
-                    "Failed to update firewalld policy {} port forwarding rules",
-                    policy_name
-                ),
+                format!("Failed to update firewalld policy {policy_name} port forwarding rules"),
                 e.into(),
             ))
         }
@@ -964,7 +960,7 @@ fn get_pf_rich_rule(
     ctr_port: &str,
     ctr_ip: &str,
 ) -> String {
-    format!("rule family=\"{}\" destination address=\"{}\" forward-port port=\"{}\" protocol=\"{}\" to-port=\"{}\" to-addr=\"{}\"", ip_family, host_ip, host_port, protocol, ctr_port, ctr_ip)
+    format!("rule family=\"{ip_family}\" destination address=\"{host_ip}\" forward-port port=\"{host_port}\" protocol=\"{protocol}\" to-port=\"{ctr_port}\" to-addr=\"{ctr_ip}\"")
 }
 
 /// Check if firewalld is running.
@@ -993,14 +989,11 @@ pub fn add_firewalld_if_possible(dbus_conn: &Option<Connection>, net: &ipnet::Ip
     if !is_firewalld_running(conn) {
         return;
     }
-    debug!("Adding firewalld rules for network {}", net);
+    debug!("Adding firewalld rules for network {net}");
 
     match add_source_subnets_to_zone(conn, "trusted", &[*net]) {
         Ok(_) => {}
-        Err(e) => warn!(
-            "Error adding subnet {} from firewalld trusted zone: {}",
-            net, e
-        ),
+        Err(e) => warn!("Error adding subnet {net} from firewalld trusted zone: {e}"),
     }
 }
 
@@ -1016,7 +1009,7 @@ pub fn rm_firewalld_if_possible(net: &ipnet::IpNet) {
     if !is_firewalld_running(&conn) {
         return;
     }
-    debug!("Removing firewalld rules for IPs {}", net);
+    debug!("Removing firewalld rules for IPs {net}");
     match conn.call_method(
         Some("org.fedoraproject.FirewallD1"),
         "/org/fedoraproject/FirewallD1",
@@ -1025,10 +1018,7 @@ pub fn rm_firewalld_if_possible(net: &ipnet::IpNet) {
         &("trusted", net.to_string()),
     ) {
         Ok(_) => {}
-        Err(e) => warn!(
-            "Error removing subnet {} from firewalld trusted zone: {}",
-            net, e
-        ),
+        Err(e) => warn!("Error removing subnet {net} from firewalld trusted zone: {e}"),
     };
 }
 
@@ -1057,15 +1047,12 @@ pub fn is_firewalld_strict_forward_enabled(dbus_con: &Option<Connection>) -> boo
                 Ok(v) => match v.downcast::<String>() {
                     Ok(s) => s,
                     Err(e) => {
-                        warn!(
-                            "couldn't downcast StrictForwardPorts value to string: {}",
-                            e
-                        );
+                        warn!("couldn't downcast StrictForwardPorts value to string: {e}");
                         return false;
                     }
                 },
                 Err(e) => {
-                    warn!("couldn't retrieve StrictForwardPorts property: {}", e);
+                    warn!("couldn't retrieve StrictForwardPorts property: {e}");
                     return false;
                 }
             };
@@ -1073,10 +1060,7 @@ pub fn is_firewalld_strict_forward_enabled(dbus_con: &Option<Connection>) -> boo
                 "yes" => true,
                 "no" => false,
                 other => {
-                    warn!(
-                        "unexpected value from StrictForwardPorts property: {}",
-                        other
-                    );
+                    warn!("unexpected value from StrictForwardPorts property: {other}");
                     false
                 }
             }

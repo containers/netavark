@@ -318,10 +318,7 @@ fn setup(
                             // make sure to delete the tmp interface.
                             if let Err(err) = netns.del_link(netlink::LinkID::ID(link.header.index))
                             {
-                                error!(
-                                    "failed to delete tmp {} link {}: {}",
-                                    kind_data, tmp_name, err
-                                );
+                                error!("failed to delete tmp {kind_data} link {tmp_name}: {err}");
                             };
                         })?;
 
