@@ -398,3 +398,49 @@ pub fn get_mac_address(v: Vec<LinkAttribute>) -> NetavarkResult<String> {
 pub fn is_using_systemd() -> bool {
     Path::new("/run/systemd/system").exists()
 }
+
+pub fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult<String> {
+    let routes = host.dump_routes().wrap("dump routes")?;
+
+    for route in routes {
+        let mut dest = false;
+        let mut out_if = 0;
+        for nla in route.attributes {
+            if let netlink_packet_route::route::RouteAttribute::Destination(_) = nla {
+                dest = true;
+            }
+            if let netlink_packet_route::route::RouteAttribute::Oif(oif) = nla {
+                out_if = oif;
+            }
+        }
+
+        // if there is no dest we have a default route
+        // return the output interface for this route
+        if !dest && out_if > 0 {
+            let link = host.get_link(netlink::LinkID::ID(out_if))?;
+            let name = link.attributes.iter().find_map(|nla| {
+                if let LinkAttribute::IfName(name) = nla {
+                    Some(name)
+                } else {
+                    None
+                }
+            });
+            if let Some(name) = name {
+                return Ok(name.to_owned());
+            }
+        }
+    }
+    Err(NetavarkError::msg("failed to get default route interface"))
+}
+
+pub fn get_mtu_from_iface(host: &mut netlink::Socket, iface_name: &str) -> NetavarkResult<u32> {
+    let link = host.get_link(netlink::LinkID::Name(iface_name.to_string()))?;
+    for nla in link.attributes.iter() {
+        if let LinkAttribute::Mtu(mtu) = nla {
+            return Ok(*mtu);
+        }
+    }
+    // It is possible that the interface has no MTU set, in this case the kernel will use the default.
+    // We return 0 to signal this, which netavark uses to mean "kernel default".
+    Ok(0)
+}

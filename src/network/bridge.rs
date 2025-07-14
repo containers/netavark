@@ -8,6 +8,7 @@ use netlink_packet_route::link::{
 };
 
 use crate::dns::aardvark::SafeString;
+use crate::network::core_utils::get_default_route_interface;
 use crate::network::dhcp::{dhcp_teardown, get_dhcp_lease};
 use crate::{
     dns::aardvark::AardvarkEntry,
@@ -557,18 +558,22 @@ fn create_interfaces(
     Option<sysctl::SysctlDWriter<'static, String, String>>,
 )> {
     let mut sysctl_writer = None;
-    let (bridge_index, mac) = match host.get_link(netlink::LinkID::Name(
+    let (bridge_index, mtu, mac) = match host.get_link(netlink::LinkID::Name(
         data.bridge_interface_name.to_string(),
     )) {
-        Ok(bridge) => (
-            validate_bridge_link(
+        Ok(bridge) => {
+            let (bridge_index, mtu) = validate_bridge_link(
                 bridge,
                 data.vlan.is_some(),
                 host,
                 &data.bridge_interface_name,
-            )?,
-            None,
-        ),
+            )?;
+            (
+                bridge_index,
+                if data.mtu == 0 { mtu } else { data.mtu },
+                None,
+            )
+        }
         Err(err) => match err.unwrap() {
             NetavarkError::Netlink(e) => {
                 if -e.raw_code() != libc::ENODEV {
@@ -652,6 +657,21 @@ fn create_interfaces(
                     data.bridge_interface_name.to_string(),
                     InfoKind::Bridge,
                 );
+
+                let mut mtu = data.mtu;
+                if mtu == 0 {
+                    // if we have a default route, use its mtu as default
+                    if let Ok(iface_name) = get_default_route_interface(host) {
+                        match core_utils::get_mtu_from_iface(host, &iface_name) {
+                            Ok(iface_mtu) => {
+                                mtu = iface_mtu;
+                            },
+                            Err(e) => debug!(
+                                "failed to get mtu for default interface {iface_name}: {e}, using kernel default",
+                            ),
+                        }
+                    }
+                }
                 create_link_opts.mtu = data.mtu;
 
                 if data.vlan.is_some() {
@@ -699,7 +719,7 @@ fn create_interfaces(
                 host.set_up(netlink::LinkID::ID(link.header.index))
                     .wrap("set bridge up")?;
 
-                (link.header.index, mac)
+                (link.header.index, mtu, mac)
             }
             _ => return Err(err),
         },
@@ -714,6 +734,7 @@ fn create_interfaces(
         internal,
         hostns_fd,
         netns_fd,
+        mtu,
     )?;
     Ok((mac, sysctl_writer))
 }
@@ -729,11 +750,12 @@ fn create_veth_pair<'fd>(
     internal: bool,
     hostns_fd: BorrowedFd<'fd>,
     netns_fd: BorrowedFd<'fd>,
+    mtu: u32,
 ) -> NetavarkResult<String> {
     let mut peer_opts =
         netlink::CreateLinkOptions::new(data.container_interface_name.to_string(), InfoKind::Veth);
     peer_opts.mac = data.mac_address.clone().unwrap_or_default();
-    peer_opts.mtu = data.mtu;
+    peer_opts.mtu = mtu;
     peer_opts.netns = Some(netns_fd);
 
     let mut peer = LinkMessage::default();
@@ -741,7 +763,7 @@ fn create_veth_pair<'fd>(
 
     let mut host_veth =
         netlink::CreateLinkOptions::new(data.host_interface_name.clone(), InfoKind::Veth);
-    host_veth.mtu = data.mtu;
+    host_veth.mtu = mtu;
     host_veth.primary_index = primary_index;
     host_veth.info_data = Some(InfoData::Veth(InfoVeth::Peer(peer)));
 
@@ -880,8 +902,13 @@ fn validate_bridge_link(
     vlan: bool,
     netlink: &mut netlink::Socket,
     br_name: &str,
-) -> NetavarkResult<u32> {
+) -> NetavarkResult<(u32, u32)> {
+    let mut mtu: u32 = 0;
+    let mut header_index: u32 = 0;
     for nla in msg.attributes.iter() {
+        if let LinkAttribute::Mtu(m) = nla {
+            mtu = *m;
+        }
         if let LinkAttribute::LinkInfo(info) = nla {
             // when vlan is requested also check the VlanFiltering attribute
             if vlan {
@@ -919,7 +946,8 @@ fn validate_bridge_link(
             for inf in info.iter() {
                 if let LinkInfo::Kind(kind) = inf {
                     if *kind == InfoKind::Bridge {
-                        return Ok(msg.header.index);
+                        header_index = msg.header.index;
+                        break;
                     } else {
                         return Err(NetavarkError::Message(format!(
                             "bridge interface {br_name} already exists but is a {kind:?} interface"
@@ -929,6 +957,11 @@ fn validate_bridge_link(
             }
         }
     }
+
+    if header_index != 0 {
+        return Ok((header_index, mtu));
+    }
+
     Err(NetavarkError::Message(format!(
         "could not determine namespace link kind for bridge {br_name}"
     )))
