@@ -5,6 +5,10 @@ NETAVARK=${NETAVARK:-./bin/netavark}
 
 TESTSDIR=${TESTSDIR:-$(dirname ${BASH_SOURCE})}
 
+# ncat 7.96 changed default behaviour
+# https://nmap.org/changelog.html#7.96
+NCATOPTS="$NCATOPTS"
+
 # export RUST_BACKTRACE so that we get a helpful stack trace
 export RUST_BACKTRACE=full
 
@@ -623,7 +627,7 @@ function run_nc_test() {
     local connect_ip=$4
     local host_port=$5
 
-    local nc_common_args=""
+    local nc_common_args="$NCATOPTS"
     exec {stdin}<>/dev/null
 
     case $proto in
