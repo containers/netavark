@@ -3,10 +3,11 @@ use std::os::fd::BorrowedFd;
 use std::{collections::HashMap, net::IpAddr};
 
 use netlink_packet_route::link::{
-    InfoData, InfoIpVlan, InfoKind, InfoMacVlan, IpVlanMode, LinkAttribute, MacVlanMode,
+    InfoData, InfoIpVlan, InfoKind, InfoMacVlan, IpVlanMode, MacVlanMode,
 };
 use rand::distr::{Alphanumeric, SampleString};
 
+use crate::network::core_utils::get_default_route_interface;
 use crate::network::dhcp::{dhcp_teardown, get_dhcp_lease};
 use crate::{
     dns::aardvark::AardvarkEntry,
@@ -357,38 +358,4 @@ fn setup(
     }
 
     get_mac_address(dev.attributes)
-}
-
-fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult<String> {
-    let routes = host.dump_routes().wrap("dump routes")?;
-
-    for route in routes {
-        let mut dest = false;
-        let mut out_if = 0;
-        for nla in route.attributes {
-            if let netlink_packet_route::route::RouteAttribute::Destination(_) = nla {
-                dest = true;
-            }
-            if let netlink_packet_route::route::RouteAttribute::Oif(oif) = nla {
-                out_if = oif;
-            }
-        }
-
-        // if there is no dest we have a default route
-        // return the output interface for this route
-        if !dest && out_if > 0 {
-            let link = host.get_link(netlink::LinkID::ID(out_if))?;
-            let name = link.attributes.iter().find_map(|nla| {
-                if let LinkAttribute::IfName(name) = nla {
-                    Some(name)
-                } else {
-                    None
-                }
-            });
-            if let Some(name) = name {
-                return Ok(name.to_owned());
-            }
-        }
-    }
-    Err(NetavarkError::msg("failed to get default route interface"))
 }

@@ -1,0 +1,35 @@
+{
+  "container_id": "6ce776ea58b5",
+  "container_name": "testcontainer",
+  "networks": {
+    "podman1": {
+      "static_ips": [
+        "10.88.0.2"
+      ],
+      "interface_name": "eth0"
+    }
+  },
+  "network_info": {
+    "podman1": {
+      "name": "podman0",
+      "id": "ed82e3a703682a9c09629d3cf45c1f1e7da5b32aeff3faf82837ef4d005356e6",
+      "driver": "bridge",
+      "network_interface": "podman0",
+      "subnets": [
+        {
+          "gateway": "10.88.0.1",
+          "subnet": "10.88.0.0/16"
+        }
+      ],
+      "ipv6_enabled": true,
+      "internal": false,
+      "dns_enabled": false,
+      "ipam_options": {
+        "driver": "host-local"
+      },
+      "options": {
+        "mtu": "9002"
+      }
+    }
+  }
+}
