@@ -429,7 +429,8 @@ pub fn get_mtu_from_iface_attributes(attributes: &[LinkAttribute]) -> NetavarkRe
             return Ok(*mtu);
         }
     }
-    // It is possible that the interface has no MTU set, in this case the kernel will use the default.
-    // We return 0 to signal this, which netavark uses to mean "kernel default".
-    Ok(0)
+    // It should be impossible that the interface has no MTU set, so return an error in such case.
+    Err(NetavarkError::msg(
+        "no MTU attribute in netlink message, possible kernel issue",
+    ))
 }

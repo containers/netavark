@@ -666,7 +666,7 @@ fn create_interfaces(
                             Ok(iface_mtu) => {
                                 mtu = iface_mtu;
                             },
-                            Err(e) => debug!(
+                            Err(e) => log::warn!(
                                 "failed to get mtu for default interface {}: {e}, using kernel default", link.header.index
                             ),
                         }
