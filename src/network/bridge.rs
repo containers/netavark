@@ -703,6 +703,7 @@ fn create_interfaces(
                 for nla in link.attributes.into_iter() {
                     if let LinkAttribute::Address(addr) = nla {
                         mac = Some(addr);
+                        break;
                     }
                 }
                 if mac.is_none() {
@@ -848,6 +849,7 @@ fn create_veth_pair<'fd>(
                     //  Disable dad inside on the host too
                     let disable_dad_in_container = format!("net/ipv6/conf/{name}/accept_dad");
                     sysctl::apply_sysctl_value(disable_dad_in_container, "0")?;
+                    break;
                 }
             }
         }
