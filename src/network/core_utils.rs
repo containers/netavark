@@ -263,11 +263,12 @@ pub fn join_netns<Fd: AsFd>(fd: Fd) -> NetavarkResult<()> {
 /// executed in the ns.
 #[macro_export]
 macro_rules! exec_netns {
-    ($host:expr, $netns:expr, $result:ident, $exec:expr) => {
+    ($host:expr, $netns:expr, $exec:expr) => {{
         join_netns($netns)?;
-        let $result = $exec;
+        let result = $exec;
         join_netns($host)?;
-    };
+        result
+    }};
 }
 
 pub struct NamespaceOptions {
@@ -284,14 +285,12 @@ pub fn open_netlink_sockets(
     let hostns = open_netlink_socket("/proc/self/ns/net").wrap("open host netns")?;
 
     let host_socket = netlink::Socket::new().wrap("host netlink socket")?;
-    exec_netns!(
+    let netns_sock = exec_netns!(
         hostns.as_fd(),
         netns.as_fd(),
-        res,
         netlink::Socket::new().wrap("netns netlink socket")
-    );
+    )?;
 
-    let netns_sock = res?;
     Ok((
         NamespaceOptions {
             file: hostns,

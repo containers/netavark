@@ -331,8 +331,7 @@ fn setup(
         }
     }
 
-    exec_netns!(hostns_fd, netns_fd, res, { disable_ipv6_autoconf(if_name) });
-    res?; // return autoconf sysctl error
+    exec_netns!(hostns_fd, netns_fd, { disable_ipv6_autoconf(if_name) })?;
 
     let dev = netns
         .get_link(netlink::LinkID::Name(if_name.to_string()))
