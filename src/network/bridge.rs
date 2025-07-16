@@ -661,13 +661,13 @@ fn create_interfaces(
                 let mut mtu = data.mtu;
                 if mtu == 0 {
                     // if we have a default route, use its mtu as default
-                    if let Ok(iface_name) = get_default_route_interface(host) {
-                        match core_utils::get_mtu_from_iface(host, &iface_name) {
+                    if let Ok(link) = get_default_route_interface(host) {
+                        match core_utils::get_mtu_from_iface_attributes(&link.attributes) {
                             Ok(iface_mtu) => {
                                 mtu = iface_mtu;
                             },
                             Err(e) => debug!(
-                                "failed to get mtu for default interface {iface_name}: {e}, using kernel default",
+                                "failed to get mtu for default interface {}: {e}, using kernel default", link.header.index
                             ),
                         }
                     }

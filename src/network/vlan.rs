@@ -243,12 +243,10 @@ fn setup(
     netns_fd: BorrowedFd<'_>,
     kind_data: &KindData,
 ) -> NetavarkResult<String> {
-    let primary_ifname = match data.host_interface_name.as_ref() {
+    let link = match data.host_interface_name.as_ref() {
         "" => get_default_route_interface(host)?,
-        host_name => host_name.to_string(),
+        host_name => host.get_link(netlink::LinkID::Name(host_name.to_string()))?,
     };
-
-    let link = host.get_link(netlink::LinkID::Name(primary_ifname))?;
 
     let opts = match kind_data {
         KindData::IpVlan { mode } => {
