@@ -664,6 +664,7 @@ fn create_interfaces(
                     if let Ok(link) = get_default_route_interface(host) {
                         match core_utils::get_mtu_from_iface_attributes(&link.attributes) {
                             Ok(iface_mtu) => {
+                                debug!("Using mtu {iface_mtu} from default route interface for the network");
                                 mtu = iface_mtu;
                             },
                             Err(e) => log::warn!(
