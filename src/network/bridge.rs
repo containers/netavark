@@ -661,13 +661,14 @@ fn create_interfaces(
                 let mut mtu = data.mtu;
                 if mtu == 0 {
                     // if we have a default route, use its mtu as default
-                    if let Ok(iface_name) = get_default_route_interface(host) {
-                        match core_utils::get_mtu_from_iface(host, &iface_name) {
+                    if let Ok(link) = get_default_route_interface(host) {
+                        match core_utils::get_mtu_from_iface_attributes(&link.attributes) {
                             Ok(iface_mtu) => {
+                                debug!("Using mtu {iface_mtu} from default route interface for the network");
                                 mtu = iface_mtu;
                             },
-                            Err(e) => debug!(
-                                "failed to get mtu for default interface {iface_name}: {e}, using kernel default",
+                            Err(e) => log::warn!(
+                                "failed to get mtu for default interface {}: {e}, using kernel default", link.header.index
                             ),
                         }
                     }
@@ -703,6 +704,7 @@ fn create_interfaces(
                 for nla in link.attributes.into_iter() {
                     if let LinkAttribute::Address(addr) = nla {
                         mac = Some(addr);
+                        break;
                     }
                 }
                 if mac.is_none() {
@@ -818,7 +820,7 @@ fn create_veth_pair<'fd>(
     }
 
     if let BridgeMode::Managed = data.mode {
-        exec_netns!(hostns_fd, netns_fd, res, {
+        exec_netns!(hostns_fd, netns_fd, {
             disable_ipv6_autoconf(&data.container_interface_name)?;
             if data.ipam.ipv6_enabled {
                 //  Disable dad inside the container too
@@ -838,9 +840,7 @@ fn create_veth_pair<'fd>(
             let rp_filter = format!("net/ipv4/conf/{}/rp_filter", &data.container_interface_name);
             sysctl::apply_sysctl_value(rp_filter, "2")?;
             Ok::<(), NetavarkError>(())
-        });
-        // check the result and return error
-        res?;
+        })?;
 
         if data.ipam.ipv6_enabled {
             let host_veth = host.get_link(netlink::LinkID::ID(host_link))?;
@@ -850,6 +850,7 @@ fn create_veth_pair<'fd>(
                     //  Disable dad inside on the host too
                     let disable_dad_in_container = format!("net/ipv6/conf/{name}/accept_dad");
                     sysctl::apply_sysctl_value(disable_dad_in_container, "0")?;
+                    break;
                 }
             }
         }
