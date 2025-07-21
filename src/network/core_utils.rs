@@ -2,7 +2,7 @@ use crate::error::{ErrorWrap, NetavarkError, NetavarkResult};
 use crate::network::{constants, internal_types, types};
 use crate::wrap;
 use ipnet::IpNet;
-use netlink_packet_route::link::{IpVlanMode, MacVlanMode};
+use netlink_packet_route::link::{IpVlanMode, LinkMessage, MacVlanMode};
 use nix::sched;
 use sha2::{Digest, Sha512};
 use std::collections::HashMap;
@@ -263,11 +263,12 @@ pub fn join_netns<Fd: AsFd>(fd: Fd) -> NetavarkResult<()> {
 /// executed in the ns.
 #[macro_export]
 macro_rules! exec_netns {
-    ($host:expr, $netns:expr, $result:ident, $exec:expr) => {
+    ($host:expr, $netns:expr, $exec:expr) => {{
         join_netns($netns)?;
-        let $result = $exec;
+        let result = $exec;
         join_netns($host)?;
-    };
+        result
+    }};
 }
 
 pub struct NamespaceOptions {
@@ -284,14 +285,12 @@ pub fn open_netlink_sockets(
     let hostns = open_netlink_socket("/proc/self/ns/net").wrap("open host netns")?;
 
     let host_socket = netlink::Socket::new().wrap("host netlink socket")?;
-    exec_netns!(
+    let netns_sock = exec_netns!(
         hostns.as_fd(),
         netns.as_fd(),
-        res,
         netlink::Socket::new().wrap("netns netlink socket")
-    );
+    )?;
 
-    let netns_sock = res?;
     Ok((
         NamespaceOptions {
             file: hostns,
@@ -399,7 +398,8 @@ pub fn is_using_systemd() -> bool {
     Path::new("/run/systemd/system").exists()
 }
 
-pub fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult<String> {
+/// Returns the *first* interface with a default route or an error if no default route interface exists.
+pub fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult<LinkMessage> {
     let routes = host.dump_routes().wrap("dump routes")?;
 
     for route in routes {
@@ -417,30 +417,20 @@ pub fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult
         // if there is no dest we have a default route
         // return the output interface for this route
         if !dest && out_if > 0 {
-            let link = host.get_link(netlink::LinkID::ID(out_if))?;
-            let name = link.attributes.iter().find_map(|nla| {
-                if let LinkAttribute::IfName(name) = nla {
-                    Some(name)
-                } else {
-                    None
-                }
-            });
-            if let Some(name) = name {
-                return Ok(name.to_owned());
-            }
+            return host.get_link(netlink::LinkID::ID(out_if));
         }
     }
     Err(NetavarkError::msg("failed to get default route interface"))
 }
 
-pub fn get_mtu_from_iface(host: &mut netlink::Socket, iface_name: &str) -> NetavarkResult<u32> {
-    let link = host.get_link(netlink::LinkID::Name(iface_name.to_string()))?;
-    for nla in link.attributes.iter() {
+pub fn get_mtu_from_iface_attributes(attributes: &[LinkAttribute]) -> NetavarkResult<u32> {
+    for nla in attributes.iter() {
         if let LinkAttribute::Mtu(mtu) = nla {
             return Ok(*mtu);
         }
     }
-    // It is possible that the interface has no MTU set, in this case the kernel will use the default.
-    // We return 0 to signal this, which netavark uses to mean "kernel default".
-    Ok(0)
+    // It should be impossible that the interface has no MTU set, so return an error in such case.
+    Err(NetavarkError::msg(
+        "no MTU attribute in netlink message, possible kernel issue",
+    ))
 }
