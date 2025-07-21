@@ -58,6 +58,7 @@ bin/netavark: $(SOURCES) bin $(CARGO_TARGET_DIR)
 	$(CARGO) build $(release)
 	cp $(CARGO_TARGET_DIR)/$(profile)/netavark bin/netavark
 	cp $(CARGO_TARGET_DIR)/$(profile)/netavark-dhcp-proxy-client bin/netavark-dhcp-proxy-client
+	cp $(CARGO_TARGET_DIR)/$(profile)/netavark-connection-tester bin/netavark-connection-tester
 
 
 .PHONY: examples
