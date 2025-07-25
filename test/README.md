@@ -14,4 +14,3 @@ The tests need root privileges to create network namespaces, so you either have 
 - iptables
 - firewalld
 - dbus-daemon
-- ncat (NMAP)

@@ -590,7 +590,7 @@ fw_driver=iptables
     assert "2" "rp_filter eth1 interface"
 
     # Important: Use the "host" ip here and not localhost or bridge ip.
-    run_nc_test "0" "tcp" 8080 "10.0.0.1" 8080
+    run_connection_test "0" "tcp" 8080 "10.0.0.1" 8080
 }
 
 @test "bridge ipam none" {

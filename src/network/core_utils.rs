@@ -259,8 +259,7 @@ pub fn join_netns<Fd: AsFd>(fd: Fd) -> NetavarkResult<()> {
 
 /// safe way to join the namespace and join back to the host after the task is done
 /// This first arg should be the hostns fd, the second is the container ns fd.
-/// The third is the result variable name and the last the closure that should be
-/// executed in the ns.
+/// The third and last the closure that should be executed in the ns.
 #[macro_export]
 macro_rules! exec_netns {
     ($host:expr, $netns:expr, $exec:expr) => {{

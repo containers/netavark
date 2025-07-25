@@ -1,0 +1,2 @@
+[target.'cfg(linux)']
+runner = 'unshare -rn'
