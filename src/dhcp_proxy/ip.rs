@@ -35,7 +35,7 @@ trait Address<T> {
     where
         Self: Sized;
     fn add_ip(&self, nls: &mut Socket) -> Result<(), ProxyError>;
-    fn add_gws(&self, nls: &mut Socket) -> Result<(), ProxyError>;
+    fn add_gws(&self, nls: &mut Socket, metric: Option<u32>) -> Result<(), ProxyError>;
 }
 
 fn handle_gws(g: Vec<String>, netmask: &str) -> Result<Vec<IpNet>, ProxyError> {
@@ -123,9 +123,9 @@ impl Address<Ipv4Addr> for MacVLAN {
     }
 
     // add one or more routes to the container namespace
-    fn add_gws(&self, nls: &mut Socket) -> Result<(), ProxyError> {
+    fn add_gws(&self, nls: &mut Socket, metric: Option<u32>) -> Result<(), ProxyError> {
         debug!("adding gateways to {}", self.interface);
-        match core_utils::add_default_routes(nls, &self.gateways, None) {
+        match core_utils::add_default_routes(nls, &self.gateways, metric) {
             Ok(_) => Ok(()),
             Err(e) => Err(ProxyError::new(e.to_string())),
         }
@@ -134,12 +134,17 @@ impl Address<Ipv4Addr> for MacVLAN {
 
 // setup takes the DHCP lease and some additional information and
 // applies the TCP/IP information to the namespace.
-pub fn setup(lease: &NetavarkLease, interface: &str, ns_path: &str) -> Result<(), ProxyError> {
+pub fn setup(
+    lease: &NetavarkLease,
+    interface: &str,
+    ns_path: &str,
+    metric: Option<u32>,
+) -> Result<(), ProxyError> {
     debug!("setting up {interface}");
     let vlan = MacVLAN::new(lease, interface)?;
     let (_, mut netns) = core_utils::open_netlink_sockets(ns_path)?;
     vlan.add_ip(&mut netns.netlink)?;
-    vlan.add_gws(&mut netns.netlink)
+    vlan.add_gws(&mut netns.netlink, metric)
 }
 
 // teardown is likely unnecessary but holding place here

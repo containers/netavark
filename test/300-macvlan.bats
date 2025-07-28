@@ -389,3 +389,31 @@ EOF
     assert_json "$default_route_v6" '.[0].dst' == "default" "Default route was selected"
     assert_json "$default_route_v6" '.[0].metric' == "200" "v6 route metric matches v4"
 }
+
+@test "macvlan route metric from config with dhcp" {
+    # This test verifies that metric is properly passed to DHCP proxy
+    # Note: This test requires a DHCP server to be running on dummy0
+    # In a real environment, this would test the actual DHCP metric functionality
+    
+    # Skip if no DHCP server is available
+    if ! command -v dnsmasq >/dev/null 2>&1; then
+        skip "dnsmasq not available for DHCP testing"
+    fi
+    
+    # Setup a simple DHCP server on dummy0
+    run_in_host_netns dnsmasq --interface=dummy0 --dhcp-range=10.89.0.10,10.89.0.100,255.255.255.0 --dhcp-option=3,10.89.0.1 &
+    DHCP_PID=$!
+    
+    # Wait for DHCP server to start
+    sleep 2
+    
+    run_netavark --file ${TESTSDIR}/testfiles/metric-macvlan-dhcp.json setup $(get_container_netns_path)
+
+    run_in_container_netns ip -j route list match 0.0.0.0
+    default_route="$output"
+    assert_json "$default_route" '.[0].dst' == "default" "Default route was selected"
+    assert_json "$default_route" '.[0].metric' == "200" "Route metric set from config with DHCP"
+
+    # Cleanup
+    kill $DHCP_PID 2>/dev/null || true
+}

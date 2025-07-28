@@ -38,6 +38,7 @@ pub fn get_dhcp_lease(
     container_macvlan_mac: &str,
     container_hostname: &str,
     container_id: &str,
+    metric: Option<u32>,
 ) -> NetavarkResult<DhcpLeaseInfo> {
     let nvp_config = NetworkConfig {
         host_iface: host_network_interface.to_string(),
@@ -49,6 +50,7 @@ pub fn get_dhcp_lease(
         container_iface: container_network_interface.to_string(),
         container_mac_addr: container_macvlan_mac.to_string(),
         container_id: container_id.to_string(),
+        metric: metric.unwrap_or(100), // Use provided metric or default to 100
     };
     let lease = match tokio::task::LocalSet::new().block_on(
         match &tokio::runtime::Builder::new_current_thread()
@@ -127,6 +129,7 @@ pub fn release_dhcp_lease(
     container_network_interface: &str,
     ns_path: &str,
     container_macvlan_mac: &str,
+    metric: Option<u32>,
 ) -> NetavarkResult<()> {
     let nvp_config = NetworkConfig {
         host_iface: host_network_interface.to_string(),
@@ -138,6 +141,7 @@ pub fn release_dhcp_lease(
         container_iface: container_network_interface.to_string(),
         container_mac_addr: container_macvlan_mac.to_string(),
         container_id: "".to_string(),
+        metric: metric.unwrap_or(100), // Use provided metric or default to 100
     };
     match tokio::task::LocalSet::new().block_on(
         match &tokio::runtime::Builder::new_current_thread()
@@ -172,11 +176,17 @@ pub fn dhcp_teardown(info: &DriverInfo, sock: &mut netlink::Socket) -> NetavarkR
         ))?;
 
         let container_mac_address = core_utils::get_mac_address(dev.attributes)?;
+
+        // Extract metric from network options
+        let metric =
+            core_utils::parse_option(&info.network.options, super::constants::OPTION_METRIC)?;
+
         release_dhcp_lease(
             &info.network.network_interface.clone().unwrap_or_default(),
             &info.per_network_opts.interface_name,
             info.netns_path,
             &container_mac_address,
+            metric, // Pass the extracted metric
         )?
     }
     Ok(())

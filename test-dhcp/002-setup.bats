@@ -125,3 +125,5 @@ EOF
         expected_rc=1 run_setup "$input_config"
         assert "$output" =~ "unable to parse mac address 123" "mac address error"
 }
+
+

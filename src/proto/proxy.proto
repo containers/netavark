@@ -17,7 +17,7 @@ message NetworkConfig {
   Version version = 6;
   string ns_path = 7;
   string container_id = 8;
-
+  uint32 metric = 9;  // Route metric for default routes
 }
 // Lease can either contain a IPv4 or IPv6 DHCP lease, and the common IP information
 message Lease {

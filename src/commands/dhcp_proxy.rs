@@ -449,6 +449,11 @@ async fn process_setup<W: Write + Clear>(
         ));
     }
 
-    ip::setup(&nv_lease, &container_network_interface, &ns_path)?;
+    ip::setup(
+        &nv_lease,
+        &container_network_interface,
+        &ns_path,
+        Some(network_config.metric),
+    )?;
     Ok(nv_lease)
 }

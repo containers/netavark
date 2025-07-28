@@ -174,6 +174,7 @@ pub async fn process_client_stream(mut client: DhcpV4Service) {
                             &client.network_config.container_iface,
                             old_lease,
                             &lease,
+                            Some(client.network_config.metric), 
                         ) {
                             Ok(_) => {}
                             Err(err) => {
@@ -198,6 +199,7 @@ fn update_lease_ip(
     interface: &str,
     old_lease: &MozimV4Lease,
     new_lease: &MozimV4Lease,
+    metric: Option<u32>,
 ) -> NetavarkResult<()> {
     let (_, netns) =
         core_utils::open_netlink_sockets(netns).wrap("failed to open netlink socket in netns")?;
@@ -227,7 +229,7 @@ fn update_lease_ip(
                 let route = Route::Ipv4 {
                     dest: ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0)?,
                     gw: *gw,
-                    metric: None,
+                    metric: None, 
                 };
                 match sock.del_route(&route) {
                     Ok(_) => {}
@@ -245,7 +247,7 @@ fn update_lease_ip(
                 let route = Route::Ipv4 {
                     dest: ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0)?,
                     gw: *gw,
-                    metric: None,
+                    metric, 
                 };
                 sock.add_route(&route)?;
             }
