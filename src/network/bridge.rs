@@ -196,6 +196,7 @@ impl driver::NetworkDriver for Bridge<'_> {
                 &container_veth_mac,
                 self.info.container_hostname.as_deref().unwrap_or(""),
                 self.info.container_id,
+                data.metric,
             )?;
             // do not overwrite dns servers set by dns podman flag
             if !self.info.container_dns_servers.is_some() {

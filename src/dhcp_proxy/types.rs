@@ -24,6 +24,7 @@ impl FromStr for NetworkConfig {
             ns_path: "".to_string(),
             container_iface: "".to_string(),
             container_id: "".to_string(),
+            metric: 100,
         })
     }
 }
