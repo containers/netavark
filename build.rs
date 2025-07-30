@@ -4,7 +4,7 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
-    let builder = tonic_build::configure()
+    let builder = tonic_prost_build::configure()
         .type_attribute("netavark_proxy.Lease", "#[derive(serde::Serialize)]")
         .type_attribute("netavark_proxy.DhcpV4Lease", "#[derive(serde::Serialize)]")
         .type_attribute("netavark_proxy.DhcpV6Lease", "#[derive(serde::Serialize)]")
