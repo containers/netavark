@@ -31,6 +31,9 @@ const ISOLATION3CHAIN: &str = "NETAVARK-ISOLATION-3";
 
 const MASK: u32 = 0x2000;
 
+const MULTICAST_NET_V4: &str = "224.0.0.0/4";
+const MULTICAST_NET_V6: &str = "ff00::/8";
+
 /// The dnat priority for chains
 /// This (and the below) are based on https://wiki.nftables.org/wiki-nftables/index.php/Netfilter_hooks#Priority_within_hook
 const DNATPRIO: i32 = -100;
@@ -376,18 +379,91 @@ impl firewall::FirewallDriver for Nftables {
                     ]),
                 ));
 
-                // Subnet chain: ip daddr != 224.0.0.0/4 masquerade
+                // Subnet chain: ip daddr != 224.0.0.0/4 snat/masquerade
                 let multicast_address: IpNet = match subnet {
-                    IpNet::V4(_) => "224.0.0.0/4".parse()?,
-                    IpNet::V6(_) => "ff::00/8".parse()?,
+                    IpNet::V4(_) => MULTICAST_NET_V4.parse()?,
+                    IpNet::V6(_) => MULTICAST_NET_V6.parse()?,
                 };
-                batch.add(make_rule(
-                    chain.clone(),
-                    Cow::Owned(vec![
-                        get_subnet_match(&multicast_address, "daddr", stmt::Operator::NEQ),
-                        stmt::Statement::Masquerade(None),
-                    ]),
-                ));
+
+                // Use appropriate outbound address based on subnet type
+                match subnet {
+                    IpNet::V4(_) => {
+                        if let Some(addr4) = network_setup.outbound_addr4 {
+                            log::trace!("Creating IPv4 SNAT rule with outbound address {addr4}");
+                            batch.add(make_rule(
+                                chain.clone(),
+                                Cow::Owned(vec![
+                                    get_subnet_match(
+                                        &multicast_address,
+                                        "daddr",
+                                        stmt::Operator::NEQ,
+                                    ),
+                                    stmt::Statement::SNAT(Some(stmt::NAT {
+                                        addr: Some(expr::Expression::String(
+                                            addr4.to_string().into(),
+                                        )),
+                                        family: Some(stmt::NATFamily::IP),
+                                        port: None,
+                                        flags: None,
+                                    })),
+                                ]),
+                            ));
+                        } else {
+                            log::trace!(
+                                "No IPv4 outbound address set, using default MASQUERADE rule"
+                            );
+                            batch.add(make_rule(
+                                chain.clone(),
+                                Cow::Owned(vec![
+                                    get_subnet_match(
+                                        &multicast_address,
+                                        "daddr",
+                                        stmt::Operator::NEQ,
+                                    ),
+                                    stmt::Statement::Masquerade(None),
+                                ]),
+                            ));
+                        }
+                    }
+                    IpNet::V6(_) => {
+                        if let Some(addr6) = network_setup.outbound_addr6 {
+                            log::trace!("Creating IPv6 SNAT rule with outbound address {addr6}");
+                            batch.add(make_rule(
+                                chain.clone(),
+                                Cow::Owned(vec![
+                                    get_subnet_match(
+                                        &multicast_address,
+                                        "daddr",
+                                        stmt::Operator::NEQ,
+                                    ),
+                                    stmt::Statement::SNAT(Some(stmt::NAT {
+                                        addr: Some(expr::Expression::String(
+                                            addr6.to_string().into(),
+                                        )),
+                                        family: Some(stmt::NATFamily::IP6),
+                                        port: None,
+                                        flags: None,
+                                    })),
+                                ]),
+                            ));
+                        } else {
+                            log::trace!(
+                                "No IPv6 outbound address set, using default MASQUERADE rule"
+                            );
+                            batch.add(make_rule(
+                                chain.clone(),
+                                Cow::Owned(vec![
+                                    get_subnet_match(
+                                        &multicast_address,
+                                        "daddr",
+                                        stmt::Operator::NEQ,
+                                    ),
+                                    stmt::Statement::Masquerade(None),
+                                ]),
+                            ));
+                        }
+                    }
+                }
 
                 // Next, populate basic chains with forwarding rules
                 // Input chain: ip saddr <subnet> udp dport 53 accept
