@@ -34,8 +34,8 @@ trait Address<T> {
     fn new(l: &Lease, interface: &str) -> Result<Self, ProxyError>
     where
         Self: Sized;
-    fn add_ip(&self, nls: &mut Socket) -> Result<(), ProxyError>;
-    fn add_gws(&self, nls: &mut Socket) -> Result<(), ProxyError>;
+    fn add_ip(&self, nls: &mut Socket<netlink::ContainerNS>) -> Result<(), ProxyError>;
+    fn add_gws(&self, nls: &mut Socket<netlink::ContainerNS>) -> Result<(), ProxyError>;
 }
 
 fn handle_gws(g: Vec<String>, netmask: &str) -> Result<Vec<IpNet>, ProxyError> {
@@ -112,7 +112,7 @@ impl Address<Ipv4Addr> for MacVLAN {
     }
 
     //  add the ip address to the container namespace
-    fn add_ip(&self, nls: &mut Socket) -> Result<(), ProxyError> {
+    fn add_ip(&self, nls: &mut netlink::Socket<netlink::ContainerNS>) -> Result<(), ProxyError> {
         debug!("adding network information for {}", self.interface);
         let ip = IpNet::new(self.address, self.prefix_length)?;
         let dev = nls.get_link(netlink::LinkID::Name(self.interface.clone()))?;
@@ -123,7 +123,7 @@ impl Address<Ipv4Addr> for MacVLAN {
     }
 
     // add one or more routes to the container namespace
-    fn add_gws(&self, nls: &mut Socket) -> Result<(), ProxyError> {
+    fn add_gws(&self, nls: &mut Socket<netlink::ContainerNS>) -> Result<(), ProxyError> {
         debug!("adding gateways to {}", self.interface);
         match core_utils::add_default_routes(nls, &self.gateways, None) {
             Ok(_) => Ok(()),
