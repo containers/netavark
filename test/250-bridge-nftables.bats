@@ -1052,6 +1052,32 @@ function check_simple_bridge_nftables() {
     assert "$output" == $'table inet netavark {\n\tchain NETAVARK-HOSTPORT-DNAT {\n\t}\n}' "NETAVARK-HOSTPORT-DNAT chain must be empty"
 }
 
+@test "$fw_driver - bridge with outbound addr4" {
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-outbound-addr4.json setup $(get_container_netns_path)
+
+    # Check that the nftables rules were created with SNAT
+    run_in_host_netns nft list chain inet netavark nv_2f259bab_10_89_0_0_nm24
+    assert "${lines[3]}" =~ "ip daddr != 224.0.0.0/4 snat ip to 100.1.100.1"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-outbound-addr4.json teardown $(get_container_netns_path)
+
+    # Check that the chain is removed
+    expected_rc=1 run_in_host_netns nft list chain inet netavark nv_2f259bab_10_89_0_0_nm24
+}
+
+@test "$fw_driver - bridge with outbound addr6" {
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-outbound-addr6.json setup $(get_container_netns_path)
+
+    # Check that the nftables rules were created with SNAT for IPv6
+    run_in_host_netns nft list chain inet netavark nv_2f259bab_fd10-88-a--_nm64
+    assert "${lines[3]}" =~ "ip6 daddr != ff00::/8 snat ip6 to fd20:100:200::1"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-outbound-addr6.json teardown $(get_container_netns_path)
+ 
+    # Check that the chain is removed
+    expected_rc=1 run_in_host_netns nft list chain inet netavark nv_2f259bab_fd10-88-a--_nm64
+}
+
 @test "$fw_driver - aardvark-dns error cleanup" {
     expected_rc=1 run_netavark -a /usr/bin/false --file ${TESTSDIR}/testfiles/dualstack-bridge-custom-dns-server.json setup $(get_container_netns_path)
     assert_json ".error" "error while applying dns entries: aardvark-dns exited unexpectedly without error message" "aardvark-dns error"
