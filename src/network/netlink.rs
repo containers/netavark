@@ -24,11 +24,22 @@ use netlink_packet_route::{
 };
 use netlink_sys::{protocols::NETLINK_ROUTE, SocketAddr};
 
-pub struct Socket {
+/// Marker trait for the Socket so we know it refers to either HostNS or ContainerNS.
+pub trait Namespace {}
+pub struct HostNS;
+pub struct ContainerNS;
+impl Namespace for HostNS {}
+impl Namespace for ContainerNS {}
+
+pub struct Socket<N: Namespace = HostNS> {
     socket: netlink_sys::Socket,
     sequence_number: u32,
     ///  buffer size for reading netlink messages, see NLMSG_GOODSIZE in the kernel
     buffer: [u8; 8192],
+
+    /// Marker for host or container namespace, allows functions to specify which netns
+    /// socket they need which then gets enforced at compile time without any runtime overhead.
+    _marker: std::marker::PhantomData<N>,
 }
 
 #[derive(Clone)]
@@ -110,8 +121,8 @@ macro_rules! function {
     }};
 }
 
-impl Socket {
-    pub fn new() -> NetavarkResult<Socket> {
+impl<N: Namespace> Socket<N> {
+    pub fn new() -> NetavarkResult<Socket<N>> {
         let mut socket = wrap!(netlink_sys::Socket::new(NETLINK_ROUTE), "open")?;
         let addr = &SocketAddr::new(0, 0);
         wrap!(socket.bind(addr), "bind")?;
@@ -121,6 +132,7 @@ impl Socket {
             socket,
             sequence_number: 0,
             buffer: [0; 8192],
+            _marker: std::marker::PhantomData,
         })
     }
 

@@ -38,12 +38,18 @@ pub trait NetworkDriver {
     /// setup the network interfaces/firewall rules for this driver
     fn setup(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (
+            &mut netlink::Socket,
+            &mut netlink::Socket<netlink::ContainerNS>,
+        ),
     ) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry>)>;
     /// teardown the network interfaces/firewall rules for this driver
     fn teardown(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (
+            &mut netlink::Socket,
+            &mut netlink::Socket<netlink::ContainerNS>,
+        ),
     ) -> NetavarkResult<()>;
 
     /// return the network name

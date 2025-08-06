@@ -159,7 +159,10 @@ pub fn release_dhcp_lease(
     Ok(())
 }
 
-pub fn dhcp_teardown(info: &DriverInfo, sock: &mut netlink::Socket) -> NetavarkResult<()> {
+pub fn dhcp_teardown(
+    info: &DriverInfo,
+    sock: &mut netlink::Socket<netlink::ContainerNS>,
+) -> NetavarkResult<()> {
     let ipam = core_utils::get_ipam_addresses(info.per_network_opts, info.network)?;
     let if_name = info.per_network_opts.interface_name.clone();
 

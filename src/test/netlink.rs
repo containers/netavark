@@ -28,13 +28,16 @@ mod tests {
     #[test]
     fn test_socket_new() {
         test_setup!();
-        assert!(Socket::new().is_ok(), "Netlink Socket::new() should work");
+        assert!(
+            Socket::<HostNS>::new().is_ok(),
+            "Netlink Socket::<HostNS>::new() should work"
+        );
     }
 
     #[test]
     fn test_add_link() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = Socket::<HostNS>::new().expect("Socket::<HostNS>::new()");
 
         let name = String::from("test1");
         sock.create_link(CreateLinkOptions::new(name.clone(), InfoKind::Dummy))
@@ -49,7 +52,7 @@ mod tests {
     #[test]
     fn test_add_addr() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = Socket::<HostNS>::new().expect("Socket::<HostNS>::new()");
 
         let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
         eprintln!("{}", String::from_utf8(out.stderr).unwrap());
@@ -72,7 +75,7 @@ mod tests {
     #[test]
     fn test_del_addr() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = Socket::<HostNS>::new().expect("Socket::<HostNS>::new()");
 
         let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
         eprintln!("{}", String::from_utf8(out.stderr).unwrap());
@@ -110,7 +113,7 @@ mod tests {
     #[ignore]
     fn test_del_route() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = Socket::<HostNS>::new().expect("Socket::<HostNS>::new()");
 
         let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
         eprintln!("{}", String::from_utf8(out.stderr).unwrap());
@@ -159,7 +162,7 @@ mod tests {
     #[test]
     fn test_dump_addr() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = Socket::<HostNS>::new().expect("Socket::<HostNS>::new()");
 
         let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
         eprintln!("{}", String::from_utf8(out.stderr).unwrap());

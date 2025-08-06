@@ -147,7 +147,10 @@ impl driver::NetworkDriver for Bridge<'_> {
 
     fn setup(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (
+            &mut netlink::Socket,
+            &mut netlink::Socket<netlink::ContainerNS>,
+        ),
     ) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry>)> {
         let data = match &self.data {
             Some(d) => d,
@@ -302,7 +305,10 @@ impl driver::NetworkDriver for Bridge<'_> {
 
     fn teardown(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (
+            &mut netlink::Socket,
+            &mut netlink::Socket<netlink::ContainerNS>,
+        ),
     ) -> NetavarkResult<()> {
         let mode: Option<String> = parse_option(&self.info.network.options, OPTION_MODE)?;
         let mode = get_bridge_mode_from_string(mode.as_deref())?;
@@ -547,7 +553,7 @@ const IPV6_FORWARD: &str = "net/ipv6/conf/all/forwarding";
 /// returns the container veth mac address
 fn create_interfaces(
     host: &mut netlink::Socket,
-    netns: &mut netlink::Socket,
+    netns: &mut netlink::Socket<netlink::ContainerNS>,
     data: &InternalData,
     internal: bool,
     rootless: bool,
@@ -745,7 +751,7 @@ fn create_interfaces(
 #[allow(clippy::too_many_arguments)]
 fn create_veth_pair<'fd>(
     host: &mut netlink::Socket,
-    netns: &mut netlink::Socket,
+    netns: &mut netlink::Socket<netlink::ContainerNS>,
     data: &InternalData,
     primary_index: u32,
     bridge_mac: Option<Vec<u8>>,
@@ -992,7 +998,7 @@ fn check_link_is_vrf(msg: LinkMessage, vrf_name: &str) -> NetavarkResult<LinkMes
 
 fn remove_link(
     host: &mut netlink::Socket,
-    netns: &mut netlink::Socket,
+    netns: &mut netlink::Socket<netlink::ContainerNS>,
     mode: BridgeMode,
     br_name: &str,
     container_veth_name: &str,

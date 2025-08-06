@@ -270,24 +270,27 @@ macro_rules! exec_netns {
     }};
 }
 
-pub struct NamespaceOptions {
+pub struct NamespaceOptions<N: netlink::Namespace> {
     /// Note we have to return the File object since the fd is only valid
     /// as long as the File object is valid
     pub file: File,
-    pub netlink: netlink::Socket,
+    pub netlink: netlink::Socket<N>,
 }
 
 pub fn open_netlink_sockets(
     netns_path: &str,
-) -> NetavarkResult<(NamespaceOptions, NamespaceOptions)> {
+) -> NetavarkResult<(
+    NamespaceOptions<netlink::HostNS>,
+    NamespaceOptions<netlink::ContainerNS>,
+)> {
     let netns = open_netlink_socket(netns_path).wrap("open container netns")?;
     let hostns = open_netlink_socket("/proc/self/ns/net").wrap("open host netns")?;
 
-    let host_socket = netlink::Socket::new().wrap("host netlink socket")?;
+    let host_socket = netlink::Socket::<netlink::HostNS>::new().wrap("host netlink socket")?;
     let netns_sock = exec_netns!(
         hostns.as_fd(),
         netns.as_fd(),
-        netlink::Socket::new().wrap("netns netlink socket")
+        netlink::Socket::<netlink::ContainerNS>::new().wrap("netns netlink socket")
     )?;
 
     Ok((
@@ -307,7 +310,7 @@ fn open_netlink_socket(netns_path: &str) -> NetavarkResult<File> {
 }
 
 pub fn add_default_routes(
-    sock: &mut netlink::Socket,
+    sock: &mut netlink::Socket<netlink::ContainerNS>,
     gws: &[ipnet::IpNet],
     metric: Option<u32>,
 ) -> NetavarkResult<()> {
