@@ -3,7 +3,8 @@ use crate::firewall;
 use crate::firewall::firewalld;
 use crate::firewall::varktables::types::TeardownPolicy::OnComplete;
 use crate::firewall::varktables::types::{
-    create_network_chains, get_network_chains, get_port_forwarding_chains, TeardownPolicy,
+    create_network_chains, get_network_chains, get_port_forwarding_chains, NetworkChainConfig,
+    TeardownPolicy,
 };
 use crate::network::internal_types::{
     PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
@@ -54,15 +55,16 @@ impl firewall::FirewallDriver for IptablesDriver {
                     conn = &self.conn6;
                 }
 
-                let chains = get_network_chains(
-                    conn,
+                let config = NetworkChainConfig {
                     network,
-                    &network_setup.network_hash_name,
-                    is_ipv6,
-                    network_setup.bridge_name.clone(),
-                    network_setup.isolation,
-                    network_setup.dns_port,
-                );
+                    network_hash_name: network_setup.network_hash_name.clone(),
+                    interface_name: network_setup.bridge_name.clone(),
+                    isolation: network_setup.isolation,
+                    dns_port: network_setup.dns_port,
+                    outbound_addr4: network_setup.outbound_addr4,
+                    outbound_addr6: network_setup.outbound_addr6,
+                };
+                let chains = get_network_chains(conn, config);
 
                 create_network_chains(chains)?;
 
@@ -83,15 +85,16 @@ impl firewall::FirewallDriver for IptablesDriver {
                 if is_ipv6 {
                     conn = &self.conn6;
                 }
-                let chains = get_network_chains(
-                    conn,
+                let config = NetworkChainConfig {
                     network,
-                    &tear.config.network_hash_name,
-                    is_ipv6,
-                    tear.config.bridge_name.clone(),
-                    tear.config.isolation,
-                    tear.config.dns_port,
-                );
+                    network_hash_name: tear.config.network_hash_name.clone(),
+                    interface_name: tear.config.bridge_name.clone(),
+                    isolation: tear.config.isolation,
+                    dns_port: tear.config.dns_port,
+                    outbound_addr4: tear.config.outbound_addr4,
+                    outbound_addr6: tear.config.outbound_addr6,
+                };
+                let chains = get_network_chains(conn, config);
 
                 for c in &chains {
                     c.remove_rules(tear.complete_teardown)?;
