@@ -8,6 +8,7 @@ pub mod setup;
 pub mod teardown;
 pub mod update;
 pub mod version;
+pub mod nftables_reload;
 
 fn get_config_dir(dir: Option<OsString>, cmd: &str) -> NetavarkResult<OsString> {
     dir.ok_or_else(|| {
