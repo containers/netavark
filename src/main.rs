@@ -3,6 +3,7 @@ use std::ffi::OsString;
 use clap::{Parser, Subcommand};
 
 use netavark::commands::dhcp_proxy;
+use netavark::commands::firewall_reload;
 use netavark::commands::firewalld_reload;
 use netavark::commands::setup;
 use netavark::commands::teardown;
@@ -51,6 +52,9 @@ enum SubCommand {
     /// Listen for the firewalld reload event and reload fw rules
     #[command(name = "firewalld-reload")]
     FirewallDReload,
+    // Re-applies firewall rules for all networks.
+    #[command(name = "firewall-reload")]
+    FirewallReload,
 }
 
 fn main() {
@@ -84,6 +88,7 @@ fn main() {
         SubCommand::Version(version) => version.exec(),
         SubCommand::DHCPProxy(proxy) => dhcp_proxy::serve(proxy),
         SubCommand::FirewallDReload => firewalld_reload::listen(config),
+        SubCommand::FirewallReload => firewall_reload::firewall_reload(config),
     };
 
     match result {
