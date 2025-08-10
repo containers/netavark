@@ -1,12 +1,5 @@
 use std::{collections::HashMap, fs, net::IpAddr, os::fd::BorrowedFd};
 
-use ipnet::IpNet;
-use log::{debug, error};
-use netlink_packet_route::link::{
-    BridgeVlanInfoFlags, InfoBridge, InfoData, InfoKind, InfoVeth, LinkAttribute, LinkInfo,
-    LinkMessage,
-};
-
 use crate::dns::aardvark::SafeString;
 use crate::network::core_utils::get_default_route_interface;
 use crate::network::dhcp::{dhcp_teardown, get_dhcp_lease};
@@ -20,6 +13,14 @@ use crate::{
     },
     network::{constants, sysctl::disable_ipv6_autoconf, types},
 };
+use ipnet::IpNet;
+use log::{debug, error};
+use netlink_packet_route::address::{AddressAttribute, AddressScope};
+use netlink_packet_route::link::{
+    BridgeVlanInfoFlags, InfoBridge, InfoData, InfoKind, InfoVeth, LinkAttribute, LinkInfo,
+    LinkMessage,
+};
+use netlink_packet_route::AddressFamily;
 
 use super::{
     constants::{
@@ -77,6 +78,16 @@ struct InternalData {
 pub struct Bridge<'a> {
     info: DriverInfo<'a>,
     data: Option<InternalData>,
+}
+
+struct CreateInterfacesResult {
+    /// The MAC address of the container's veth interface.
+    mac_address: String,
+    /// An optional writer for creating a sysctl.d config file.
+    /// This is only created when a new bridge is created.
+    sysctl_writer: Option<sysctl::SysctlDWriter<'static, String, String>>,
+    /// The interface index of the bridge.
+    bridge_index: u32,
 }
 
 impl<'a> Bridge<'a> {
@@ -166,7 +177,11 @@ impl driver::NetworkDriver for Bridge<'_> {
 
         let (host_sock, netns_sock) = netlink_sockets;
 
-        let (container_veth_mac, sysctl_writer) = create_interfaces(
+        let CreateInterfacesResult {
+            mac_address: container_veth_mac,
+            sysctl_writer,
+            bridge_index,
+        } = create_interfaces(
             host_sock,
             netns_sock,
             data,
@@ -252,18 +267,49 @@ impl driver::NetworkDriver for Bridge<'_> {
                 }
             }
 
-            let gw = data
-                .ipam
-                .gateway_addresses
-                .iter()
-                .map(|ipnet| ipnet.addr())
-                .collect();
+            // Fixes #1177: In unmanaged mode, the gateway IP may not be on the host.
+            // We need to find an IP on the bridge itself for aardvark-dns to bind to.
+            let bind_addr: Vec<IpAddr> = if data.mode == BridgeMode::Unmanaged {
+                let addr_msgs = host_sock.dump_addresses(Some(bridge_index))?;
+
+                let addresses: Vec<IpAddr> = addr_msgs
+                    .into_iter()
+                    .filter_map(|addr_msg| {
+                        // address is either a IPv4 address, or it's an IPv6 address that is not a link-local address.
+                        if (addr_msg.header.family == AddressFamily::Inet6
+                            && addr_msg.header.scope != AddressScope::Link)
+                            || addr_msg.header.family == AddressFamily::Inet
+                        {
+                            addr_msg.attributes.into_iter().find_map(|attr| {
+                                if let AddressAttribute::Address(ip) = attr {
+                                    Some(ip)
+                                } else {
+                                    None
+                                }
+                            })
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                if addresses.is_empty() {
+                    return Err(NetavarkError::msg(format!("bridge '{}' in unmanaged mode has no usable IP addresses. Aardvark-dns requires at least one address (should not be an IPv6 link-local address) to bind to. Please add an IP address or disable DNS for this network (--disable-dns).", data.bridge_interface_name)));
+                }
+                response.dns_server_ips = Some(addresses.clone());
+                addresses
+            } else {
+                data.ipam
+                    .gateway_addresses
+                    .iter()
+                    .map(|ipnet| ipnet.addr())
+                    .collect()
+            };
 
             match self.info.container_id.as_str().try_into() {
                 Ok(id) => Some(AardvarkEntry {
                     network_name: &self.info.network.name,
                     container_id: id,
-                    network_gateways: gw,
+                    network_gateways: bind_addr,
                     network_dns_servers: &self.info.network.network_dns_servers,
                     container_ips_v4: ipv4,
                     container_ips_v6: ipv6,
@@ -553,10 +599,7 @@ fn create_interfaces(
     rootless: bool,
     hostns_fd: BorrowedFd<'_>,
     netns_fd: BorrowedFd<'_>,
-) -> NetavarkResult<(
-    String,
-    Option<sysctl::SysctlDWriter<'static, String, String>>,
-)> {
+) -> NetavarkResult<CreateInterfacesResult> {
     let mut sysctl_writer = None;
     let (bridge_index, mtu, mac) = match host.get_link(netlink::LinkID::Name(
         data.bridge_interface_name.to_string(),
@@ -738,7 +781,11 @@ fn create_interfaces(
         netns_fd,
         mtu,
     )?;
-    Ok((mac, sysctl_writer))
+    Ok(CreateInterfacesResult {
+        mac_address: mac,
+        sysctl_writer,
+        bridge_index,
+    })
 }
 
 /// return the container veth mac address
