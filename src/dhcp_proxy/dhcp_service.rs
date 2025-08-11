@@ -11,8 +11,9 @@ use crate::network::netlink::Route;
 use crate::wrap;
 use log::debug;
 use mozim::{DhcpV4ClientAsync, DhcpV4Config, DhcpV4Lease as MozimV4Lease};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
-
 use tonic::{Code, Status};
 
 /// The kind of DhcpServiceError that can be caused when finding a dhcp lease
@@ -39,6 +40,7 @@ impl DhcpServiceError {
 }
 
 /// DHCP service is responsible for creating, handling, and managing the dhcp lease process.
+#[derive(Debug)]
 pub struct DhcpV4Service {
     client: DhcpV4ClientAsync,
     network_config: NetworkConfig,
@@ -129,6 +131,28 @@ impl DhcpV4Service {
             "Could not find a lease within the timeout limit".to_string(),
         ))
     }
+
+    /// Sends a DHCPRELEASE message for the given lease.
+    /// This is a "best effort" operation and should not block teardown.
+    pub fn release_lease(&mut self) -> Result<(), DhcpServiceError> {
+        if let Some(lease) = &self.previous_lease {
+            debug!(
+                "Attempting to release lease for MAC: {}",
+                &self.network_config.container_mac_addr
+            );
+            // Directly call the release function on the underlying mozim client.
+            self.client
+                .release(lease)
+                .map_err(|e| DhcpServiceError::new(Bug, e.to_string()))
+        } else {
+            // No previous lease recorded; nothing to release. Best-effort -> succeed silently.
+            debug!(
+                "No previous lease to release for MAC: {}",
+                &self.network_config.container_mac_addr
+            );
+            Ok(())
+        }
+    }
 }
 
 impl std::fmt::Display for DhcpServiceError {
@@ -149,50 +173,47 @@ impl From<DhcpServiceError> for Status {
     }
 }
 
-pub async fn process_client_stream(mut client: DhcpV4Service) {
-    while let Some(lease) = client.client.next().await {
-        match lease {
+pub async fn process_client_stream(service_arc: Arc<Mutex<DhcpV4Service>>) {
+    let mut client = service_arc.lock().await;
+    while let Some(lease_result) = client.client.next().await {
+        match lease_result {
             Ok(lease) => {
                 log::info!(
                     "got new lease for mac {}: {:?}",
                     &client.network_config.container_mac_addr,
                     &lease
                 );
-                // get previous lease and check if ip addr changed, if not we do not have to do anything
+
                 if let Some(old_lease) = &client.previous_lease {
                     if old_lease.yiaddr != lease.yiaddr
                         || old_lease.subnet_mask != lease.subnet_mask
                         || old_lease.gateways != lease.gateways
                     {
-                        // ips do not match, remove old ones and assign new ones.
                         log::info!(
                             "ip or gateway for mac {} changed, update address",
                             &client.network_config.container_mac_addr
                         );
-                        match update_lease_ip(
+                        if let Err(err) = update_lease_ip(
                             &client.network_config.ns_path,
                             &client.network_config.container_iface,
                             old_lease,
                             &lease,
                         ) {
-                            Ok(_) => {}
-                            Err(err) => {
-                                log::error!("{err}");
-                                continue;
-                            }
+                            log::error!("{err}");
                         }
                     }
                 }
-                client.previous_lease = Some(lease)
+                client.previous_lease = Some(lease);
             }
-            Err(err) => log::error!(
-                "Failed to renew lease for {}: {err}",
-                &client.network_config.container_mac_addr
-            ),
+            Err(err) => {
+                log::error!(
+                    "Failed to renew lease for {}: {err}",
+                    &client.network_config.container_mac_addr
+                );
+            }
         }
     }
 }
-
 fn update_lease_ip(
     netns: &str,
     interface: &str,

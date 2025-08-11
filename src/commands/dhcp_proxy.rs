@@ -38,6 +38,8 @@ use tonic::{
     transport::Server, Code, Code::Internal, Code::InvalidArgument, Request, Response, Status,
 };
 
+type TaskData = (Arc<tokio::sync::Mutex<DhcpV4Service>>, AbortHandle);
+
 #[derive(Debug)]
 /// This is the tonic netavark proxy service that is required to impl the Netavark Proxy trait which
 /// includes the gRPC methods defined in proto/proxy.proto. We can store a atomically referenced counted
@@ -59,7 +61,7 @@ struct NetavarkProxyService<W: Write + Clear> {
     timeout_sender: Option<Arc<Mutex<Sender<i32>>>>,
     // All dhcp poll will be spawned on a new task, keep track of it so
     // we can remove it on teardown. The key is the container mac.
-    task_map: Arc<Mutex<HashMap<String, AbortHandle>>>,
+    task_map: Arc<Mutex<HashMap<String, TaskData>>>,
 }
 
 impl<W: Write + Clear> NetavarkProxyService<W> {
@@ -136,8 +138,8 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
         };
     }
 
-    /// When a container is shut down this method should be called. It will clear the lease information
-    /// from the caching system.
+    /// When a container is shut down this method should be called. It will release the
+    /// DHCP lease and clear the lease information from the caching system.
     async fn teardown(
         &self,
         request: Request<NetworkConfig>,
@@ -149,12 +151,25 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
         let cache = self.cache.clone();
         let tasks = self.task_map.clone();
 
-        let task = tasks
-            .lock()
-            .expect("lock tasks")
-            .remove(&nc.container_mac_addr);
-        if let Some(handle) = task {
-            handle.abort();
+        let maybe_service_arc = {
+            // Scope for the std::sync::MutexGuard
+            let mut tasks_guard = tasks.lock().expect("lock tasks");
+
+            if let Some((service_arc, handle)) = tasks_guard.remove(&nc.container_mac_addr) {
+                handle.abort();
+                Some(service_arc)
+            } else {
+                None
+            }
+        };
+        if let Some(service_arc) = maybe_service_arc {
+            let mut service = service_arc.lock().await;
+            if let Err(e) = service.release_lease() {
+                warn!(
+                    "Failed to send DHCPRELEASE for {}: {}",
+                    &nc.container_mac_addr, e
+                );
+            }
         }
 
         // Remove the client from the cache dir
@@ -406,7 +421,7 @@ async fn process_setup<W: Write + Clear>(
     network_config: NetworkConfig,
     timeout: u32,
     cache: Arc<Mutex<LeaseCache<W>>>,
-    tasks: Arc<Mutex<HashMap<String, AbortHandle>>>,
+    tasks: Arc<Mutex<HashMap<String, TaskData>>>,
 ) -> Result<NetavarkLease, Status> {
     let container_network_interface = network_config.container_iface.clone();
     let ns_path = network_config.ns_path.clone();
@@ -422,11 +437,13 @@ async fn process_setup<W: Write + Clear>(
             let mut service = DhcpV4Service::new(network_config, timeout)?;
 
             let lease = service.get_lease().await?;
-            let task = tokio::spawn(process_client_stream(service));
+            let service_arc = Arc::new(tokio::sync::Mutex::new(service));
+            let service_arc_clone = service_arc.clone();
+            let task_handle = tokio::spawn(process_client_stream(service_arc_clone));
             tasks
                 .lock()
                 .expect("lock tasks")
-                .insert(mac.to_string(), task.abort_handle());
+                .insert(mac.to_string(), (service_arc, task_handle.abort_handle()));
             lease
         }
         //V6 TODO implement DHCPv6
