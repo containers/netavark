@@ -375,7 +375,7 @@ function stop_dhcp() {
 }
 
 function start_proxy() {
-  RUST_LOG=info ip netns exec "$NS_NAME" $NETAVARK dhcp-proxy --dir "$TMP_TESTDIR" --uds "$TMP_TESTDIR" &>"$TMP_TESTDIR/proxy.log" &
+  RUST_LOG=debug ip netns exec "$NS_NAME" $NETAVARK dhcp-proxy --dir "$TMP_TESTDIR" --uds "$TMP_TESTDIR" &>"$TMP_TESTDIR/proxy.log" &
   PROXY_PID=$!
 }
 
