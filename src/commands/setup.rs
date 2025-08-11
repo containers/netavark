@@ -160,8 +160,11 @@ impl Setup {
     }
 }
 
-fn teardown_drivers<'a, I>(drivers: I, host: &mut netlink::Socket, netns: &mut netlink::Socket)
-where
+fn teardown_drivers<'a, I>(
+    drivers: I,
+    host: &mut netlink::Socket,
+    netns: &mut netlink::Socket<netlink::ContainerNS>,
+) where
     I: Iterator<Item = &'a Box<dyn NetworkDriver + 'a>>,
 {
     for driver in drivers {

@@ -145,7 +145,10 @@ impl driver::NetworkDriver for Vlan<'_> {
 
     fn setup(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (
+            &mut netlink::Socket,
+            &mut netlink::Socket<netlink::ContainerNS>,
+        ),
     ) -> Result<(StatusBlock, Option<AardvarkEntry>), NetavarkError> {
         let data = match &self.data {
             Some(d) => d,
@@ -218,7 +221,10 @@ impl driver::NetworkDriver for Vlan<'_> {
 
     fn teardown(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (
+            &mut netlink::Socket,
+            &mut netlink::Socket<netlink::ContainerNS>,
+        ),
     ) -> NetavarkResult<()> {
         dhcp_teardown(&self.info, netlink_sockets.1)?;
 
@@ -236,7 +242,7 @@ impl driver::NetworkDriver for Vlan<'_> {
 
 fn setup(
     host: &mut netlink::Socket,
-    netns: &mut netlink::Socket,
+    netns: &mut netlink::Socket<netlink::ContainerNS>,
     if_name: &str,
     data: &InternalData,
     hostns_fd: BorrowedFd<'_>,

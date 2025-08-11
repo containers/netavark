@@ -36,7 +36,10 @@ impl NetworkDriver for PluginDriver<'_> {
 
     fn setup(
         &self,
-        _netlink_sockets: (&mut super::netlink::Socket, &mut super::netlink::Socket),
+        _netlink_sockets: (
+            &mut super::netlink::Socket,
+            &mut super::netlink::Socket<super::netlink::ContainerNS>,
+        ),
     ) -> NetavarkResult<(types::StatusBlock, Option<AardvarkEntry>)> {
         let result = self.exec_plugin(true, self.info.netns_path).wrap(format!(
             "plugin {:?} failed",
@@ -49,7 +52,10 @@ impl NetworkDriver for PluginDriver<'_> {
 
     fn teardown(
         &self,
-        _netlink_sockets: (&mut super::netlink::Socket, &mut super::netlink::Socket),
+        _netlink_sockets: (
+            &mut super::netlink::Socket,
+            &mut super::netlink::Socket<super::netlink::ContainerNS>,
+        ),
     ) -> NetavarkResult<()> {
         self.exec_plugin(false, self.info.netns_path).wrap(format!(
             "plugin {:?} failed",
