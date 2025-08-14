@@ -39,7 +39,7 @@ pub trait NetworkDriver {
     fn setup(
         &self,
         netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
-    ) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry>)>;
+    ) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry<'_>>)>;
     /// teardown the network interfaces/firewall rules for this driver
     fn teardown(
         &self,

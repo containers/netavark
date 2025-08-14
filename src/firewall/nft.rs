@@ -791,7 +791,7 @@ fn delete_port_rules<'a>(
 }
 
 /// Convert a subnet into a chain name.
-fn get_subnet_chain_name(subnet: IpNet, net_id: &str, dnat: bool) -> Cow<str> {
+fn get_subnet_chain_name(subnet: IpNet, net_id: &str, dnat: bool) -> Cow<'_, str> {
     // nftables is very lenient around chain name lengths.
     // So let's use the full IP to be unambiguous.
     // Replace . and : with _, and / with _nm (netmask), to remove special characters.
@@ -815,7 +815,7 @@ fn get_subnet_chain_name(subnet: IpNet, net_id: &str, dnat: bool) -> Cow<str> {
 
 /// Get a statement to match the given destination bridge.
 /// Always matches using ==.
-fn get_dest_bridge_match(bridge: &str) -> stmt::Statement {
+fn get_dest_bridge_match(bridge: &str) -> stmt::Statement<'_> {
     stmt::Statement::Match(stmt::Match {
         left: expr::Expression::Named(expr::NamedExpression::Meta(expr::Meta {
             key: expr::MetaKey::Oifname,
@@ -883,7 +883,7 @@ fn subnet_to_payload<'a>(net: &IpNet, field: &'a str) -> expr::Expression<'a> {
 
 /// Get a condition to match destination port/ports based on a given PortMapping.
 /// Properly handles port ranges, protocol, etc.
-fn get_dport_cond(port: &PortMapping) -> stmt::Statement {
+fn get_dport_cond(port: &PortMapping) -> stmt::Statement<'_> {
     stmt::Statement::Match(stmt::Match {
         left: expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload::PayloadField(
             expr::PayloadField {
@@ -1089,7 +1089,7 @@ fn get_dnat_rules_for_addr_family<'a>(
 }
 
 /// Make a DNAT rule to allow DNS traffic to a DNS server on a non-standard port (53 -> actual port).
-fn make_dns_dnat_rule(dns_ip: &IpAddr, dns_port: u16) -> schema::NfListObject {
+fn make_dns_dnat_rule(dns_ip: &IpAddr, dns_port: u16) -> schema::NfListObject<'_> {
     let rule = schema::Rule {
         family: types::NfFamily::INet,
         table: Cow::Borrowed(TABLENAME),
@@ -1156,7 +1156,7 @@ fn make_complex_chain(
     chain_type: types::NfChainType,
     hook: types::NfHook,
     priority: i32,
-) -> schema::NfListObject {
+) -> schema::NfListObject<'_> {
     schema::NfListObject::Chain(schema::Chain {
         family: types::NfFamily::INet,
         table: Cow::Borrowed(TABLENAME),

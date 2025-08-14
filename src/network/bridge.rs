@@ -148,7 +148,7 @@ impl driver::NetworkDriver for Bridge<'_> {
     fn setup(
         &self,
         netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
-    ) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry>)> {
+    ) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry<'_>>)> {
         let data = match &self.data {
             Some(d) => d,
             None => return Err(NetavarkError::msg("must call validate() before setup()")),

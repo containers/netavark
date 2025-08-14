@@ -146,7 +146,7 @@ impl driver::NetworkDriver for Vlan<'_> {
     fn setup(
         &self,
         netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
-    ) -> Result<(StatusBlock, Option<AardvarkEntry>), NetavarkError> {
+    ) -> Result<(StatusBlock, Option<AardvarkEntry<'_>>), NetavarkError> {
         let data = match &self.data {
             Some(d) => d,
             None => return Err(NetavarkError::msg("must call validate() before setup()")),
