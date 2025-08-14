@@ -985,6 +985,36 @@ net/ipv4/conf/podman1/rp_filter = 2"
 @test "$fw_driver - port forwarding ipv4 - tcp with firewalld reload" {
     test_port_fw firewalld_reload=true
 }
+@test "$fw_driver - test firewall-reload" {
+    # setup a simple bridge network
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+
+    # verify the rules are there initially
+    check_simple_bridge_nftables
+
+    # check that the firewall config files exist
+    net_id=$(jq -r '.network_info.podman.id' < "${TESTSDIR}/testfiles/simplebridge.json")
+    config_file="$NETAVARK_TMPDIR/config/firewall/networks/$net_id"
+    run_helper test -f "$config_file"
+    assert "$status" == "0" "network config file $config_file should exist"
+    # flush all nftables rules
+    run_in_host_netns nft flush ruleset
+
+    # verify the netavark table is gone
+    expected_rc=1 run_in_host_netns nft list table inet netavark
+    assert "$output" =~ "Error: No such file or directory" "netavark table should be gone"
+
+    # run firewall-reload to restore the rules
+    RUST_LOG=netavark=debug run_netavark firewall-reload
+    assert "$output" =~ "\[INFO  netavark::commands::firewall_reload\] Successfully reloaded firewall rules" "firewall-reload success message"
+
+    # check that the rules are back
+    check_simple_bridge_nftables
+
+    # teardown the network
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
+}
+
 
 function check_simple_bridge_nftables() {
     # check nftables POSTROUTING chain
