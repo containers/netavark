@@ -37,7 +37,7 @@ impl NetworkDriver for PluginDriver<'_> {
     fn setup(
         &self,
         _netlink_sockets: (&mut super::netlink::Socket, &mut super::netlink::Socket),
-    ) -> NetavarkResult<(types::StatusBlock, Option<AardvarkEntry>)> {
+    ) -> NetavarkResult<(types::StatusBlock, Option<AardvarkEntry<'_>>)> {
         let result = self.exec_plugin(true, self.info.netns_path).wrap(format!(
             "plugin {:?} failed",
             &self.path.file_name().unwrap_or_default()

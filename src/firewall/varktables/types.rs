@@ -88,7 +88,7 @@ impl VarkChain<'_> {
         table: String,
         chain_name: String,
         td_policy: Option<TeardownPolicy>,
-    ) -> VarkChain {
+    ) -> VarkChain<'_> {
         VarkChain {
             driver,
             chain_name,
