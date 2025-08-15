@@ -15,8 +15,12 @@ packages:
 
 srpm_build_deps:
   - cargo
+  - git-archive-all
   - make
   - openssl-devel
+
+actions:
+  fix-spec-file: "bash .packit-copr-rpm.sh"
 
 jobs:
   - job: copr_build
