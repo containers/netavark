@@ -175,10 +175,12 @@ impl firewall::FirewallDriver for Nftables {
                         key: expr::MetaKey::Mark,
                     })),
                     value: expr::Expression::BinaryOperation(Box::new(expr::BinaryOperation::OR(
-                        expr::Expression::Named(expr::NamedExpression::Meta(expr::Meta {
-                            key: expr::MetaKey::Mark,
-                        })),
-                        expr::Expression::Number(MASK),
+                        vec![
+                            expr::Expression::Named(expr::NamedExpression::Meta(expr::Meta {
+                                key: expr::MetaKey::Mark,
+                            })),
+                            expr::Expression::Number(MASK),
+                        ],
                     ))),
                 })]),
             ));
