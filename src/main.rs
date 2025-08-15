@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 
 use netavark::commands::dhcp_proxy;
 use netavark::commands::firewalld_reload;
+use netavark::commands::nftables_reload;
 use netavark::commands::setup;
 use netavark::commands::teardown;
 use netavark::commands::update;
@@ -51,6 +52,9 @@ enum SubCommand {
     /// Listen for the firewalld reload event and reload fw rules
     #[command(name = "firewalld-reload")]
     FirewallDReload,
+    /// Reload netavark nftables firewall rules
+    #[command(name = "nftables-reload")]
+    NftablesReload,
 }
 
 fn main() {
@@ -84,6 +88,7 @@ fn main() {
         SubCommand::Version(version) => version.exec(),
         SubCommand::DHCPProxy(proxy) => dhcp_proxy::serve(proxy),
         SubCommand::FirewallDReload => firewalld_reload::listen(config),
+        SubCommand::NftablesReload => nftables_reload::reload_nftables(config),
     };
 
     match result {
