@@ -118,10 +118,12 @@ cd docs
 %preun
 %systemd_preun %{name}-dhcp-proxy.service
 %systemd_preun %{name}-firewalld-reload.service
+%systemd_preun %{name}-nftables-reload.service
 
 %postun
 %systemd_postun %{name}-dhcp-proxy.service
 %systemd_postun %{name}-firewalld-reload.service
+%systemd_postun %{name}-nftables-reload.service
 
 %files
 %license LICENSE
@@ -136,6 +138,7 @@ cd docs
 %{_unitdir}/%{name}-dhcp-proxy.service
 %{_unitdir}/%{name}-dhcp-proxy.socket
 %{_unitdir}/%{name}-firewalld-reload.service
+%{_unitdir}/%{name}-nftables-reload.service
 
 %changelog
 %autochangelog
