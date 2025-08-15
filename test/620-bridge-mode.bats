@@ -44,3 +44,28 @@ load helpers
     expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/bridge-managed-dhcp.json setup $(get_container_netns_path)
     assert_json ".error" "cannot use dhcp ipam driver without using the option mode=unmanaged" "dhcp error"
 }
+
+@test bridge - unmanaged mode with aardvark-dns no bridge ip {
+    run_in_host_netns ip link add brtest0 type bridge
+    run_in_host_netns ip link set brtest0 up
+    run_in_host_netns ip -j --details link show brtest0
+    link_info="$output"
+    assert_json "$link_info" '.[].flags[] | select(.=="UP")' == "UP" "Host bridge interface is up"
+
+    expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/bridge-unmanaged-dns.json setup $(get_container_netns_path)
+    assert_json ".error" "bridge 'brtest0' in unmanaged mode has no universe scope IP addresses, but aardvark-dns requires at least one universe scope address to bind to. Please add an universe scope IP address or disable DNS for this network (--disable-dns)."
+}
+
+@test bridge - unmanaged mode with aardvark-dns bridge ip {
+    run_in_host_netns ip link add brtest0 type bridge
+    run_in_host_netns ip link set brtest0 up
+    run_in_host_netns ip -j --details link show brtest0
+    link_info="$output"
+    assert_json "$link_info" '.[].flags[] | select(.=="UP")' == "UP" "Host bridge interface is up"
+
+    run_in_host_netns ip addr add 10.88.0.1/16 dev brtest0
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-unmanaged-dns.json setup $(get_container_netns_path)
+
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman"
+    assert "${lines[0]}" == "10.88.0.1" "aardvark-dns should bind to the unmanaged bridge IP"
+}

@@ -14,7 +14,7 @@ use netlink_packet_core::{
     NLM_F_REQUEST,
 };
 use netlink_packet_route::{
-    address::AddressMessage,
+    address::{AddressMessage, AddressScope},
     link::{
         AfSpecBridge, BridgeVlanInfo, BridgeVlanInfoFlags, InfoBridge, InfoData, InfoKind,
         LinkAttribute, LinkFlags, LinkInfo, LinkMessage,
@@ -114,6 +114,8 @@ impl Socket {
     pub fn new() -> NetavarkResult<Socket> {
         let mut socket = wrap!(netlink_sys::Socket::new(NETLINK_ROUTE), "open")?;
         let addr = &SocketAddr::new(0, 0);
+        // Needs to be enabled for dump filtering to work
+        socket.set_netlink_get_strict_chk(true)?;
         wrap!(socket.bind(addr), "bind")?;
         wrap!(socket.connect(addr), "connect")?;
 
@@ -409,11 +411,27 @@ impl Socket {
         Ok(links)
     }
 
-    pub fn dump_addresses(&mut self) -> NetavarkResult<Vec<AddressMessage>> {
-        let msg = AddressMessage::default();
+    // If filtering options are supplied, then only the ip addresses satisfying the filter are returned. Otherwise all ip addresses of all interfaces are returned
+    pub fn dump_addresses(
+        &mut self,
+        interface_id_filter: Option<u32>,
+        address_filter: Option<AddressFamily>,
+        scope_filter: Option<AddressScope>,
+    ) -> NetavarkResult<Vec<AddressMessage>> {
+        let mut msg = AddressMessage::default();
 
-        let results = self
-            .make_netlink_request(RouteNetlinkMessage::GetAddress(msg), NLM_F_DUMP | NLM_F_ACK)?;
+        if let Some(id) = interface_id_filter {
+            msg.header.index = id;
+        }
+        if let Some(addr_family) = address_filter {
+            msg.header.family = addr_family;
+        }
+        if let Some(scope) = scope_filter {
+            msg.header.scope = scope;
+        }
+
+        let results =
+            self.make_netlink_request(RouteNetlinkMessage::GetAddress(msg), NLM_F_DUMP)?;
 
         let mut addresses = Vec::with_capacity(results.len());
 
