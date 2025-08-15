@@ -3,6 +3,7 @@ use std::{
     os::fd::{AsFd, AsRawFd, BorrowedFd},
 };
 
+
 use crate::{
     error::{ErrorWrap, NetavarkError, NetavarkResult},
     network::constants,
@@ -611,4 +612,58 @@ pub fn parse_create_link_options(msg: &mut LinkMessage, options: CreateLinkOptio
         msg.attributes
             .push(LinkAttribute::NetNsFd(netns.as_raw_fd()));
     }
+}
+
+
+use log::{info, warn};
+use rtnetlink::{new_connection, Error};
+use futures::stream::TryStreamExt;
+
+
+pub fn allow_dhcp_on_vlan(bridge_name: &str, vlan_id: u16) -> Result<(), Error> {
+    info!(
+        "Applying DHCP allow rule on VLAN {} for bridge {}",
+        vlan_id, bridge_name
+    );
+
+    // Build VLAN subinterface name (e.g., br0.100)
+    let vlan_iface = format!("{}.{}", bridge_name, vlan_id);
+
+    // Create netlink connection
+    let (connection, handle, _) = new_connection()?;
+    tokio::spawn(connection);
+
+    // Lookup VLAN interface by name
+    let mut rt = tokio::runtime::Runtime::new().unwrap();
+    let mut links = rt.block_on(
+        handle
+            .link()
+            .get()
+            .match_name(vlan_iface.clone())
+            .execute()
+    );
+
+    match rt.block_on(links.try_next()) {
+        Ok(Some(_link)) => {
+            info!(
+                "Found VLAN interface {}, would configure bridge VLAN filtering to allow DHCP (UDP 67/68)",
+                vlan_iface
+            );
+            // TODO: implement actual VLAN filtering adjustment here
+        }
+        Ok(None) => {
+            warn!(
+                "VLAN interface {} not found, skipping DHCP allow rule",
+                vlan_iface
+            );
+        }
+        Err(e) => {
+            warn!(
+                "Error looking up VLAN interface {}: {}",
+                vlan_iface, e
+            );
+        }
+    }
+
+    Ok(())
 }

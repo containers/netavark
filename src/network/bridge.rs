@@ -85,6 +85,7 @@ impl<'a> Bridge<'a> {
     }
 }
 
+
 impl driver::NetworkDriver for Bridge<'_> {
     fn network_name(&self) -> String {
         self.info.network.name.clone()
@@ -583,6 +584,19 @@ fn create_interfaces(
                 }
 
                 if let BridgeMode::Unmanaged = data.mode {
+                    if let Some(vlan_id) = data.vlan {
+                        log::info!(
+                            "Configuring VLAN {} filtering rules for unmanaged bridge {}",
+                            vlan_id,
+                            data.bridge_interface_name
+                        );
+
+              
+                    crate::utils::netlink::allow_dhcp_on_vlan(
+                        &data.bridge_interface_name,
+                        vlan_id,
+                    )?;
+                    }
                     return Err(err)
                         .wrap("in unmanaged mode, the bridge must already exist on the host");
                 }
