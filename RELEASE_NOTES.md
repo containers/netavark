@@ -1,5 +1,9 @@
 # Release Notes
 
+## v1.16.1
+
+* Fixed an incompatibility with nftables 1.1.4 json output which broke the firewall rule generation. ([#1303](https://github.com/containers/netavark/issues/1303))
+
 ## v1.16.0
 
 * The netavark bridge driver now defaults to using the MTU of the default route interface when no explicit MTU was configured for the network. This helps in environments where a non standard MTU is used. ([containers/podman#20009](https://github.com/containers/podman/issues/20009))
