@@ -114,6 +114,8 @@ impl Socket {
     pub fn new() -> NetavarkResult<Socket> {
         let mut socket = wrap!(netlink_sys::Socket::new(NETLINK_ROUTE), "open")?;
         let addr = &SocketAddr::new(0, 0);
+        // Needs to be enabled for dump filtering to work
+        socket.set_netlink_get_strict_chk(true)?;
         wrap!(socket.bind(addr), "bind")?;
         wrap!(socket.connect(addr), "connect")?;
 
@@ -409,11 +411,19 @@ impl Socket {
         Ok(links)
     }
 
-    pub fn dump_addresses(&mut self) -> NetavarkResult<Vec<AddressMessage>> {
-        let msg = AddressMessage::default();
+    // If filtering options are supplied, then only the ip addresses satisfying the filter are returned. Otherwise all ip addresses of all interfaces are returned
+    pub fn dump_addresses(
+        &mut self,
+        interface_id_filter: Option<u32>,
+    ) -> NetavarkResult<Vec<AddressMessage>> {
+        let mut msg = AddressMessage::default();
 
-        let results = self
-            .make_netlink_request(RouteNetlinkMessage::GetAddress(msg), NLM_F_DUMP | NLM_F_ACK)?;
+        if let Some(id) = interface_id_filter {
+            msg.header.index = id;
+        }
+
+        let results =
+            self.make_netlink_request(RouteNetlinkMessage::GetAddress(msg), NLM_F_DUMP)?;
 
         let mut addresses = Vec::with_capacity(results.len());
 

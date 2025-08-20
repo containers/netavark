@@ -50,7 +50,7 @@ impl Plugin for Exec {
             }
         }
 
-        let addresses = host.netlink.dump_addresses()?;
+        let addresses = host.netlink.dump_addresses(None)?;
         let mut subnets = Vec::new();
         for address in addresses {
             if address.header.index == link.header.index {
