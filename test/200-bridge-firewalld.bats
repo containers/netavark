@@ -382,3 +382,84 @@ function setup() {
     expected_rc=1 run_netavark -f ${TESTSDIR}/testfiles/invalid-port.json setup $(get_container_netns_path)
     assert_json ".error" "invalid host ip \"abcd\" provided for port 8080" "host ip error"
 }
+
+function strict_port_forwarding_enabled_should_deny_port_forwarding() {
+    local fw_driver="$1"
+    if [ -z "$fw_driver" ]; then
+        echo "Error: No fw_driver provided." >&2 
+        return 1
+    fi
+
+    echo "StrictForwardPorts=yes" > $NETAVARK_TMPDIR/firewalld.conf
+
+    run_in_host_netns firewall-cmd --reload
+    assert "$output" == "success"
+
+    expected_rc=1 run_netavark --firewall-driver $fw_driver --file ${TESTSDIR}/testfiles/bridge-port-tcp-udp.json setup $(get_container_netns_path)
+    assert_json ".error" "Port forwarding not possible as firewalld StrictForwardPorts enabled"
+}
+
+function strict_port_forwarding_disabled_should_allow_port_forwarding() {
+    local fw_driver="$1"
+    if [ -z "$fw_driver" ]; then
+        echo "Error: No fw_driver provided." >&2 
+        return 1
+    fi
+
+    echo "StrictForwardPorts=no" > $NETAVARK_TMPDIR/firewalld.conf
+
+    run_in_host_netns firewall-cmd --reload
+    assert "$output" == "success"
+
+    run_netavark --firewall-driver $fw_driver --file ${TESTSDIR}/testfiles/bridge-port-tcp-udp.json setup $(get_container_netns_path)
+    run_netavark --firewall-driver $fw_driver --file ${TESTSDIR}/testfiles/bridge-port-tcp-udp.json teardown $(get_container_netns_path)
+
+    test_port_fw hostip="127.0.0.1" proto=tcp
+    test_port_fw hostip="127.0.0.1" proto=udp
+}
+
+function strict_port_forwarding_invalid_value_should_warn_and_allow_port_forwarding() {
+    local fw_driver="$1"
+    if [ -z "$fw_driver" ]; then
+        echo "Error: No fw_driver provided." >&2 
+        return 1
+    fi
+
+    echo "StrictForwardPorts=invalid-value" > "$NETAVARK_TMPDIR/firewalld.conf"
+
+    run_in_host_netns firewall-cmd --reload
+    assert "$output" == "success"
+
+    RUST_LOG=netavark=warn run_netavark --firewall-driver $fw_driver --file ${TESTSDIR}/testfiles/bridge-port-tcp-udp.json setup $(get_container_netns_path)
+    assert "$output" =~ "unexpected value from StrictForwardPorts property: invalid-value"
+
+    run_netavark --firewall-driver $fw_driver --file ${TESTSDIR}/testfiles/bridge-port-tcp-udp.json teardown $(get_container_netns_path)
+
+    test_port_fw hostip="127.0.0.1" proto=tcp
+    test_port_fw hostip="127.0.0.1" proto=udp
+}
+
+@test "nftables - strict port forwarding enabled should deny port forwarding" {
+    strict_port_forwarding_enabled_should_deny_port_forwarding nftables
+}
+
+@test "iptables - strict port forwarding enabled should deny port forwarding" {
+    strict_port_forwarding_enabled_should_deny_port_forwarding iptables
+}
+
+@test "iptables - strict port forwarding disabled should allow port forwarding" {
+    strict_port_forwarding_disabled_should_allow_port_forwarding iptables
+}
+
+@test "nftables - strict port forwarding disabled should allow port forwarding" {
+    strict_port_forwarding_disabled_should_allow_port_forwarding nftables
+}
+
+@test "nftables - strict port forwarding invalid value should warn and allow port forwarding" {
+    strict_port_forwarding_invalid_value_should_warn_and_allow_port_forwarding nftables
+}
+
+@test "iptables - strict port forwarding invalid value should warn and allow port forwarding" {
+    strict_port_forwarding_invalid_value_should_warn_and_allow_port_forwarding iptables
+}
+
