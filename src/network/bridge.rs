@@ -876,6 +876,16 @@ fn create_veth_pair<'fd>(
                     &data.container_interface_name
                 );
                 sysctl::apply_sysctl_value(disable_dad_in_container, "0")?;
+                // Accept router advertisements even if forwarding is enabled.
+                // This is required for the container to get a default route in
+                // case of IPv6
+                // by enabling this we don't need to provide the gateway
+                //in the Lease as the kerenl Installs the default route
+                // directly into the container's routing table.
+                sysctl::apply_sysctl_value(
+                    format!("net/ipv6/conf/{}/accept_ra", &data.container_interface_name),
+                    "2",
+                )?;
             }
             let enable_arp_notify = format!(
                 "net/ipv4/conf/{}/arp_notify",
