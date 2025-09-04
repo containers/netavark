@@ -24,7 +24,7 @@ Netavark is a tool for configuring networking for Linux containers. Its features
 
 ## MSRV (Minimum Supported Rust Version)
 
-v1.83
+v1.86
 
 We test that Netavark can be build on this Rust version and on some newer versions.
 All newer versions should also build, and if they do not, the issue should be
