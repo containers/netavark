@@ -1,7 +1,9 @@
 #![cfg_attr(not(unix), allow(unused_imports))]
 
 use crate::dhcp_proxy::cache::{Clear, LeaseCache};
-use crate::dhcp_proxy::dhcp_service::{process_client_stream, DhcpV4Service};
+use crate::dhcp_proxy::dhcp_service::{
+    process_client_stream, DhcpService, DhcpV4Service, DhcpV6Service,
+};
 use crate::dhcp_proxy::ip;
 use crate::dhcp_proxy::lib::g_rpc::netavark_proxy_server::{NetavarkProxy, NetavarkProxyServer};
 use crate::dhcp_proxy::lib::g_rpc::{
@@ -14,6 +16,7 @@ use crate::error::{NetavarkError, NetavarkResult};
 use crate::network::core_utils;
 use clap::Parser;
 use log::{debug, error, warn};
+use mozim::DhcpV6IaType;
 use tokio::task::AbortHandle;
 
 use std::collections::HashMap;
@@ -422,16 +425,25 @@ async fn process_setup<W: Write + Clear>(
             let mut service = DhcpV4Service::new(network_config, timeout)?;
 
             let lease = service.get_lease().await?;
-            let task = tokio::spawn(process_client_stream(service));
+            let task = tokio::spawn(process_client_stream(DhcpService::V4(service)));
             tasks
                 .lock()
                 .expect("lock tasks")
                 .insert(mac.to_string(), task.abort_handle());
             lease
         }
-        //V6 TODO implement DHCPv6
         1 => {
-            return Err(Status::new(InvalidArgument, "ipv6 not yet supported"));
+            // ia_type for conatainers is generally NonTemporaryAddresses
+            let mut service =
+                DhcpV6Service::new(network_config, timeout, DhcpV6IaType::NonTemporaryAddresses)?;
+            let lease = service.get_lease().await?;
+            //    service in the generic DhcpService enum.
+            let task = tokio::spawn(process_client_stream(DhcpService::V6(service)));
+            tasks
+                .lock()
+                .expect("lock tasks")
+                .insert(mac.to_string(), task.abort_handle());
+            lease
         }
         _ => {
             return Err(Status::new(InvalidArgument, "invalid protocol version"));

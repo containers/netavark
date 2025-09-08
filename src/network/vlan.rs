@@ -14,7 +14,7 @@ use crate::{
     error::{ErrorWrap, NetavarkError, NetavarkResult},
     exec_netns,
     network::core_utils::join_netns,
-    network::sysctl::disable_ipv6_autoconf,
+    network::sysctl,
 };
 
 use super::{
@@ -329,7 +329,15 @@ fn setup(
         }
     }
 
-    exec_netns!(hostns_fd, netns_fd, { disable_ipv6_autoconf(if_name) })?;
+    exec_netns!(hostns_fd, netns_fd, {
+        sysctl::disable_ipv6_autoconf(if_name)?;
+        if data.ipam.ipv6_enabled {
+            // Accept router advertisements even if forwarding is enabled.
+            // This is required for the container to get a default route.
+            sysctl::apply_sysctl_value(format!("net/ipv6/conf/{if_name}/accept_ra"), "2")?;
+        }
+        Ok::<(), NetavarkError>(())
+    })?;
 
     let dev = netns
         .get_link(netlink::LinkID::Name(if_name.to_string()))
