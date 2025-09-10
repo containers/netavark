@@ -74,7 +74,7 @@ pub enum NetavarkError {
 
     Serde(serde_json::Error),
 
-    Netlink(netlink_packet_core::error::ErrorMessage),
+    Netlink(netlink_packet_core::ErrorMessage),
 
     List(NetavarkErrorList),
 
@@ -206,8 +206,8 @@ impl From<ipnet::PrefixLenError> for NetavarkError {
     }
 }
 
-impl From<netlink_packet_core::error::ErrorMessage> for NetavarkError {
-    fn from(err: netlink_packet_core::error::ErrorMessage) -> Self {
+impl From<netlink_packet_core::ErrorMessage> for NetavarkError {
+    fn from(err: netlink_packet_core::ErrorMessage) -> Self {
         NetavarkError::Netlink(err)
     }
 }
