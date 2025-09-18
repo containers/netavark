@@ -246,7 +246,15 @@ function setup() {
   NS_PATH="/var/run/netns/$(random_string)"
   NS_NAME=$(basename "$NS_PATH")
   ip netns add "${NS_NAME}"
-  basic_setup
+  #If the test name contains the word "ipv6", it automatically calls 
+  #basic_setup 6 to create an IPv6 environment. Otherwise, it defaults to 
+  #basic_setup 4 for IPv4. This is the key change that allows new 
+  #IPv6 tests to work without breaking existing ones.
+  if [[ "$BATS_TEST_DESCRIPTION" == *"ipv6"* ]]; then
+      basic_setup 6
+  else
+      basic_setup 4
+  fi
 }
 
 function teardown() {
@@ -268,7 +276,8 @@ function basic_teardown(){
 
 
 function basic_setup() {
-  SUBNET_CIDR=$(random_subnet)
+  local version=${1:-4}
+  SUBNET_CIDR=$(random_subnet "$version")
   set_tmpdir
   add_bridge "br0"
   add_veth "veth0" "br0"
@@ -276,7 +285,7 @@ function basic_setup() {
   CONTAINER_MAC=$(echo "$output" | jq -r .[0].address)
   add_veth "veth1" "br0"
   run_in_container_netns ip link set lo up
-  run_dhcp "$TESTSDIR/dnsmasqfiles"
+  run_dhcp "$version"
   start_proxy
 }
 
@@ -326,37 +335,42 @@ function add_veth() {
 }
 
 #
-# run_dhcp /var/tmp/conf
+# run_dhcp <ip_version>
 #
 function run_dhcp() {
-  gw=$(gateway_from_subnet "$SUBNET_CIDR")
-  stripped_subnet=$(strip_last_octet_from_subnet)
+  local version=${1:-4}
+  local gw=$(gateway_from_subnet "$SUBNET_CIDR")
+  local dnsmasq_config=""
 
+  if [ "$version" == "6" ]; then
     read -r -d '\0' dnsmasq_config <<EOF
 interface=br0
-
-# To disable dnsmasq's DNS server functionality.
-
 port=0
-
-
-
-# To enable dnsmasq's DHCP server functionality.
-dhcp-range=${stripped_subnet}50,${stripped_subnet}59,255.255.255.0,2m
-
-# Set gateway as Router. Following two lines are identical.
-dhcp-option=3,$gw
-
-# Set DNS server as Router.
-dhcp-option=6,$gw
-
-# Logging.
-log-facility=/var/log/dnsmasq.log   # logfile path.
+enable-ra
+dhcp-range=::,constructor:br0,ra-names,12h
+dhcp-option=option6:dns-server,[::1]
+log-facility=/var/log/dnsmasq.log
 log-async
-log-queries # log queries.
-log-dhcp    # log dhcp related messages.
+log-queries
+log-dhcp
 \0
 EOF
+  else
+    local stripped_subnet=$(strip_last_octet_from_subnet)
+    read -r -d '\0' dnsmasq_config <<EOF
+interface=br0
+port=0
+dhcp-range=${stripped_subnet}50,${stripped_subnet}59,255.255.255.0,2m
+dhcp-option=3,$gw
+dhcp-option=6,$gw
+log-facility=/var/log/dnsmasq.log
+log-async
+log-queries
+log-dhcp
+\0
+EOF
+  fi
+
   dnsmasq_testdir="${TMP_TESTDIR}/dnsmasq"
   mkdir -p $dnsmasq_testdir
   echo "$dnsmasq_config" > "$dnsmasq_testdir/test.conf"
@@ -375,7 +389,7 @@ function stop_dhcp() {
 }
 
 function start_proxy() {
-  RUST_LOG=info ip netns exec "$NS_NAME" $NETAVARK dhcp-proxy --dir "$TMP_TESTDIR" --uds "$TMP_TESTDIR" &>"$TMP_TESTDIR/proxy.log" &
+  RUST_LOG=debug ip netns exec "$NS_NAME" $NETAVARK dhcp-proxy --dir "$TMP_TESTDIR" --uds "$TMP_TESTDIR" &>"$TMP_TESTDIR/proxy.log" &
   PROXY_PID=$!
 }
 

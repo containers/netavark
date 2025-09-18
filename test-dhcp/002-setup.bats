@@ -30,6 +30,37 @@ EOF
         assert `grep -c "client provides name: foobar" "$TMP_TESTDIR/dnsmasq.log"` == 3
 }
 
+@test "basic ipv6 setup" {
+read -r -d '\0' input_config <<EOF
+{
+"host_iface": "veth1",
+"container_iface": "veth0",
+"container_mac_addr": "$CONTAINER_MAC",
+"domain_name": "example.com",
+"host_name": "foobar-v6",
+"version": 1,
+"ns_path": "$NS_PATH",
+"container_id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+}
+\0
+EOF
+
+run_setup "$input_config"
+# Check that an IPv6 address was assigned
+container_ip=$(echo "$output" | jq -r .yiaddr)
+# The has_ip helper should work for IPv6 too as it's a string match
+has_ip "$container_ip" veth0
+
+# Check that the default IPv6 route is set
+gateway=$(gateway_from_subnet "$SUBNET_CIDR")
+run_in_container_netns ip -6 route show default
+assert "$output" =~ "via $gateway" "default ipv6 gateway should be set"
+
+# Check dnsmasq log for DHCPv6 activity
+assert `grep -c "DHCPv6" "$TMP_TESTDIR/dnsmasq.log"` -gt 0
+
+}
+
 @test "no hostname" {
 
       read -r -d '\0' input_config <<EOF

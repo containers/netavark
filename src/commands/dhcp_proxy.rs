@@ -1,7 +1,9 @@
 #![cfg_attr(not(unix), allow(unused_imports))]
 
 use crate::dhcp_proxy::cache::{Clear, LeaseCache};
-use crate::dhcp_proxy::dhcp_service::{process_client_stream, DhcpV4Service};
+use crate::dhcp_proxy::dhcp_service::{
+    process_client_stream, DhcpService, DhcpV4Service, DhcpV6Service,
+};
 use crate::dhcp_proxy::ip;
 use crate::dhcp_proxy::lib::g_rpc::netavark_proxy_server::{NetavarkProxy, NetavarkProxyServer};
 use crate::dhcp_proxy::lib::g_rpc::{
@@ -14,6 +16,7 @@ use crate::error::{NetavarkError, NetavarkResult};
 use crate::network::core_utils;
 use clap::Parser;
 use log::{debug, error, warn};
+use mozim::DhcpV6IaType;
 use tokio::task::AbortHandle;
 
 use std::collections::HashMap;
@@ -38,7 +41,7 @@ use tonic::{
     transport::Server, Code, Code::Internal, Code::InvalidArgument, Request, Response, Status,
 };
 
-type TaskData = (Arc<tokio::sync::Mutex<DhcpV4Service>>, AbortHandle);
+type TaskData = (Arc<tokio::sync::Mutex<DhcpService>>, AbortHandle);
 
 #[derive(Debug)]
 /// This is the tonic netavark proxy service that is required to impl the Netavark Proxy trait which
@@ -437,7 +440,7 @@ async fn process_setup<W: Write + Clear>(
             let mut service = DhcpV4Service::new(network_config, timeout)?;
 
             let lease = service.get_lease().await?;
-            let service_arc = Arc::new(tokio::sync::Mutex::new(service));
+            let service_arc = Arc::new(tokio::sync::Mutex::new(DhcpService::V4(service)));
             let service_arc_clone = service_arc.clone();
             let task_handle = tokio::spawn(process_client_stream(service_arc_clone));
             tasks
@@ -446,9 +449,20 @@ async fn process_setup<W: Write + Clear>(
                 .insert(mac.to_string(), (service_arc, task_handle.abort_handle()));
             lease
         }
-        //V6 TODO implement DHCPv6
         1 => {
-            return Err(Status::new(InvalidArgument, "ipv6 not yet supported"));
+            // ia_type for conatainers is generally NonTemporaryAddresses
+            let mut service =
+                DhcpV6Service::new(network_config, timeout, DhcpV6IaType::NonTemporaryAddresses)?;
+            let lease = service.get_lease().await?;
+            //    service in the generic DhcpService enum.
+            let service_arc = Arc::new(tokio::sync::Mutex::new(DhcpService::V6(service)));
+            let service_arc_clone = service_arc.clone();
+            let task_handle = tokio::spawn(process_client_stream(service_arc_clone));
+            tasks
+                .lock()
+                .expect("lock tasks")
+                .insert(mac.to_string(), (service_arc, task_handle.abort_handle()));
+            lease
         }
         _ => {
             return Err(Status::new(InvalidArgument, "invalid protocol version"));
