@@ -14,7 +14,7 @@ use crate::{
     error::{ErrorWrap, NetavarkError, NetavarkResult},
     exec_netns,
     network::core_utils::join_netns,
-    network::sysctl::disable_ipv6_autoconf,
+    network::sysctl,
 };
 
 use super::{
@@ -192,6 +192,7 @@ impl driver::NetworkDriver for Vlan<'_> {
                 &container_vlan_mac,
                 self.info.container_hostname.as_deref().unwrap_or(""),
                 self.info.container_id,
+                &data.ipam,
             )?;
             // do not overwrite dns servers set by dns podman flag
             if !self.info.container_dns_servers.is_some() {
@@ -329,7 +330,14 @@ fn setup(
         }
     }
 
-    exec_netns!(hostns_fd, netns_fd, { disable_ipv6_autoconf(if_name) })?;
+    exec_netns!(hostns_fd, netns_fd, {
+        sysctl::disable_ipv6_autoconf(if_name)?;
+        if data.ipam.ipv6_enabled {
+            // This is required for the container to get a default route.
+            sysctl::apply_sysctl_value(format!("net/ipv6/conf/{if_name}/accept_ra"), "1")?;
+        }
+        Ok::<(), NetavarkError>(())
+    })?;
 
     let dev = netns
         .get_link(netlink::LinkID::Name(if_name.to_string()))
