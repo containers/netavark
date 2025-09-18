@@ -8,9 +8,11 @@ use crate::dhcp_proxy::lib::g_rpc::{Lease as NetavarkLease, NetworkConfig};
 use crate::error::{ErrorWrap, NetavarkError, NetavarkResult};
 use crate::network::core_utils;
 use crate::network::netlink::Route;
-use crate::wrap;
 use log::debug;
-use mozim::{DhcpV4ClientAsync, DhcpV4Config, DhcpV4Lease as MozimV4Lease};
+use mozim::{
+    DhcpV4ClientAsync, DhcpV4Config, DhcpV4Lease as MozimV4Lease, DhcpV6ClientAsync, DhcpV6Config,
+    DhcpV6IaType, DhcpV6Lease as MozimV6Lease,
+};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
@@ -26,7 +28,68 @@ pub enum DhcpServiceErrorKind {
     LeaseExpired,
     Unimplemented,
 }
+#[derive(Debug)]
+pub enum DhcpService {
+    V4(DhcpV4Service),
+    V6(DhcpV6Service),
+}
+// Add helper methods to the enum for cleaner access
+impl DhcpService {
+    fn get_net_config(&self) -> &NetworkConfig {
+        match self {
+            DhcpService::V4(c) => &c.network_config,
+            DhcpService::V6(c) => &c.network_config,
+        }
+    }
 
+    fn get_previous_lease(&self) -> Option<MozimLease> {
+        match self {
+            // Get the v4 lease, clone it, and wrap it in the V4 enum variant.
+            DhcpService::V4(c) => c
+                .previous_lease
+                .as_ref()
+                .map(|lease| MozimLease::V4(lease.clone())),
+            // Get the v6 lease, clone it, and wrap it in the V6 enum variant.
+            DhcpService::V6(c) => c
+                .previous_lease
+                .as_ref()
+                .map(|lease| MozimLease::V6(lease.clone())),
+        }
+    }
+
+    fn set_previous_lease(&mut self, lease: MozimLease) {
+        match self {
+            DhcpService::V4(c) => {
+                // We only store the lease if it's the correct V4 variant.
+                if let MozimLease::V4(v4_lease) = lease {
+                    c.previous_lease = Some(v4_lease);
+                } else {
+                    log::error!("Attempted to set a non-V4 lease on a V4 service");
+                }
+            }
+            DhcpService::V6(c) => {
+                // We only store the lease if it's the correct V6 variant.
+                if let MozimLease::V6(v6_lease) = lease {
+                    c.previous_lease = Some(v6_lease);
+                } else {
+                    log::error!("Attempted to set a non-V6 lease on a V6 service");
+                }
+            }
+        }
+    }
+    pub fn release_lease(&mut self) -> Result<(), DhcpServiceError> {
+        match self {
+            DhcpService::V4(c) => c.release_lease(),
+            DhcpService::V6(c) => c.release_lease(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum MozimLease {
+    V4(MozimV4Lease),
+    V6(MozimV6Lease),
+}
 /// A DhcpServiceError is an error caused in the process of finding a dhcp lease
 pub struct DhcpServiceError {
     kind: DhcpServiceErrorKind,
@@ -173,105 +236,256 @@ impl From<DhcpServiceError> for Status {
     }
 }
 
-pub async fn process_client_stream(service_arc: Arc<Mutex<DhcpV4Service>>) {
+pub async fn process_client_stream(service_arc: Arc<Mutex<DhcpService>>) {
     let mut client = service_arc.lock().await;
-    while let Some(lease_result) = client.client.next().await {
+    while let Some(lease_result) = match &mut *client {
+        DhcpService::V4(c) => c.client.next().await.map(|r| r.map(MozimLease::V4)),
+        DhcpService::V6(c) => c.client.next().await.map(|r| r.map(MozimLease::V6)),
+    } {
         match lease_result {
             Ok(lease) => {
+                let net_config = client.get_net_config();
                 log::info!(
-                    "got new lease for mac {}: {:?}",
-                    &client.network_config.container_mac_addr,
+                    "Got new lease for mac {}: {:?}",
+                    &net_config.container_mac_addr,
                     &lease
                 );
-
-                if let Some(old_lease) = &client.previous_lease {
-                    if old_lease.yiaddr != lease.yiaddr
-                        || old_lease.subnet_mask != lease.subnet_mask
-                        || old_lease.gateways != lease.gateways
-                    {
+                // get previous lease and check if ip addr changed, if not we do not have to do anything
+                if let Some(old_lease) = client.get_previous_lease() {
+                    if lease_has_changed(&old_lease, &lease) {
                         log::info!(
-                            "ip or gateway for mac {} changed, update address",
-                            &client.network_config.container_mac_addr
+                            "ip or gateway for mac {} changed, updating address",
+                            &net_config.container_mac_addr
                         );
-                        if let Err(err) = update_lease_ip(
-                            &client.network_config.ns_path,
-                            &client.network_config.container_iface,
-                            old_lease,
+                        if let Err(e) = update_lease_ip(
+                            &net_config.ns_path,
+                            &net_config.container_iface,
+                            &old_lease,
                             &lease,
                         ) {
-                            log::error!("{err}");
+                            log::error!("Failed to update lease IP: {e}");
+                            continue;
                         }
                     }
                 }
-                client.previous_lease = Some(lease);
+                // Use the helper that unwraps and sets the specific lease
+                client.set_previous_lease(lease);
             }
             Err(err) => {
                 log::error!(
-                    "Failed to renew lease for {}: {err}",
-                    &client.network_config.container_mac_addr
+                    "Failed to renew lease for {}: {}",
+                    &client.get_net_config().container_mac_addr,
+                    err
                 );
             }
         }
     }
 }
+
+/// Helper to compare the unified `MozimLease` enum.
+fn lease_has_changed(old: &MozimLease, new: &MozimLease) -> bool {
+    match (old, new) {
+        (MozimLease::V4(old_v4), MozimLease::V4(new_v4)) => {
+            old_v4.yiaddr != new_v4.yiaddr
+                || old_v4.subnet_mask != new_v4.subnet_mask
+                || old_v4.gateways != new_v4.gateways
+        }
+        (MozimLease::V6(old_v6), MozimLease::V6(new_v6)) => {
+            old_v6.addr != new_v6.addr || old_v6.prefix_len != new_v6.prefix_len
+        }
+        _ => true, // could have used unreachable!()
+    }
+}
+
 fn update_lease_ip(
     netns: &str,
     interface: &str,
-    old_lease: &MozimV4Lease,
-    new_lease: &MozimV4Lease,
+    old_lease: &MozimLease,
+    new_lease: &MozimLease,
 ) -> NetavarkResult<()> {
     let (_, netns) =
         core_utils::open_netlink_sockets(netns).wrap("failed to open netlink socket in netns")?;
     let mut sock = netns.netlink;
-    let old_net = wrap!(
-        ipnet::Ipv4Net::with_netmask(old_lease.yiaddr, old_lease.subnet_mask),
-        "create ipnet from old lease"
-    )?;
-    let new_net = wrap!(
-        ipnet::Ipv4Net::with_netmask(new_lease.yiaddr, new_lease.subnet_mask),
-        "create ipnet from new lease"
-    )?;
+    match (old_lease, new_lease) {
+        (MozimLease::V4(old_v4), MozimLease::V4(new_v4)) => {
+            let old_net = ipnet::Ipv4Net::with_netmask(old_v4.yiaddr, old_v4.subnet_mask)?;
+            let new_net = ipnet::Ipv4Net::with_netmask(new_v4.yiaddr, new_v4.subnet_mask)?;
 
-    if new_net != old_net {
-        let link = sock
-            .get_link(crate::network::netlink::LinkID::Name(interface.to_string()))
-            .wrap("get interface in netns")?;
-        sock.add_addr(link.header.index, &ipnet::IpNet::V4(new_net))
-            .wrap("add new addr")?;
-        sock.del_addr(link.header.index, &ipnet::IpNet::V4(old_net))
-            .wrap("remove old addrs")?;
-    }
-    if new_lease.gateways != old_lease.gateways {
-        if let Some(gws) = &old_lease.gateways {
-            let old_gw = gws.first();
-            if let Some(gw) = old_gw {
-                let route = Route::Ipv4 {
-                    dest: ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0)?,
-                    gw: *gw,
-                    metric: None,
-                };
-                match sock.del_route(&route) {
-                    Ok(_) => {}
-                    Err(err) => match err.unwrap() {
-                        // special case do not error if route does not exists
-                        NetavarkError::Netlink(e) if -e.raw_code() == libc::ESRCH => {}
-                        _ => return Err(err).wrap("delete old default route"),
-                    },
-                };
+            // Update the IP address if it has changed
+            if new_net != old_net {
+                let link = sock
+                    .get_link(crate::network::netlink::LinkID::Name(interface.to_string()))
+                    .wrap("get interface in netns")?;
+                sock.add_addr(link.header.index, &ipnet::IpNet::V4(new_net))
+                    .wrap("add new addr")?;
+                sock.del_addr(link.header.index, &ipnet::IpNet::V4(old_net))
+                    .wrap("remove old addrs")?;
+            }
+
+            // Update the default gateway ONLY for IPv4 if it has changed
+            if new_v4.gateways != old_v4.gateways {
+                if let Some(gws) = &old_v4.gateways {
+                    if let Some(gw) = gws.first() {
+                        let route = Route::Ipv4 {
+                            dest: ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0)?,
+                            gw: *gw,
+                            metric: None,
+                        };
+                        match sock.del_route(&route) {
+                            Ok(_) => {}
+                            Err(err) => match err.unwrap() {
+                                NetavarkError::Netlink(e) if -e.raw_code() == libc::ESRCH => {}
+                                _ => return Err(err).wrap("delete old default route"),
+                            },
+                        };
+                    }
+                }
+                if let Some(gws) = &new_v4.gateways {
+                    if let Some(gw) = gws.first() {
+                        let route = Route::Ipv4 {
+                            dest: ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0)?,
+                            gw: *gw,
+                            metric: None,
+                        };
+                        sock.add_route(&route)?;
+                    }
+                }
             }
         }
-        if let Some(gws) = &new_lease.gateways {
-            let new_gw = gws.first();
-            if let Some(gw) = new_gw {
-                let route = Route::Ipv4 {
-                    dest: ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0)?,
-                    gw: *gw,
-                    metric: None,
-                };
-                sock.add_route(&route)?;
-            }
-        }
-    }
+        (MozimLease::V6(old_v6), MozimLease::V6(new_v6)) => {
+            let old_net = ipnet::Ipv6Net::new(old_v6.addr, old_v6.prefix_len)?;
+            let new_net = ipnet::Ipv6Net::new(new_v6.addr, new_v6.prefix_len)?;
 
+            // Update the IP address if it has changed
+            if new_net != old_net {
+                let link = sock
+                    .get_link(crate::network::netlink::LinkID::Name(interface.to_string()))
+                    .wrap("get interface in netns")?;
+                sock.add_addr(link.header.index, &ipnet::IpNet::V6(new_net))?;
+                sock.del_addr(link.header.index, &ipnet::IpNet::V6(old_net))?;
+            }
+            // NO gateway logic for IPv6. This is intentional.
+        }
+        _ => return Err(NetavarkError::msg("Lease type mismatch during IP update")),
+    }
     Ok(())
+}
+
+/// DHCPv6 implementation
+/// DHCP service is responsible for creating, handling, and managing the dhcp lease process.
+#[derive(Debug)]
+pub struct DhcpV6Service {
+    client: DhcpV6ClientAsync,
+    network_config: NetworkConfig,
+    previous_lease: Option<MozimV6Lease>,
+}
+
+impl DhcpV6Service {
+    // for netavark ia_type will be NonTemporaryAddresses
+    pub fn new(
+        nc: NetworkConfig,
+        timeout: u32,
+        ia_type: DhcpV6IaType,
+    ) -> Result<Self, DhcpServiceError> {
+        let mut config = DhcpV6Config::new(&nc.host_iface, ia_type);
+        config.set_timeout(timeout);
+
+        // Sending the hostname to the DHCP server is optional but it can be useful
+        // in environments where DDNS is used to create or update DNS records.
+        if !nc.host_name.is_empty() {
+            // Note: Currently mozim's DhcpV6Config does not have a method to set host name via the FQDN option
+            // If it gets added in the future, add it here
+        };
+
+        // Similar to DHCPv4, we should set a unique identifier for the client
+        // Since the container id remains constant for life of the container
+        // and it should be globally unique, we can use it to create a DUID
+        // using Dhcpv6Duid::Ll (link-layer based) with the container's MAC address
+
+        // We MUST use DUID-LL (Link-Layer) to generate the DHCP Unique Identifier.
+        // A container's identity needs to be stable across restarts and migrations to
+        // receive a persistent IP address.
+        //
+        // DUID-LL is the only type that is purely deterministic, generated solely from
+        // the container's static MAC address. This ensures that if a container is
+        // recreated with the same MAC, it will always produce the same DUID.
+        //
+        // Other types like DUID-LLT are unsuitable because they include a timestamp,
+        // which would generate a new DUID on every container restart, breaking lease
+        // persistence as when the conatainer shifts to a different host on the same network
+        let client = match DhcpV6ClientAsync::init(config, None) {
+            Ok(client) => Ok(client),
+            Err(err) => Err(DhcpServiceError::new(InvalidArgument, err.to_string())),
+        }?;
+        // since it uses DUID instead of MAC address for lease tracking so
+        //doesnt matter if use proxy or not to send the message to the dhcp
+        // server - but for the sake of following the template we are using the
+        // proxy by sending grpc request to it via the uds port
+        Ok(Self {
+            client,
+            network_config: nc,
+            previous_lease: None,
+        })
+    }
+
+    pub async fn get_lease(&mut self) -> Result<NetavarkLease, DhcpServiceError> {
+        if let Some(lease_result) = self.client.next().await {
+            match lease_result {
+                Ok(lease) => {
+                    let mut netavark_lease =
+                        <NetavarkLease as From<MozimV6Lease>>::from(lease.clone());
+                    // the domain name is also filled in the from function
+                    netavark_lease.add_domain_name(&self.network_config.domain_name);
+                    netavark_lease.add_mac_address(&self.network_config.container_mac_addr);
+                    debug!(
+                        "found a lease for {:?}, {:?}",
+                        &self.network_config.container_mac_addr, &netavark_lease
+                    );
+                    self.previous_lease = Some(lease);
+                    return Ok(netavark_lease);
+                }
+                Err(err) => {
+                    return Err(match err.kind() {
+                        mozim::ErrorKind::Timeout => {
+                            DhcpServiceError::new(Timeout, err.to_string())
+                        }
+                        mozim::ErrorKind::InvalidArgument => {
+                            DhcpServiceError::new(InvalidArgument, err.to_string())
+                        }
+                        mozim::ErrorKind::NoLease => {
+                            DhcpServiceError::new(NoLease, err.to_string())
+                        }
+                        mozim::ErrorKind::Bug => DhcpServiceError::new(Bug, err.to_string()),
+                        _ => DhcpServiceError::new(Bug, err.to_string()),
+                    })
+                }
+            }
+        }
+        Err(DhcpServiceError::new(
+            Timeout,
+            "Could not find a lease within the timeout limit".to_string(),
+        ))
+    }
+    /// Sends a DHCPRELEASE message for the given IPv6 lease.
+    /// This is a "best effort" operation and should not block teardown.
+    pub fn release_lease(&mut self) -> Result<(), DhcpServiceError> {
+        // We must check the specific MozimV6Lease from the previous_lease field.
+        if let Some(lease) = &self.previous_lease {
+            debug!(
+                "Attempting to release lease for MAC: {}",
+                &self.network_config.container_mac_addr
+            );
+            // Directly call the release function on the underlying mozim client.
+            self.client
+                .release(lease)
+                .map_err(|e| DhcpServiceError::new(Bug, e.to_string()))
+        } else {
+            // No previous lease, or a type mismatch (which shouldn't happen).
+            debug!(
+                "No previous IPv6 lease to release for MAC: {}",
+                &self.network_config.container_mac_addr
+            );
+            Ok(())
+        }
+    }
 }
