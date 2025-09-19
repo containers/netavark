@@ -1424,7 +1424,7 @@ dependencies = [
  "libc",
  "log",
  "mozim",
- "netlink-packet-core 0.8.0",
+ "netlink-packet-core 0.8.1",
  "netlink-packet-route 0.25.1",
  "netlink-sys",
  "nftables",
@@ -1458,11 +1458,11 @@ dependencies = [
 
 [[package]]
 name = "netlink-packet-core"
-version = "0.8.0"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "745d789fe0958caf7252f5e1e900ce5c09b6a5bf05c7bba02a9cc600866ce31e"
+checksum = "3463cbb78394cb0141e2c926b93fc2197e473394b761986eca3b9da2c63ae0f4"
 dependencies = [
- "pastey",
+ "paste",
 ]
 
 [[package]]
@@ -1501,7 +1501,7 @@ dependencies = [
  "bitflags",
  "libc",
  "log",
- "netlink-packet-core 0.8.0",
+ "netlink-packet-core 0.8.1",
 ]
 
 [[package]]
@@ -1646,12 +1646,6 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
-
-[[package]]
-name = "pastey"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35fb2e5f958ec131621fdd531e9fc186ed768cbe395337403ae56c17a74c68ec"
 
 [[package]]
 name = "percent-encoding"
