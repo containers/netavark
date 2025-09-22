@@ -24,6 +24,8 @@ pub const OPTION_BCLIM: &str = "bclim";
 pub const OPTION_VRF: &str = "vrf";
 pub const OPTION_VLAN: &str = "vlan";
 pub const OPTION_HOST_INTERFACE_NAME: &str = "host_interface_name";
+pub const OPTION_OUTBOUND_ADDR4: &str = "outbound_addr4";
+pub const OPTION_OUTBOUND_ADDR6: &str = "outbound_addr6";
 
 /// 100 is the default metric for most Linux networking tools.
 pub const DEFAULT_METRIC: u32 = 100;
