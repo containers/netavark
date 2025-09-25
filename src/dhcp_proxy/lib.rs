@@ -22,7 +22,8 @@ pub mod g_rpc {
     include!(concat!(env!("OUT_DIR"), "/netavark_proxy.rs"));
     use crate::dhcp_proxy::lib::VectorConv;
     use crate::dhcp_proxy::types::{CustomErr, ProxyError};
-    use mozim::DhcpV4Lease;
+    use dhcproto::v6::{DhcpOption, NtpSuboption};
+    use mozim::{DhcpV4Lease, DhcpV6Lease};
     use std::convert::TryFrom;
     use std::net::Ipv4Addr;
     use std::str::FromStr;
@@ -110,6 +111,83 @@ pub mod g_rpc {
             Ok(lease)
         }
     }
+
+    // DhcpV6Lease
+    // here the fields of DhcpV4Lease are repurposed tarry their equivalents in the DhcpV6Lease
+    impl From<DhcpV6Lease> for Lease {
+        fn from(l: DhcpV6Lease) -> Lease {
+            let mut domain_name = String::new();
+            let mut dns_servers: Vec<String> = Vec::new();
+            let mut ntp_servers: Vec<String> = Vec::new();
+
+            // Iterate through the raw DHCP options from the lease.
+            for option in l.dhcp_opts.iter() {
+                match option {
+                    // Find the DNS Servers option (code 23)
+                    DhcpOption::DomainNameServers(servers) => {
+                        // Convert each Ipv6Addr to a String and collect them.
+                        dns_servers = servers.iter().map(|s| s.to_string()).collect();
+                    }
+                    // Find the Domain Search List option (code 24)
+                    DhcpOption::DomainSearchList(domains) => {
+                        // Convert each domain name part to a string and join them
+                        // with spaces, which is a common format for resolv.conf.
+                        domain_name = domains
+                            .iter()
+                            .map(|d| d.to_string())
+                            .collect::<Vec<String>>()
+                            .join(" ");
+                    }
+                    // Find the NTP Server option (code 56)
+                    DhcpOption::NtpServer(suboptions) => {
+                        for suboption in suboptions {
+                            match suboption {
+                                // Can be a direct unicast or multicast server address
+                                NtpSuboption::ServerAddress(addr)
+                                | NtpSuboption::MulticastAddress(addr) => {
+                                    ntp_servers.push(addr.to_string());
+                                }
+                                // Or it can be a fully-qualified domain name
+                                NtpSuboption::FQDN(name) => {
+                                    ntp_servers.push(name.to_string());
+                                }
+                            }
+                        }
+                    }
+                    // Ignore all other options as they are not needed for the gRPC lease.
+                    _ => {}
+                }
+            }
+            Lease {
+                // some of the fields like mtu, gateways are learnt via Router Advertisements
+                // and the kernel needs to be configured to hear these
+                t1: l.t1,
+                t2: l.t2,
+                lease_time: l.valid_life,
+                yiaddr: l.addr.to_string(),
+                siaddr: l.srv_ip.to_string(),
+                srv_id: hex::encode(l.srv_duid),
+                is_v6: true,
+                domain_name,
+                dns_servers,
+                ntp_servers,
+                subnet_mask: l.prefix_len.to_string(),
+                // Fields that are not applicable to DHCPv6 can be set to default values
+                mac_address: "".to_string(), // DUID is used for identity, not MAC
+                mtu: 0,                      // MTU is learned via Router Advertisements in IPv6
+                broadcast_addr: "".to_string(), // IPv6 uses multicast, not broadcast
+                gateways: Vec::new(),        // Gateways are also learned via Router Advertisements
+                host_name: "".to_string(), // This is sent by the client, not received in the lease
+            }
+        }
+    }
+    // impl TryFrom<Lease> for DhcpV6Lease {
+    //     type Error = ProxyError;
+    //     This conversion is lossy in nature and won't be useful anyways
+    //     fn try_from(l: Lease) -> Result<Self, ProxyError> {
+    //         todo!()
+    //     }
+    // }
 
     fn handle_ip_vectors(ip: Option<Vec<std::net::Ipv4Addr>>) -> Vec<String> {
         let mut ips: Vec<String> = Vec::new();

@@ -246,7 +246,15 @@ function setup() {
   NS_PATH="/var/run/netns/$(random_string)"
   NS_NAME=$(basename "$NS_PATH")
   ip netns add "${NS_NAME}"
-  basic_setup
+  #If the test name contains the word "ipv6", it automatically calls 
+  #basic_setup 6 to create an IPv6 environment. Otherwise, it defaults to 
+  #basic_setup 4 for IPv4. This is the key change that allows new 
+  #IPv6 tests to work without breaking existing ones.
+  if [[ "$BATS_TEST_DESCRIPTION" == *"ipv6"* ]]; then
+      basic_setup 6
+  else
+      basic_setup 4
+  fi
 }
 
 function teardown() {
@@ -268,15 +276,20 @@ function basic_teardown(){
 
 
 function basic_setup() {
-  SUBNET_CIDR=$(random_subnet)
+  local version=${1:-4}
+  SUBNET_CIDR=$(random_subnet "$version")
   set_tmpdir
   add_bridge "br0"
   add_veth "veth0" "br0"
   run_in_container_netns ip -j link show veth0
   CONTAINER_MAC=$(echo "$output" | jq -r .[0].address)
   add_veth "veth1" "br0"
+  # Assign a link-local IPv6 address to the veth1 interface in the host namespace
+  #run_in_container_netns ip addr add fe80::1/64 dev veth1
+  #we need to give some time for the DAD process to finish 
+  sleep 2
   run_in_container_netns ip link set lo up
-  run_dhcp "$TESTSDIR/dnsmasqfiles"
+  run_dhcp "$version"
   start_proxy
 }
 
@@ -326,43 +339,73 @@ function add_veth() {
 }
 
 #
-# run_dhcp /var/tmp/conf
+# run_dhcp <ip_version>
 #
 function run_dhcp() {
-  gw=$(gateway_from_subnet "$SUBNET_CIDR")
-  stripped_subnet=$(strip_last_octet_from_subnet)
+    local version=${1:-4}
+    local gw
+    gw=$(gateway_from_subnet "$SUBNET_CIDR")
+    local dnsmasq_config=""
 
-    read -r -d '\0' dnsmasq_config <<EOF
+    if [ "$version" == "6" ]; then
+        # Get the IPv6 network prefix from the full CIDR.
+        # For example, turn "fd1d:5139:5cb5:1a99::/64" into "fd1d:5139:5cb5:1a99::"
+        local stripped_subnet_v6
+        stripped_subnet_v6=$(echo "$SUBNET_CIDR" | sed 's#::/64#::#')
+
+        read -r -d '\0' dnsmasq_config <<EOF
 interface=br0
-
-# To disable dnsmasq's DNS server functionality.
-
 port=0
-
-
-
-# To enable dnsmasq's DHCP server functionality.
-dhcp-range=${stripped_subnet}50,${stripped_subnet}59,255.255.255.0,2m
-
-# Set gateway as Router. Following two lines are identical.
-dhcp-option=3,$gw
-
-# Set DNS server as Router.
-dhcp-option=6,$gw
-
-# Logging.
-log-facility=/var/log/dnsmasq.log   # logfile path.
+enable-ra
+# Use the dynamically generated subnet for the DHCPv6 range
+dhcp-range=${stripped_subnet_v6}100,${stripped_subnet_v6}200,12h
+dhcp-option=option6:dns-server,[::1]
+log-facility=/var/log/dnsmasq.log
 log-async
-log-queries # log queries.
-log-dhcp    # log dhcp related messages.
+log-queries
+log-dhcp
 \0
 EOF
-  dnsmasq_testdir="${TMP_TESTDIR}/dnsmasq"
-  mkdir -p $dnsmasq_testdir
-  echo "$dnsmasq_config" > "$dnsmasq_testdir/test.conf"
+    else
+        local stripped_subnet
+        stripped_subnet=$(strip_last_octet_from_subnet)
+        read -r -d '\0' dnsmasq_config <<EOF
+interface=br0
+port=0
+dhcp-range=${stripped_subnet}50,${stripped_subnet}59,255.255.255.0,2m
+dhcp-option=3,$gw
+dhcp-option=6,$gw
+log-facility=/var/log/dnsmasq.log
+log-async
+log-queries
+log-dhcp
+\0
+EOF
+    fi
 
-  ip netns exec "${NS_NAME}" dnsmasq --log-debug --log-dhcp --no-daemon --conf-dir "${dnsmasq_testdir}" &>>"$TMP_TESTDIR/dnsmasq.log" &
-  DNSMASQ_PID=$!
+    local dnsmasq_testdir="${TMP_TESTDIR}/dnsmasq"
+    mkdir -p "$dnsmasq_testdir"
+    echo "$dnsmasq_config" > "$dnsmasq_testdir/test.conf"
+
+    echo "--- dnsmasq config files in $dnsmasq_testdir ---"
+    for file in "$dnsmasq_testdir"/*; do
+        if [ -f "$file" ]; then
+            echo "--- Contents of $file ---"
+            cat "$file"
+        fi
+    done
+    echo "------------------------------------------------"
+
+    echo "--- Initial contents of $TMP_TESTDIR/dnsmasq.log ---"
+    # touch the file to make sure it exists
+    touch "$TMP_TESTDIR/dnsmasq.log"
+    cat "$TMP_TESTDIR/dnsmasq.log"
+    echo "----------------------------------------------------"
+    #ip netns exec "${NS_NAME}" dnsmasq --log-debug --log-dhcp --no-daemon --conf-dir "${dnsmasq_testdir}" --conf-file= -
+    ip netns exec "${NS_NAME}" dnsmasq --log-debug --log-dhcp --no-daemon --conf-dir "${dnsmasq_testdir}" &>>"$TMP_TESTDIR/dnsmasq.log" &
+    #ip netns exec "${NS_NAME}" dnsmasq --log-debug --log-dhcp --no-daemon --conf-dir "${dnsmasq_testdir}" --conf-file=/dev/null &>>"$TMP_TESTDIR/dnsmasq.log" &
+    #ip netns exec "${NS_NAME}" dnsmasq --log-debug --log-dhcp --no-daemon -C "${dnsmasq_conf_file}" &>>"$TMP_TESTDIR/dnsmasq.log" &
+    DNSMASQ_PID=$!
 }
 
 #
