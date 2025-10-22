@@ -27,7 +27,7 @@ env:
 
 gcp_credentials: ENCRYPTED[d6efdb7d6d4c61e3831df2193ca6348bb02f26cd931695f69d41930b1965f7dab72a838ca0902f6ed8cde66c7deddae2]
 
-aws_credentials: ENCRYPTED[36b3e82f72ec2c909235b69d88b835a09e230aa289e2925d949b0dc4c813c1b468655aabb05edf3f7dcfed430c320b87]
+aws_credentials: ENCRYPTED[9f65dd26c4b7dc54c72ce2061d22e6719c8c39cc452456e4ca02001039ad8ceee93ad35ed1782d87d71e340af94efa79]
 
 
 build_task:
