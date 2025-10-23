@@ -434,6 +434,33 @@ impl<'a> Bridge<'a> {
     ) -> NetavarkResult<(SetupNetwork, PortForwardConfig<'a>)> {
         let id_network_hash =
             CoreUtils::create_network_hash(&self.info.network.name, MAX_HASH_SIZE);
+        // Parse SNAT configuration from network options
+        // Format: "snat_ipv4": "true|false", "snat_ipv6": "true|false"
+        // Defaults to true for backward compatibility
+        let snat_ipv4 = match parse_option::<bool>(
+            &self.info.network.options,
+            "snat_ipv4",
+        ) {
+            Ok(Some(val)) => val,
+            Ok(None) => true,  // Default to true
+            Err(e) => {
+                debug!("Failed to parse snat_ipv4 option: {}, using default (true)", e);
+                true
+            }
+        };
+
+        let snat_ipv6 = match parse_option::<bool>(
+            &self.info.network.options,
+            "snat_ipv6",
+        ) {
+            Ok(Some(val)) => val,
+            Ok(None) => true,  // Default to true
+            Err(e) => {
+                debug!("Failed to parse snat_ipv6 option: {}, using default (true)", e);
+                true
+            }
+        };
+
         let sn = SetupNetwork {
             subnets: self
                 .info
@@ -446,6 +473,8 @@ impl<'a> Bridge<'a> {
             network_hash_name: id_network_hash.clone(),
             isolation: isolate,
             dns_port: self.info.dns_port,
+            snat_ipv4,
+            snat_ipv6,
         };
 
         let mut has_ipv4 = false;

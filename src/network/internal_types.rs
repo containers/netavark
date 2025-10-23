@@ -26,6 +26,20 @@ pub struct SetupNetwork {
     pub isolation: IsolateOption,
     /// port used for the dns server
     pub dns_port: u16,
+    /// enable SNAT for IPv4 traffic (default: true)
+    #[serde(default = "default_snat_ipv4")]
+    pub snat_ipv4: bool,
+    /// enable SNAT for IPv6 traffic (default: true)
+    #[serde(default = "default_snat_ipv6")]
+    pub snat_ipv6: bool,
+}
+
+fn default_snat_ipv4() -> bool {
+    true
+}
+
+fn default_snat_ipv6() -> bool {
+    true
 }
 
 #[derive(Debug)]

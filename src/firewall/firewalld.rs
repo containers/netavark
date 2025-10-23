@@ -49,8 +49,15 @@ impl firewall::FirewallDriver for FirewallD {
                 ))
             }
         };
+        // Determine if masquerade should be enabled based on SNAT configuration
+        // For firewalld, we check if either IPv4 or IPv6 SNAT is enabled
+        // since firewalld policy applies to both address families at the same level.
+        // Note: Unlike nftables/iptables, firewalld applies masquerade at the policy level,
+        // not per-subnet, so we use OR logic - if any protocol needs SNAT, enable it.
+        let enable_masquerade = network_setup.snat_ipv4 || network_setup.snat_ipv6;
+
         need_reload |= match add_policy_if_not_exist(
-            &self.conn, POLICYNAME, ZONENAME, "ANY", "ACCEPT", true, None,
+            &self.conn, POLICYNAME, ZONENAME, "ANY", "ACCEPT", enable_masquerade, None,
         ) {
             Ok(b) => b,
             Err(e) => {

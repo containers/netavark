@@ -200,6 +200,7 @@ pub fn get_network_chains<'a>(
     interface_name: String,
     isolation: IsolateOption,
     dns_port: u16,
+    enable_snat: bool,
 ) -> Vec<VarkChain<'a>> {
     let mut chains = Vec::new();
     let prefixed_network_hash_name = format!("{}-{}", "NETAVARK", network_hash_name);
@@ -218,14 +219,17 @@ pub fn get_network_chains<'a>(
         Some(TeardownPolicy::OnComplete),
     ));
 
-    let mut multicast_dest = MULTICAST_NET_V4;
-    if is_ipv6 {
-        multicast_dest = MULTICAST_NET_V6;
+    // Only add MASQUERADE rule if SNAT is enabled for this address family
+    if enable_snat {
+        let mut multicast_dest = MULTICAST_NET_V4;
+        if is_ipv6 {
+            multicast_dest = MULTICAST_NET_V6;
+        }
+        hashed_network_chain.build_rule(VarkRule::new(
+            format!("! -d {multicast_dest} -j {MASQUERADE}"),
+            Some(TeardownPolicy::OnComplete),
+        ));
     }
-    hashed_network_chain.build_rule(VarkRule::new(
-        format!("! -d {multicast_dest} -j {MASQUERADE}"),
-        Some(TeardownPolicy::OnComplete),
-    ));
     chains.push(hashed_network_chain);
 
     // POSTROUTING
