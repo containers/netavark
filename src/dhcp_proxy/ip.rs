@@ -8,8 +8,8 @@
 pub use crate::dhcp_proxy::lib::g_rpc::{Lease as NetavarkLease, Lease};
 pub use crate::dhcp_proxy::types::{CustomErr, ProxyError};
 use crate::network::core_utils;
-use crate::network::netlink;
-use crate::network::netlink::Socket;
+use crate::network::netlink_route;
+use crate::network::netlink_route::RouteSocket;
 use ipnet::IpNet;
 use log::debug;
 use std::net::{IpAddr, Ipv4Addr};
@@ -34,8 +34,8 @@ trait Address<T> {
     fn new(l: &Lease, interface: &str) -> Result<Self, ProxyError>
     where
         Self: Sized;
-    fn add_ip(&self, nls: &mut Socket) -> Result<(), ProxyError>;
-    fn add_gws(&self, nls: &mut Socket) -> Result<(), ProxyError>;
+    fn add_ip(&self, nls: &mut RouteSocket) -> Result<(), ProxyError>;
+    fn add_gws(&self, nls: &mut RouteSocket) -> Result<(), ProxyError>;
 }
 
 fn handle_gws(g: Vec<String>, netmask: &str) -> Result<Vec<IpNet>, ProxyError> {
@@ -112,10 +112,10 @@ impl Address<Ipv4Addr> for MacVLAN {
     }
 
     //  add the ip address to the container namespace
-    fn add_ip(&self, nls: &mut Socket) -> Result<(), ProxyError> {
+    fn add_ip(&self, nls: &mut RouteSocket) -> Result<(), ProxyError> {
         debug!("adding network information for {}", self.interface);
         let ip = IpNet::new(self.address, self.prefix_length)?;
-        let dev = nls.get_link(netlink::LinkID::Name(self.interface.clone()))?;
+        let dev = nls.get_link(netlink_route::LinkID::Name(self.interface.clone()))?;
         match nls.add_addr(dev.header.index, &ip) {
             Ok(_) => Ok(()),
             Err(e) => Err(ProxyError::new(e.to_string())),
@@ -123,7 +123,7 @@ impl Address<Ipv4Addr> for MacVLAN {
     }
 
     // add one or more routes to the container namespace
-    fn add_gws(&self, nls: &mut Socket) -> Result<(), ProxyError> {
+    fn add_gws(&self, nls: &mut RouteSocket) -> Result<(), ProxyError> {
         debug!("adding gateways to {}", self.interface);
         match core_utils::add_default_routes(nls, &self.gateways, None) {
             Ok(_) => Ok(()),

@@ -2,7 +2,7 @@
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
 
-    use netavark::network::netlink::*;
+    use netavark::network::netlink_route::*;
     use netlink_packet_route::{address, link::InfoKind};
 
     macro_rules! test_setup {
@@ -28,13 +28,16 @@ mod tests {
     #[test]
     fn test_socket_new() {
         test_setup!();
-        assert!(Socket::new().is_ok(), "Netlink Socket::new() should work");
+        assert!(
+            RouteSocket::new().is_ok(),
+            "Netlink Socket::new() should work"
+        );
     }
 
     #[test]
     fn test_add_link() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = RouteSocket::new().expect("Socket::new()");
 
         let name = String::from("test1");
         sock.create_link(CreateLinkOptions::new(name.clone(), InfoKind::Dummy))
@@ -49,7 +52,7 @@ mod tests {
     #[test]
     fn test_add_addr() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = RouteSocket::new().expect("Socket::new()");
 
         let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
         eprintln!("{}", String::from_utf8(out.stderr).unwrap());
@@ -72,7 +75,7 @@ mod tests {
     #[test]
     fn test_del_addr() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = RouteSocket::new().expect("Socket::new()");
 
         let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
         eprintln!("{}", String::from_utf8(out.stderr).unwrap());
@@ -110,7 +113,7 @@ mod tests {
     #[ignore]
     fn test_del_route() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = RouteSocket::new().expect("Socket::new()");
 
         let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
         eprintln!("{}", String::from_utf8(out.stderr).unwrap());
@@ -159,7 +162,7 @@ mod tests {
     #[test]
     fn test_dump_addr() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = RouteSocket::new().expect("Socket::new()");
 
         let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
         eprintln!("{}", String::from_utf8(out.stderr).unwrap());
@@ -190,7 +193,7 @@ mod tests {
     #[test]
     fn test_dump_addr_filter() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = RouteSocket::new().expect("Socket::new()");
 
         let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
         eprintln!("{}", String::from_utf8(out.stderr).unwrap());

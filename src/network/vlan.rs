@@ -25,7 +25,7 @@ use super::{
     core_utils::{self, get_ipam_addresses, get_mac_address, parse_option, CoreUtils},
     driver::{self, DriverInfo},
     internal_types::IPAMAddresses,
-    netlink::{self, CreateLinkOptions},
+    netlink_route::{self, CreateLinkOptions},
     types::{NetInterface, StatusBlock},
 };
 
@@ -145,7 +145,10 @@ impl driver::NetworkDriver for Vlan<'_> {
 
     fn setup(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (
+            &mut netlink_route::RouteSocket,
+            &mut netlink_route::RouteSocket,
+        ),
     ) -> Result<(StatusBlock, Option<AardvarkEntry<'_>>), NetavarkError> {
         let data = match &self.data {
             Some(d) => d,
@@ -218,7 +221,10 @@ impl driver::NetworkDriver for Vlan<'_> {
 
     fn teardown(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (
+            &mut netlink_route::RouteSocket,
+            &mut netlink_route::RouteSocket,
+        ),
     ) -> NetavarkResult<()> {
         dhcp_teardown(&self.info, netlink_sockets.1)?;
 
@@ -227,7 +233,7 @@ impl driver::NetworkDriver for Vlan<'_> {
             netlink_sockets.1.del_route(route)?;
         }
 
-        netlink_sockets.1.del_link(netlink::LinkID::Name(
+        netlink_sockets.1.del_link(netlink_route::LinkID::Name(
             self.info.per_network_opts.interface_name.to_string(),
         ))?;
         Ok(())
@@ -235,8 +241,8 @@ impl driver::NetworkDriver for Vlan<'_> {
 }
 
 fn setup(
-    host: &mut netlink::Socket,
-    netns: &mut netlink::Socket,
+    host: &mut netlink_route::RouteSocket,
+    netns: &mut netlink_route::RouteSocket,
     if_name: &str,
     data: &InternalData,
     hostns_fd: BorrowedFd<'_>,
@@ -245,7 +251,7 @@ fn setup(
 ) -> NetavarkResult<String> {
     let link = match data.host_interface_name.as_ref() {
         "" => get_default_route_interface(host)?,
-        host_name => host.get_link(netlink::LinkID::Name(host_name.to_string()))?,
+        host_name => host.get_link(netlink_route::LinkID::Name(host_name.to_string()))?,
     };
 
     let opts = match kind_data {
@@ -307,7 +313,7 @@ fn setup(
                     }
 
                     let link = netns
-                        .get_link(netlink::LinkID::Name(tmp_name.clone()))
+                        .get_link(netlink_route::LinkID::Name(tmp_name.clone()))
                         .wrap(format!("get tmp {kind_data} interface"))?;
                     netns
                         .set_link_name(link.header.index, if_name.to_string())
@@ -315,7 +321,8 @@ fn setup(
                         .inspect_err(|_| {
                             // If there is an error here most likely the name in the netns is already used,
                             // make sure to delete the tmp interface.
-                            if let Err(err) = netns.del_link(netlink::LinkID::ID(link.header.index))
+                            if let Err(err) =
+                                netns.del_link(netlink_route::LinkID::ID(link.header.index))
                             {
                                 error!("failed to delete tmp {kind_data} link {tmp_name}: {err}");
                             };
@@ -332,7 +339,7 @@ fn setup(
     exec_netns!(hostns_fd, netns_fd, { disable_ipv6_autoconf(if_name) })?;
 
     let dev = netns
-        .get_link(netlink::LinkID::Name(if_name.to_string()))
+        .get_link(netlink_route::LinkID::Name(if_name.to_string()))
         .wrap(format!("get {kind_data} interface"))?;
 
     for addr in &data.ipam.container_addresses {
@@ -342,7 +349,7 @@ fn setup(
     }
 
     netns
-        .set_up(netlink::LinkID::ID(dev.header.index))
+        .set_up(netlink_route::LinkID::ID(dev.header.index))
         .wrap(format!("set {kind_data} up"))?;
 
     if !data.no_default_route {

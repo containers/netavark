@@ -34,7 +34,7 @@ use super::{
         IPAMAddresses, IsolateOption, PortForwardConfig, SetupNetwork, TearDownNetwork,
         TeardownPortForward,
     },
-    netlink, sysctl,
+    netlink_route, sysctl,
     types::StatusBlock,
 };
 
@@ -158,7 +158,10 @@ impl driver::NetworkDriver for Bridge<'_> {
 
     fn setup(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (
+            &mut netlink_route::RouteSocket,
+            &mut netlink_route::RouteSocket,
+        ),
     ) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry<'_>>)> {
         let data = match &self.data {
             Some(d) => d,
@@ -348,7 +351,10 @@ impl driver::NetworkDriver for Bridge<'_> {
 
     fn teardown(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (
+            &mut netlink_route::RouteSocket,
+            &mut netlink_route::RouteSocket,
+        ),
     ) -> NetavarkResult<()> {
         let mode: Option<String> = parse_option(&self.info.network.options, OPTION_MODE)?;
         let mode = get_bridge_mode_from_string(mode.as_deref())?;
@@ -592,8 +598,8 @@ const IPV6_FORWARD: &str = "net/ipv6/conf/all/forwarding";
 
 /// returns the container veth mac address
 fn create_interfaces(
-    host: &mut netlink::Socket,
-    netns: &mut netlink::Socket,
+    host: &mut netlink_route::RouteSocket,
+    netns: &mut netlink_route::RouteSocket,
     data: &InternalData,
     internal: bool,
     rootless: bool,
@@ -601,7 +607,7 @@ fn create_interfaces(
     netns_fd: BorrowedFd<'_>,
 ) -> NetavarkResult<CreateInterfacesResult> {
     let mut sysctl_writer = None;
-    let (bridge_index, mtu, mac) = match host.get_link(netlink::LinkID::Name(
+    let (bridge_index, mtu, mac) = match host.get_link(netlink_route::LinkID::Name(
         data.bridge_interface_name.to_string(),
     )) {
         Ok(bridge) => {
@@ -696,7 +702,7 @@ fn create_interfaces(
                 // writer must be create before the bridge is created
                 let sw = sysctl::SysctlDWriter::new(path, sysctls);
 
-                let mut create_link_opts = netlink::CreateLinkOptions::new(
+                let mut create_link_opts = netlink_route::CreateLinkOptions::new(
                     data.bridge_interface_name.to_string(),
                     InfoKind::Bridge,
                 );
@@ -724,7 +730,8 @@ fn create_interfaces(
                 }
 
                 if let Some(vrf_name) = &data.vrf {
-                    let vrf = match host.get_link(netlink::LinkID::Name(vrf_name.to_string())) {
+                    let vrf = match host.get_link(netlink_route::LinkID::Name(vrf_name.to_string()))
+                    {
                         Ok(vrf) => check_link_is_vrf(vrf, vrf_name)?,
                         Err(err) => return Err(err).wrap("get vrf to set up bridge interface"),
                     };
@@ -738,7 +745,7 @@ fn create_interfaces(
                 sysctl_writer = Some(sw);
 
                 let link = host
-                    .get_link(netlink::LinkID::Name(
+                    .get_link(netlink_route::LinkID::Name(
                         data.bridge_interface_name.to_string(),
                     ))
                     .wrap("get bridge interface")?;
@@ -761,7 +768,7 @@ fn create_interfaces(
                         .wrap("add ip addr to bridge")?;
                 }
 
-                host.set_up(netlink::LinkID::ID(link.header.index))
+                host.set_up(netlink_route::LinkID::ID(link.header.index))
                     .wrap("set bridge up")?;
 
                 (link.header.index, mtu, mac)
@@ -791,8 +798,8 @@ fn create_interfaces(
 /// return the container veth mac address
 #[allow(clippy::too_many_arguments)]
 fn create_veth_pair<'fd>(
-    host: &mut netlink::Socket,
-    netns: &mut netlink::Socket,
+    host: &mut netlink_route::RouteSocket,
+    netns: &mut netlink_route::RouteSocket,
     data: &InternalData,
     primary_index: u32,
     bridge_mac: Option<Vec<u8>>,
@@ -801,17 +808,19 @@ fn create_veth_pair<'fd>(
     netns_fd: BorrowedFd<'fd>,
     mtu: u32,
 ) -> NetavarkResult<String> {
-    let mut peer_opts =
-        netlink::CreateLinkOptions::new(data.container_interface_name.to_string(), InfoKind::Veth);
+    let mut peer_opts = netlink_route::CreateLinkOptions::new(
+        data.container_interface_name.to_string(),
+        InfoKind::Veth,
+    );
     peer_opts.mac = data.mac_address.clone().unwrap_or_default();
     peer_opts.mtu = mtu;
     peer_opts.netns = Some(netns_fd);
 
     let mut peer = LinkMessage::default();
-    netlink::parse_create_link_options(&mut peer, peer_opts);
+    netlink_route::parse_create_link_options(&mut peer, peer_opts);
 
     let mut host_veth =
-        netlink::CreateLinkOptions::new(data.host_interface_name.clone(), InfoKind::Veth);
+        netlink_route::CreateLinkOptions::new(data.host_interface_name.clone(), InfoKind::Veth);
     host_veth.mtu = mtu;
     host_veth.primary_index = primary_index;
     host_veth.info_data = Some(InfoData::Veth(InfoVeth::Peer(peer)));
@@ -835,7 +844,7 @@ fn create_veth_pair<'fd>(
     })?;
 
     let veth = netns
-        .get_link(netlink::LinkID::Name(
+        .get_link(netlink_route::LinkID::Name(
             data.container_interface_name.to_string(),
         ))
         .wrap("get container veth")?;
@@ -890,7 +899,7 @@ fn create_veth_pair<'fd>(
         })?;
 
         if data.ipam.ipv6_enabled {
-            let host_veth = host.get_link(netlink::LinkID::ID(host_link))?;
+            let host_veth = host.get_link(netlink_route::LinkID::ID(host_link))?;
 
             for nla in host_veth.attributes.into_iter() {
                 if let LinkAttribute::IfName(name) = nla {
@@ -903,7 +912,7 @@ fn create_veth_pair<'fd>(
         }
     }
 
-    host.set_up(netlink::LinkID::ID(host_link))
+    host.set_up(netlink_route::LinkID::ID(host_link))
         .wrap("failed to set host veth up")?;
 
     // Ok this is extremely strange, by default the kernel will always choose the mac address with the
@@ -916,7 +925,7 @@ fn create_veth_pair<'fd>(
     // connected otherwise no connectivity is possible at all and I have no idea why but CNI does it
     // also in the same way.
     if let Some(m) = bridge_mac {
-        host.set_mac_address(netlink::LinkID::ID(primary_index), m)
+        host.set_mac_address(netlink_route::LinkID::ID(primary_index), m)
             .wrap("set static mac on bridge")?;
     }
 
@@ -927,7 +936,7 @@ fn create_veth_pair<'fd>(
     }
 
     netns
-        .set_up(netlink::LinkID::ID(veth.header.index))
+        .set_up(netlink_route::LinkID::ID(veth.header.index))
         .wrap("set container veth up")?;
 
     if !internal && !data.no_default_route {
@@ -948,7 +957,7 @@ fn create_veth_pair<'fd>(
 fn validate_bridge_link(
     msg: LinkMessage,
     vlan: bool,
-    netlink: &mut netlink::Socket,
+    netlink: &mut netlink_route::RouteSocket,
     br_name: &str,
 ) -> NetavarkResult<(u32, u32)> {
     let mut mtu: u32 = 0;
@@ -1038,20 +1047,20 @@ fn check_link_is_vrf(msg: LinkMessage, vrf_name: &str) -> NetavarkResult<LinkMes
 }
 
 fn remove_link(
-    host: &mut netlink::Socket,
-    netns: &mut netlink::Socket,
+    host: &mut netlink_route::RouteSocket,
+    netns: &mut netlink_route::RouteSocket,
     mode: BridgeMode,
     br_name: &str,
     container_veth_name: &str,
 ) -> NetavarkResult<bool> {
     netns
-        .del_link(netlink::LinkID::Name(container_veth_name.to_string()))
+        .del_link(netlink_route::LinkID::Name(container_veth_name.to_string()))
         .wrap(format!(
             "failed to delete container veth {container_veth_name}"
         ))?;
 
     let br = host
-        .get_link(netlink::LinkID::Name(br_name.to_string()))
+        .get_link(netlink_route::LinkID::Name(br_name.to_string()))
         .wrap("failed to get bridge interface")?;
 
     let links = host
@@ -1061,7 +1070,7 @@ fn remove_link(
     if links.is_empty() {
         if let BridgeMode::Managed = mode {
             log::info!("removing bridge {br_name}");
-            host.del_link(netlink::LinkID::ID(br.header.index))
+            host.del_link(netlink_route::LinkID::ID(br.header.index))
                 .wrap(format!("failed to delete bridge {container_veth_name}"))?;
             return Ok(true);
         }

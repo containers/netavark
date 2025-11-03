@@ -7,7 +7,7 @@ use crate::dhcp_proxy::dhcp_service::DhcpServiceErrorKind::{
 use crate::dhcp_proxy::lib::g_rpc::{Lease as NetavarkLease, NetworkConfig};
 use crate::error::{ErrorWrap, NetavarkError, NetavarkResult};
 use crate::network::core_utils;
-use crate::network::netlink::Route;
+use crate::network::netlink_route::Route;
 use crate::wrap;
 use log::debug;
 use mozim::{DhcpV4ClientAsync, DhcpV4Config, DhcpV4Lease as MozimV4Lease};
@@ -234,7 +234,9 @@ fn update_lease_ip(
 
     if new_net != old_net {
         let link = sock
-            .get_link(crate::network::netlink::LinkID::Name(interface.to_string()))
+            .get_link(crate::network::netlink_route::LinkID::Name(
+                interface.to_string(),
+            ))
             .wrap("get interface in netns")?;
         sock.add_addr(link.header.index, &ipnet::IpNet::V4(new_net))
             .wrap("add new addr")?;

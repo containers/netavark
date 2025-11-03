@@ -24,7 +24,7 @@ use netlink_packet_route::{
 };
 use netlink_sys::{protocols::NETLINK_ROUTE, SocketAddr};
 
-pub struct Socket {
+pub struct RouteSocket {
     socket: netlink_sys::Socket,
     sequence_number: u32,
     ///  buffer size for reading netlink messages, see NLMSG_GOODSIZE in the kernel
@@ -110,8 +110,8 @@ macro_rules! function {
     }};
 }
 
-impl Socket {
-    pub fn new() -> NetavarkResult<Socket> {
+impl RouteSocket {
+    pub fn new() -> NetavarkResult<RouteSocket> {
         let mut socket = wrap!(netlink_sys::Socket::new(NETLINK_ROUTE), "open")?;
         let addr = &SocketAddr::new(0, 0);
         // Needs to be enabled for dump filtering to work
@@ -119,7 +119,7 @@ impl Socket {
         wrap!(socket.bind(addr), "bind")?;
         wrap!(socket.connect(addr), "connect")?;
 
-        Ok(Socket {
+        Ok(RouteSocket {
             socket,
             sequence_number: 0,
             buffer: [0; 8192],

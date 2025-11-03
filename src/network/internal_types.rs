@@ -1,4 +1,4 @@
-use super::netlink;
+use super::netlink_route;
 use crate::network::types;
 use std::net::IpAddr;
 
@@ -103,7 +103,7 @@ pub struct IPAMAddresses {
     // if using macvlan and dhcp, then true
     pub dhcp_enabled: bool,
     pub gateway_addresses: Vec<ipnet::IpNet>,
-    pub routes: Vec<netlink::Route>,
+    pub routes: Vec<netlink_route::Route>,
     pub ipv6_enabled: bool,
     // result for podman
     pub net_addresses: Vec<types::NetAddress>,

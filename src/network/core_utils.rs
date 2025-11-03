@@ -17,7 +17,7 @@ use std::os::unix::prelude::*;
 use std::path::Path;
 use std::str::FromStr;
 
-use super::netlink;
+use super::netlink_route;
 
 use netlink_packet_route::link::LinkAttribute;
 
@@ -126,7 +126,7 @@ pub fn get_ipam_addresses<'a>(
                 });
             }
 
-            let routes: Vec<netlink::Route> = match create_route_list(&network.routes) {
+            let routes: Vec<netlink_route::Route> = match create_route_list(&network.routes) {
                 Ok(r) => r,
                 Err(e) => {
                     return Err(e);
@@ -274,7 +274,7 @@ pub struct NamespaceOptions {
     /// Note we have to return the File object since the fd is only valid
     /// as long as the File object is valid
     pub file: File,
-    pub netlink: netlink::Socket,
+    pub netlink: netlink_route::RouteSocket,
 }
 
 pub fn open_netlink_sockets(
@@ -283,11 +283,11 @@ pub fn open_netlink_sockets(
     let netns = open_netlink_socket(netns_path).wrap("open container netns")?;
     let hostns = open_netlink_socket("/proc/self/ns/net").wrap("open host netns")?;
 
-    let host_socket = netlink::Socket::new().wrap("host netlink socket")?;
+    let host_socket = netlink_route::RouteSocket::new().wrap("host netlink socket")?;
     let netns_sock = exec_netns!(
         hostns.as_fd(),
         netns.as_fd(),
-        netlink::Socket::new().wrap("netns netlink socket")
+        netlink_route::RouteSocket::new().wrap("netns netlink socket")
     )?;
 
     Ok((
@@ -307,7 +307,7 @@ fn open_netlink_socket(netns_path: &str) -> NetavarkResult<File> {
 }
 
 pub fn add_default_routes(
-    sock: &mut netlink::Socket,
+    sock: &mut netlink_route::RouteSocket,
     gws: &[ipnet::IpNet],
     metric: Option<u32>,
 ) -> NetavarkResult<()> {
@@ -321,7 +321,7 @@ pub fn add_default_routes(
                 }
                 ipv4 = true;
 
-                netlink::Route::Ipv4 {
+                netlink_route::Route::Ipv4 {
                     dest: ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0)?,
                     gw: v4.addr(),
                     metric,
@@ -333,7 +333,7 @@ pub fn add_default_routes(
                 }
                 ipv6 = true;
 
-                netlink::Route::Ipv6 {
+                netlink_route::Route::Ipv6 {
                     dest: ipnet::Ipv6Net::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0)?,
                     gw: v6.addr(),
                     metric,
@@ -348,7 +348,7 @@ pub fn add_default_routes(
 
 pub fn create_route_list(
     routes: &Option<Vec<types::Route>>,
-) -> NetavarkResult<Vec<netlink::Route>> {
+) -> NetavarkResult<Vec<netlink_route::Route>> {
     match routes {
         Some(rs) => rs
             .iter()
@@ -357,12 +357,12 @@ pub fn create_route_list(
                 let dst = r.destination;
                 let mtr = r.metric;
                 match (gw, dst) {
-                    (IpAddr::V4(gw4), IpNet::V4(dst4)) => Ok(netlink::Route::Ipv4 {
+                    (IpAddr::V4(gw4), IpNet::V4(dst4)) => Ok(netlink_route::Route::Ipv4 {
                         dest: dst4,
                         gw: gw4,
                         metric: mtr,
                     }),
-                    (IpAddr::V6(gw6), IpNet::V6(dst6)) => Ok(netlink::Route::Ipv6 {
+                    (IpAddr::V6(gw6), IpNet::V6(dst6)) => Ok(netlink_route::Route::Ipv6 {
                         dest: dst6,
                         gw: gw6,
                         metric: mtr,
@@ -398,7 +398,9 @@ pub fn is_using_systemd() -> bool {
 }
 
 /// Returns the *first* interface with a default route or an error if no default route interface exists.
-pub fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult<LinkMessage> {
+pub fn get_default_route_interface(
+    host: &mut netlink_route::RouteSocket,
+) -> NetavarkResult<LinkMessage> {
     let routes = host.dump_routes().wrap("dump routes")?;
 
     for route in routes {
@@ -416,7 +418,7 @@ pub fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult
         // if there is no dest we have a default route
         // return the output interface for this route
         if !dest && out_if > 0 {
-            return host.get_link(netlink::LinkID::ID(out_if));
+            return host.get_link(netlink_route::LinkID::ID(out_if));
         }
     }
     Err(NetavarkError::msg("failed to get default route interface"))

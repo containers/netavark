@@ -16,7 +16,7 @@ pub mod core_utils;
 mod dhcp;
 pub mod driver;
 pub mod internal_types;
-pub mod netlink;
+pub mod netlink_route;
 pub mod plugin;
 pub mod sysctl;
 pub mod vlan;

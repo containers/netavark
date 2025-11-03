@@ -8,7 +8,7 @@ use std::{ffi::OsString, net::IpAddr, os::fd::BorrowedFd, path::Path};
 
 use super::{
     bridge::Bridge,
-    constants, netlink,
+    constants, netlink_route,
     plugin::PluginDriver,
     types::{Network, PerNetworkOptions, PortMapping, StatusBlock},
     vlan::Vlan,
@@ -38,12 +38,18 @@ pub trait NetworkDriver {
     /// setup the network interfaces/firewall rules for this driver
     fn setup(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (
+            &mut netlink_route::RouteSocket,
+            &mut netlink_route::RouteSocket,
+        ),
     ) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry<'_>>)>;
     /// teardown the network interfaces/firewall rules for this driver
     fn teardown(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (
+            &mut netlink_route::RouteSocket,
+            &mut netlink_route::RouteSocket,
+        ),
     ) -> NetavarkResult<()>;
 
     /// return the network name
