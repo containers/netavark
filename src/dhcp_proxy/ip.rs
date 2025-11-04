@@ -12,7 +12,7 @@ use crate::network::netlink;
 use crate::network::netlink::Socket;
 use ipnet::IpNet;
 use log::debug;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 
 /*
@@ -88,7 +88,7 @@ impl Address<Ipv4Addr> for MacVLAN {
         let address = match IpAddr::from_str(&l.yiaddr) {
             Ok(a) => a,
             Err(e) => {
-                return Err(ProxyError::new(format!("bad address: {e}")));
+                return Err(ProxyError::new(format!("bad ipv4 address: {e}")));
             }
         };
         let gateways = match handle_gws(l.gateways.clone(), &l.subnet_mask) {
@@ -113,7 +113,7 @@ impl Address<Ipv4Addr> for MacVLAN {
 
     //  add the ip address to the container namespace
     fn add_ip(&self, nls: &mut Socket) -> Result<(), ProxyError> {
-        debug!("adding network information for {}", self.interface);
+        debug!("adding ipv4 network information for {}", self.interface);
         let ip = IpNet::new(self.address, self.prefix_length)?;
         let dev = nls.get_link(netlink::LinkID::Name(self.interface.clone()))?;
         match nls.add_addr(dev.header.index, &ip) {
@@ -132,14 +132,70 @@ impl Address<Ipv4Addr> for MacVLAN {
     }
 }
 
+// IPV6 implementation
+impl Address<Ipv6Addr> for MacVLAN {
+    fn new(l: &NetavarkLease, interface: &str) -> Result<MacVLAN, ProxyError> {
+        debug!("new ipv6 macvlan for {interface}");
+        let address = match IpAddr::from_str(&l.yiaddr) {
+            Ok(a) => a,
+            Err(e) => {
+                return Err(ProxyError::new(format!("bad ipv6 address: {e}")));
+            }
+        };
+        let gateways = Vec::new();
+        let prefix_length = u8::from_str(&l.subnet_mask)
+            .map_err(|e| ProxyError::new(format!("bad ipv6 prefix: {e}")))?;
+
+        Ok(MacVLAN {
+            address,
+            gateways,
+            interface: interface.to_string(),
+            // Disabled for now
+            // mtu: l.mtu,
+            prefix_length,
+        })
+    }
+
+    //  add the ip address to the container namespace
+    fn add_ip(&self, nls: &mut Socket) -> Result<(), ProxyError> {
+        debug!("adding ipv6 network information for {}", self.interface);
+        let ip = IpNet::new(self.address, self.prefix_length)?;
+        let dev = nls.get_link(netlink::LinkID::Name(self.interface.clone()))?;
+        match nls.add_addr(dev.header.index, &ip) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(ProxyError::new(e.to_string())),
+        }
+    }
+
+    /// This is a no-op for IPv6, as gateways are handled by the kernel.
+    fn add_gws(&self, _nls: &mut Socket) -> Result<(), ProxyError> {
+        debug!("skipping gateway setup for ipv6; handled by kernel via Router Advertisements");
+        Ok(())
+    }
+}
+
 // setup takes the DHCP lease and some additional information and
 // applies the TCP/IP information to the namespace.
 pub fn setup(lease: &NetavarkLease, interface: &str, ns_path: &str) -> Result<(), ProxyError> {
     debug!("setting up {interface}");
-    let vlan = MacVLAN::new(lease, interface)?;
     let (_, mut netns) = core_utils::open_netlink_sockets(ns_path)?;
-    vlan.add_ip(&mut netns.netlink)?;
-    vlan.add_gws(&mut netns.netlink)
+    if lease.is_v6 {
+        setup_ipv6(&mut netns.netlink, lease, interface)
+    } else {
+        setup_ipv4(&mut netns.netlink, lease, interface)
+    }
+}
+
+fn setup_ipv4(nls: &mut Socket, lease: &NetavarkLease, interface: &str) -> Result<(), ProxyError> {
+    let vlan = <MacVLAN as Address<Ipv4Addr>>::new(lease, interface)?;
+    <MacVLAN as Address<Ipv4Addr>>::add_ip(&vlan, nls)?;
+    <MacVLAN as Address<Ipv4Addr>>::add_gws(&vlan, nls)
+}
+
+fn setup_ipv6(nls: &mut Socket, lease: &NetavarkLease, interface: &str) -> Result<(), ProxyError> {
+    let vlan = <MacVLAN as Address<Ipv6Addr>>::new(lease, interface)?;
+    <MacVLAN as Address<Ipv6Addr>>::add_ip(&vlan, nls)?;
+    <MacVLAN as Address<Ipv6Addr>>::add_gws(&vlan, nls)
 }
 
 // teardown is likely unnecessary but holding place here
