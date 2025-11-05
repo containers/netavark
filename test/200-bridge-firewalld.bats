@@ -386,7 +386,7 @@ function setup() {
 function strict_port_forwarding_enabled_should_deny_port_forwarding() {
     local fw_driver="$1"
     if [ -z "$fw_driver" ]; then
-        echo "Error: No fw_driver provided." >&2 
+        echo "Error: No fw_driver provided." >&2
         return 1
     fi
 
@@ -402,7 +402,7 @@ function strict_port_forwarding_enabled_should_deny_port_forwarding() {
 function strict_port_forwarding_disabled_should_allow_port_forwarding() {
     local fw_driver="$1"
     if [ -z "$fw_driver" ]; then
-        echo "Error: No fw_driver provided." >&2 
+        echo "Error: No fw_driver provided." >&2
         return 1
     fi
 
@@ -421,7 +421,7 @@ function strict_port_forwarding_disabled_should_allow_port_forwarding() {
 function strict_port_forwarding_invalid_value_should_warn_and_allow_port_forwarding() {
     local fw_driver="$1"
     if [ -z "$fw_driver" ]; then
-        echo "Error: No fw_driver provided." >&2 
+        echo "Error: No fw_driver provided." >&2
         return 1
     fi
 

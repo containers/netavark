@@ -18,7 +18,7 @@ There is also a dedicated firewalld driver in Netavark.
 This driver uses the firewalld DBus API to natively interact with firewalld.
 It can be enabled by setting `firewall_driver` to `firewalld` in `containers.conf`.
 The native firewalld driver offers better integration with firewalld, but presently suffers from several limitations.
-It does not support isolation (the `--opt isolate=` option to `podman network create`.
+It does not support isolation (the `--opt isolate=` option to `podman network create`).
 Connections to ports forwarded by a container on the same host can only be made through the IPv4 localhost IP (`127.0.0.1`).
 Using other IPs on the host will not work, unless the connection comes from a separate host.
 
