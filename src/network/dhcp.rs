@@ -53,6 +53,7 @@ pub fn get_dhcp_lease(
     let lease = match tokio::task::LocalSet::new().block_on(
         match &tokio::runtime::Builder::new_current_thread()
             .enable_io()
+            .enable_time()
             .build()
         {
             Ok(r) => r,
