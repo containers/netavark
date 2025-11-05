@@ -113,6 +113,8 @@ jobs:
       run: cat $VERSION-release-notes.md
     - name: Download all artifacts
       uses: actions/download-artifact@v6
+      with:
+          path: release-artifacts
     - name: Create release
       env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -165,4 +167,3 @@ jobs:
       run: make crate-publish
       env:
         CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
