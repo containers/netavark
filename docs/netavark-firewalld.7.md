@@ -9,7 +9,7 @@ netavark-firewalld - description of the interaction of Netavark and firewalld
 ## Description
 
 Netavark can be used on systems with firewalld enabled without issue.
-When using the default `nftables` or `iptables` firewall drivers, on systems where firewalld is running, firewalld will automatically be configured to allow connectivity to Podman containers.
+When using the default `nftables` firewall driver, on systems where firewalld is running, firewalld will automatically be configured to allow connectivity to Podman containers.
 All subnets of Podman-managed networks will be automatically added to the `trusted` zone to allow this access.
 
 ### Firewalld Driver

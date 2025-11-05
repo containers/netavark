@@ -259,7 +259,7 @@ mod tests {
     fn test_fw_config() {
         let network_id = "abc";
         let container_id = "123";
-        let driver = "iptables";
+        let driver = "nftables";
 
         let tmpdir = Builder::new().prefix("netavark-tests").tempdir().unwrap();
         let config_dir = tmpdir.path();
@@ -308,7 +308,7 @@ mod tests {
         drop(paths.lock_file); // unlock to prevent deadlock with other calls
 
         let res = fs::read_to_string(paths.fw_driver_file).unwrap();
-        assert_eq!(res, "iptables", "read fw driver");
+        assert_eq!(res, "nftables", "read fw driver");
 
         let res = fs::read_to_string(&paths.net_conf_file).unwrap();
         assert_eq!(res, net_conf_json, "read net conf");

@@ -36,7 +36,6 @@ function basic_setup() {
     # hack to make aardvark-dns run when really root or when running as user with
     # podman unshare --rootless-netns; since netavark runs aardvark with systemd-run
     # it needs to know if it should use systemd user instance or not.
-    # iptables are still setup identically.
     rootless=false
     if [[ ! -e "/run/dbus/system_bus_socket" ]]; then
         rootless=true

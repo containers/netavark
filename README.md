@@ -10,7 +10,7 @@ Netavark is a tool for configuring networking for Linux containers. Its features
 * Configuration of container networks via JSON configuration file
 * Creation and management of required network interfaces, including MACVLAN networks
 * All required firewall configuration to perform NAT and port forwarding as required for containers
-* Support for iptables, firewalld and nftables
+* Support for firewalld and nftables
 * Support for rootless containers
 * Support for IPv4 and IPv6
 * Support for container DNS resolution via the [aardvark-dns](https://github.com/containers/aardvark-dns) project
