@@ -285,9 +285,9 @@ function basic_setup() {
 #
 function add_bridge() {
   local bridge_name="$1"
-  br_cidr=$(gateway_from_subnet "$SUBNET_CIDR")
+  local br_gw=$(gateway_from_subnet "$SUBNET_CIDR")
   run_in_container_netns ip link add $bridge_name type bridge
-  run_in_container_netns ip addr add $br_cidr dev $bridge_name
+  run_in_container_netns ip addr add $br_gw/24 dev $bridge_name
   run_in_container_netns ip link set $bridge_name up
 }
 
@@ -330,7 +330,7 @@ function add_veth() {
 #
 function run_dhcp() {
   gw=$(gateway_from_subnet "$SUBNET_CIDR")
-  stripped_subnet=$(strip_last_octet_from_subnet)
+  stripped_subnet=$(strip_last_octet_from_subnet "$SUBNET_CIDR")
 
     read -r -d '\0' dnsmasq_config <<EOF
 interface=br0
@@ -452,16 +452,21 @@ function random_ip_in_subnet() {
 # the first arg must be an subnet created by random_subnet
 # otherwise this function might return an invalid ip
 function gateway_from_subnet() {
-   local num=1
-    net_ip=$(strip_last_octet_from_subnet "$SUBNET_CIDR")
+    local subnet="$1"
+    local num=1
+    net_ip=$(strip_last_octet_from_subnet "$subnet")
     printf "$net_ip%s" $num
 }
 
 
-
+#########################
+#  strip_last_octet_from_subnet  # get the ip from the subnet without its last octet
+#########################
+# requires the subnet as first arg
 function strip_last_octet_from_subnet() {
+    local subnet="$1"
     # first trim subnet
-    local net_ip=${SUBNET_CIDR%/*}
+    local net_ip=${subnet%/*}
     # set first ip in network as gateway
     # if ip has dor it is ipv4
     if [[ "$net_ip" == *"."* ]]; then
