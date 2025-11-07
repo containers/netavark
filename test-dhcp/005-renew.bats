@@ -32,14 +32,14 @@ EOF
 
     # stop dhcp and restart with new subnet to get a new ip on the next lease
     stop_dhcp
-    run_in_container_netns ip add del $(gateway_from_subnet) dev br0
+    run_in_container_netns ip add del $(gateway_from_subnet "$SUBNET_CIDR")/24 dev br0
     run_in_container_netns ip addr
     run_in_container_netns ip route
 
     # get new subnet
     SUBNET_CIDR=$(random_subnet)
-    run_in_container_netns ip addr add $(gateway_from_subnet) dev br0
-    stripped_subnet=$(strip_last_octet_from_subnet)
+    run_in_container_netns ip addr add $(gateway_from_subnet "$SUBNET_CIDR")/24 dev br0
+    stripped_subnet=$(strip_last_octet_from_subnet "$SUBNET_CIDR")
     run_dhcp
 
     run_in_container_netns ip addr
@@ -53,7 +53,7 @@ EOF
 
     # make sure we got the new gateway set as well
     run_in_container_netns ip -j route show default
-    assert "$output" =~ "$(gateway_from_subnet)"
+    assert "$output" =~ "$(gateway_from_subnet "$SUBNET_CIDR")"
 
     # extra check to make sure we got our expected log
     run_helper grep "ip or gateway for mac $CONTAINER_MAC changed" "$TMP_TESTDIR/proxy.log"
