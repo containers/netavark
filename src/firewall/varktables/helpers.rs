@@ -58,9 +58,9 @@ fn chain_exists(driver: &IPTables, table: &str, chain: &str) -> NetavarkResult<b
     };
     if c.iter().any(|i| i == chain) {
         debug_chain_exists(table, chain);
-        return serde::__private::Result::Ok(true);
+        return Ok(true);
     }
-    serde::__private::Result::Ok(false)
+    Ok(false)
 }
 
 pub fn remove_if_rule_exists(
