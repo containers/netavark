@@ -8,11 +8,13 @@ use std::{ffi::OsString, net::IpAddr, os::fd::BorrowedFd, path::Path};
 
 use super::{
     bridge::Bridge,
-    constants, netlink,
+    constants,
     plugin::PluginDriver,
     types::{Network, PerNetworkOptions, PortMapping, StatusBlock},
     vlan::Vlan,
 };
+use crate::network::netlink::Socket;
+use crate::network::netlink_route::NetlinkRoute;
 use std::os::unix::fs::PermissionsExt;
 
 pub struct DriverInfo<'a> {
@@ -38,12 +40,12 @@ pub trait NetworkDriver {
     /// setup the network interfaces/firewall rules for this driver
     fn setup(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (&mut Socket<NetlinkRoute>, &mut Socket<NetlinkRoute>),
     ) -> NetavarkResult<(StatusBlock, Option<AardvarkEntry<'_>>)>;
     /// teardown the network interfaces/firewall rules for this driver
     fn teardown(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (&mut Socket<NetlinkRoute>, &mut Socket<NetlinkRoute>),
     ) -> NetavarkResult<()>;
 
     /// return the network name

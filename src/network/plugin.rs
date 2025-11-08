@@ -14,6 +14,8 @@ use super::{
     driver::{DriverInfo, NetworkDriver},
     types,
 };
+use crate::network::netlink::Socket;
+use crate::network::netlink_route::NetlinkRoute;
 
 pub struct PluginDriver<'a> {
     path: PathBuf,
@@ -36,7 +38,7 @@ impl NetworkDriver for PluginDriver<'_> {
 
     fn setup(
         &self,
-        _netlink_sockets: (&mut super::netlink::Socket, &mut super::netlink::Socket),
+        _netlink_sockets: (&mut Socket<NetlinkRoute>, &mut Socket<NetlinkRoute>),
     ) -> NetavarkResult<(types::StatusBlock, Option<AardvarkEntry<'_>>)> {
         let result = self.exec_plugin(true, self.info.netns_path).wrap(format!(
             "plugin {:?} failed",
@@ -49,7 +51,7 @@ impl NetworkDriver for PluginDriver<'_> {
 
     fn teardown(
         &self,
-        _netlink_sockets: (&mut super::netlink::Socket, &mut super::netlink::Socket),
+        _netlink_sockets: (&mut Socket<NetlinkRoute>, &mut Socket<NetlinkRoute>),
     ) -> NetavarkResult<()> {
         self.exec_plugin(false, self.info.netns_path).wrap(format!(
             "plugin {:?} failed",

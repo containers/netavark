@@ -4,7 +4,8 @@ use crate::dns::aardvark::Aardvark;
 use crate::error::{NetavarkError, NetavarkResult};
 use crate::firewall;
 use crate::network::driver::{get_network_driver, DriverInfo, NetworkDriver};
-use crate::network::netlink::{self, LinkID};
+use crate::network::netlink::Socket;
+use crate::network::netlink_route::{LinkID, NetlinkRoute};
 use crate::network::{self};
 use crate::network::{core_utils, types};
 
@@ -160,8 +161,11 @@ impl Setup {
     }
 }
 
-fn teardown_drivers<'a, I>(drivers: I, host: &mut netlink::Socket, netns: &mut netlink::Socket)
-where
+fn teardown_drivers<'a, I>(
+    drivers: I,
+    host: &mut Socket<NetlinkRoute>,
+    netns: &mut Socket<NetlinkRoute>,
+) where
     I: Iterator<Item = &'a Box<dyn NetworkDriver + 'a>>,
 {
     for driver in drivers {

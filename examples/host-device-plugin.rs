@@ -5,7 +5,7 @@ use std::{collections::HashMap, os::fd::AsFd};
 use netavark::{
     network::{
         core_utils::{open_netlink_sockets, CoreUtils},
-        netlink, types,
+        netlink_route, types,
     },
     new_error,
     plugin::{Info, Plugin, PluginExec, API_VERSION},
@@ -41,7 +41,9 @@ impl Plugin for Exec {
 
         let name = opts.network.network_interface.unwrap_or_default();
 
-        let link = host.netlink.get_link(netlink::LinkID::Name(name.clone()))?;
+        let link = host
+            .netlink
+            .get_link(netlink_route::LinkID::Name(name.clone()))?;
 
         let mut mac_address = String::from("");
         for nla in link.attributes {
@@ -98,7 +100,7 @@ impl Plugin for Exec {
 
         let name = opts.network.network_interface.unwrap_or_default();
 
-        let link = netns.netlink.get_link(netlink::LinkID::Name(name))?;
+        let link = netns.netlink.get_link(netlink_route::LinkID::Name(name))?;
 
         netns
             .netlink

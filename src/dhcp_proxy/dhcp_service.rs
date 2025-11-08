@@ -1,5 +1,6 @@
 use std::{net::Ipv4Addr, sync::Arc};
 
+use crate::network::netlink_route::{LinkID, Route};
 use log::debug;
 use mozim::{DhcpV4Client, DhcpV4Config, DhcpV4Lease as MozimV4Lease, DhcpV4State};
 use tokio::sync::Mutex;
@@ -11,7 +12,7 @@ use crate::{
         lib::g_rpc::{Lease as NetavarkLease, NetworkConfig},
     },
     error::{ErrorWrap, NetavarkError, NetavarkResult},
-    network::{core_utils, netlink::Route},
+    network::core_utils,
     wrap,
 };
 
@@ -257,7 +258,7 @@ fn update_lease_ip(
 
     if new_net != old_net {
         let link = sock
-            .get_link(crate::network::netlink::LinkID::Name(interface.to_string()))
+            .get_link(LinkID::Name(interface.to_string()))
             .wrap("get interface in netns")?;
         sock.add_addr(link.header.index, &ipnet::IpNet::V4(new_net))
             .wrap("add new addr")?;
