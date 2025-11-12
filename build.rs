@@ -64,17 +64,16 @@ fn main() {
     println!("cargo:rustc-env=GIT_COMMIT={commit}");
 
     // Handle default firewall driver.
-    // Allowed values "nftables" and "iptables".
+    // Allowed values "nftables" and "none".
     let fwdriver = match env::var("NETAVARK_DEFAULT_FW")
-        .unwrap_or("iptables".to_string())
+        .unwrap_or("nftables".to_string())
         .as_str()
     {
         "nftables" => "nftables",
-        "iptables" => "iptables",
         "none" => "none",
         inv => panic!("Invalid default firewall driver {inv}"),
     };
-    println!("cargo:rustc-check-cfg=cfg(default_fw, values(\"nftables\", \"iptables\", \"none\"))");
+    println!("cargo:rustc-check-cfg=cfg(default_fw, values(\"nftables\", \"none\"))");
     println!("cargo:rustc-cfg=default_fw=\"{fwdriver}\"");
     println!("cargo:rustc-env=DEFAULT_FW={fwdriver}");
 }

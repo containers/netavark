@@ -62,7 +62,7 @@ pub struct Network {
 /// NetworkOptions for a given container.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NetworkOptions {
-    /// The container id, used for iptables comments and ipam allocation.
+    /// The container id, used for ipam allocation.
     #[serde(rename = "container_id")]
     pub container_id: String,
 
