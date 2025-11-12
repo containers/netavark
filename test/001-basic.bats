@@ -7,11 +7,11 @@ load helpers
 
 @test "netavark version" {
     run_netavark --version
-    assert "$output" =~ "netavark 1\.[0-9]+\.[0-9]+(-rc|-dev)?" "expected version"
+    assert "$output" =~ "netavark 2\.[0-9]+\.[0-9]+(-rc|-dev)?" "expected version"
 
     run_netavark version
     json="$output"
-    assert_json "$json" ".version" =~ "^1\.[0-9]+\.[0-9]+(-rc[0-9]|-dev)?" "correct version"
+    assert_json "$json" ".version" =~ "^2\.[0-9]+\.[0-9]+(-rc[0-9]|-dev)?" "correct version"
     if [ -n "$NETAVARK_UPSTREAM" ]; then
         assert_json "$json" ".commit" =~ "[0-9a-f]{40}" "shows commit sha"
     fi
@@ -33,5 +33,5 @@ load helpers
     # do not use run_netavark here as it sets --config
     run_helper $NETAVARK --config $'/tmp/\xff.test' version
     json="$output"
-    assert_json "$json" ".version" =~ "^1\.[0-9]+\.[0-9]+(-rc[0-9]|-dev)?" "correct version"
+    assert_json "$json" ".version" =~ "^2\.[0-9]+\.[0-9]+(-rc[0-9]|-dev)?" "correct version"
 }
