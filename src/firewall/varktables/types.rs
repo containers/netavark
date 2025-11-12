@@ -452,14 +452,14 @@ pub fn get_port_forwarding_chains<'a>(
     // PREROUTING
     let mut prerouting_chain = VarkChain::new(conn, NAT.to_string(), PREROUTING.to_string(), None);
     prerouting_chain.build_rule(VarkRule::new(
-        format!("-j {NETAVARK_HOSTPORT_DNAT} -m addrtype --dst-type LOCAL"),
+        format!("-m addrtype --dst-type LOCAL -j {NETAVARK_HOSTPORT_DNAT}"),
         Some(TeardownPolicy::Never),
     ));
 
     //  OUTPUT
     let mut output_chain = VarkChain::new(conn, NAT.to_string(), OUTPUT.to_string(), None);
     output_chain.build_rule(VarkRule::new(
-        format!("-j {NETAVARK_HOSTPORT_DNAT} -m addrtype --dst-type LOCAL"),
+        format!("-m addrtype --dst-type LOCAL -j {NETAVARK_HOSTPORT_DNAT}"),
         Some(TeardownPolicy::Never),
     ));
 
@@ -487,7 +487,7 @@ pub fn get_port_forwarding_chains<'a>(
     netavark_hostport_masq_chain.create = true;
     netavark_hostport_masq_chain.build_rule(VarkRule::new(
         format!(
-            "-j {MASQUERADE} -m comment --comment 'netavark portfw masq mark' -m mark --mark {HEXMARK}/{HEXMARK}"
+            "-m mark --mark {HEXMARK}/{HEXMARK} -j {MASQUERADE} -m comment --comment 'netavark portfw masq mark'"
         ),
         Some(TeardownPolicy::Never),
     ));
@@ -524,8 +524,8 @@ pub fn get_port_forwarding_chains<'a>(
             for proto in ["udp", "tcp"] {
                 netavark_hostport_dn_chain.build_rule(VarkRule {
                     rule: format!(
-                        "-j {} -d {} -p {} --dport {} --to-destination {}:{}",
-                        DNAT, dns_ip, proto, 53, ip_value, pfwd.dns_port
+                        "-d {} -p {} --dport {} -j {} --to-destination {}:{}",
+                        dns_ip, proto, 53, DNAT, ip_value, pfwd.dns_port
                     ),
                     // rule should be first otherwise another container might hijack all 53 traffic to itself
                     position: Some(1),
@@ -582,21 +582,21 @@ pub fn get_port_forwarding_chains<'a>(
                 format!(
                     // I'm leaving this commented code for now in the case
                     // we need to revert.
-                    // "-j {} -p {} -m multiport --destination-ports {} {}",
-                    "-j {} -p {} --dport {} {}",
-                    network_dn_chain_name, i.protocol, &host_port, comment_dn_network_cid
+                    // "-p {} -m multiport --destination-ports {} -j {} {}",
+                    "-p {} --dport {} -j {} {}",
+                    i.protocol, &host_port, network_dn_chain_name, comment_dn_network_cid
                 ),
                 None,
             ));
 
             let mut dn_setmark_rule_localhost = format!(
-                "-j {} -s {} -p {} --dport {}",
-                NETAVARK_HOSTPORT_SETMARK, network_address, i.protocol, &host_port
+                "-s {} -p {} --dport {} -j {}",
+                network_address, i.protocol, &host_port, NETAVARK_HOSTPORT_SETMARK,
             );
 
             let mut dn_setmark_rule_subnet = format!(
-                "-j {} -s {} -p {} --dport {}",
-                NETAVARK_HOSTPORT_SETMARK, localhost_ip, i.protocol, &host_port
+                "-s {} -p {} --dport {} -j {}",
+                localhost_ip, i.protocol, &host_port, NETAVARK_HOSTPORT_SETMARK,
             );
 
             // if a destination ip address is provided, we need to alter
@@ -625,8 +625,8 @@ pub fn get_port_forwarding_chains<'a>(
                 );
             }
             let mut dnat_rule = format!(
-                "-j {} -p {} --to-destination {}:{} --destination-port {}",
-                DNAT, i.protocol, container_ip_value, container_port, &host_port
+                "-p {} --destination-port {} -j {} --to-destination {}:{}",
+                i.protocol, &host_port, DNAT, container_ip_value, container_port,
             );
 
             // if a destination ip address is provided, we need to alter
