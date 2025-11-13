@@ -379,17 +379,25 @@ impl firewall::FirewallDriver for Nftables {
                 ));
 
                 // Subnet chain: ip daddr != 224.0.0.0/4 masquerade
-                let multicast_address: IpNet = match subnet {
-                    IpNet::V4(_) => "224.0.0.0/4".parse()?,
-                    IpNet::V6(_) => "ff::00/8".parse()?,
+                // Only add masquerade rule if SNAT is enabled for this address family
+                let should_add_masquerade = match subnet {
+                    IpNet::V4(_) => network_setup.snat_ipv4,
+                    IpNet::V6(_) => network_setup.snat_ipv6,
                 };
-                batch.add(make_rule(
-                    chain.clone(),
-                    Cow::Owned(vec![
-                        get_subnet_match(&multicast_address, "daddr", stmt::Operator::NEQ),
-                        stmt::Statement::Masquerade(None),
-                    ]),
-                ));
+
+                if should_add_masquerade {
+                    let multicast_address: IpNet = match subnet {
+                        IpNet::V4(_) => "224.0.0.0/4".parse()?,
+                        IpNet::V6(_) => "ff::00/8".parse()?,
+                    };
+                    batch.add(make_rule(
+                        chain.clone(),
+                        Cow::Owned(vec![
+                            get_subnet_match(&multicast_address, "daddr", stmt::Operator::NEQ),
+                            stmt::Statement::Masquerade(None),
+                        ]),
+                    ));
+                }
 
                 // Next, populate basic chains with forwarding rules
                 // Input chain: ip saddr <subnet> udp dport 53 accept

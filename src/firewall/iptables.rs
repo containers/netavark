@@ -54,6 +54,12 @@ impl firewall::FirewallDriver for IptablesDriver {
                     conn = &self.conn6;
                 }
 
+                let enable_snat = if is_ipv6 {
+                    network_setup.snat_ipv6
+                } else {
+                    network_setup.snat_ipv4
+                };
+
                 let chains = get_network_chains(
                     conn,
                     network,
@@ -62,6 +68,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                     network_setup.bridge_name.clone(),
                     network_setup.isolation,
                     network_setup.dns_port,
+                    enable_snat,
                 );
 
                 create_network_chains(chains)?;
@@ -83,6 +90,12 @@ impl firewall::FirewallDriver for IptablesDriver {
                 if is_ipv6 {
                     conn = &self.conn6;
                 }
+                let enable_snat = if is_ipv6 {
+                    tear.config.snat_ipv6
+                } else {
+                    tear.config.snat_ipv4
+                };
+
                 let chains = get_network_chains(
                     conn,
                     network,
@@ -91,6 +104,7 @@ impl firewall::FirewallDriver for IptablesDriver {
                     tear.config.bridge_name.clone(),
                     tear.config.isolation,
                     tear.config.dns_port,
+                    enable_snat,
                 );
 
                 for c in &chains {
