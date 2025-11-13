@@ -61,7 +61,7 @@ futures-channel = "0.3.31"
 futures-core = "0.3.31"
 futures-util = "0.3.31"
 tower = { version = "0.5.2", features = ["util"] }
-hyper-util = "0.1.17"
+hyper-util = "0.1.18"
 
 [build-dependencies]
 chrono = { version = "0.4.42", default-features = false, features = ["clock"] }
