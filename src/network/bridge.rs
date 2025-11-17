@@ -1,4 +1,9 @@
-use std::{collections::HashMap, fs, net::IpAddr, os::fd::BorrowedFd};
+use std::{
+    collections::HashMap,
+    fs,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    os::fd::BorrowedFd,
+};
 
 use crate::dns::aardvark::SafeString;
 use crate::network::core_utils::get_default_route_interface;
@@ -30,7 +35,8 @@ use super::{
     constants::{
         ISOLATE_OPTION_FALSE, ISOLATE_OPTION_STRICT, ISOLATE_OPTION_TRUE,
         NO_CONTAINER_INTERFACE_ERROR, OPTION_HOST_INTERFACE_NAME, OPTION_ISOLATE, OPTION_METRIC,
-        OPTION_MODE, OPTION_MTU, OPTION_NO_DEFAULT_ROUTE, OPTION_VLAN, OPTION_VRF,
+        OPTION_MODE, OPTION_MTU, OPTION_NO_DEFAULT_ROUTE, OPTION_OUTBOUND_ADDR4,
+        OPTION_OUTBOUND_ADDR6, OPTION_VLAN, OPTION_VRF,
     },
     core_utils::{self, get_ipam_addresses, is_using_systemd, join_netns, parse_option, CoreUtils},
     driver::{self, DriverInfo},
@@ -77,6 +83,10 @@ struct InternalData {
     vrf: Option<String>,
     /// vlan id of the interface attached to the bridge
     vlan: Option<u16>,
+    /// outbound IPv4 address for SNAT
+    outbound_addr4: Option<Ipv4Addr>,
+    /// outbound IPv6 address for SNAT
+    outbound_addr6: Option<Ipv6Addr>,
 }
 
 pub struct Bridge<'a> {
@@ -143,6 +153,12 @@ impl driver::NetworkDriver for Bridge<'_> {
             }
         }
 
+        // Parse outbound address options early to catch errors
+        let outbound_addr4: Option<Ipv4Addr> =
+            parse_option(&self.info.network.options, OPTION_OUTBOUND_ADDR4)?;
+        let outbound_addr6: Option<Ipv6Addr> =
+            parse_option(&self.info.network.options, OPTION_OUTBOUND_ADDR6)?;
+
         self.data = Some(InternalData {
             bridge_interface_name: bridge_name,
             container_interface_name: self.info.per_network_opts.interface_name.clone(),
@@ -156,6 +172,8 @@ impl driver::NetworkDriver for Bridge<'_> {
             no_default_route,
             vrf,
             vlan,
+            outbound_addr4,
+            outbound_addr6,
         });
         Ok(())
     }
@@ -435,6 +453,8 @@ impl<'a> Bridge<'a> {
         nameservers: &'a Vec<IpAddr>,
         isolate: IsolateOption,
         bridge_name: String,
+        outbound_addr4: Option<Ipv4Addr>,
+        outbound_addr6: Option<Ipv6Addr>,
     ) -> NetavarkResult<(SetupNetwork, PortForwardConfig<'a>)> {
         let id_network_hash =
             CoreUtils::create_network_hash(&self.info.network.name, MAX_HASH_SIZE);
@@ -450,6 +470,8 @@ impl<'a> Bridge<'a> {
             network_hash_name: id_network_hash.clone(),
             isolation: isolate,
             dns_port: self.info.dns_port,
+            outbound_addr4,
+            outbound_addr6,
         };
 
         let mut has_ipv4 = false;
@@ -501,6 +523,8 @@ impl<'a> Bridge<'a> {
             &data.ipam.nameservers,
             data.isolate,
             data.bridge_interface_name.clone(),
+            data.outbound_addr4,
+            data.outbound_addr6,
         )?;
 
         if !self.info.rootless {
@@ -531,33 +555,63 @@ impl<'a> Bridge<'a> {
         // "borrow later used" problems
         let (container_addresses, nameservers);
 
-        let (container_addresses_ref, nameservers_ref, isolate) = match &self.data {
-            Some(d) => (&d.ipam.container_addresses, &d.ipam.nameservers, d.isolate),
-            None => {
-                let isolate = get_isolate_option(&self.info.network.options).unwrap_or_else(|e| {
-                    // just log we still try to do as much as possible for cleanup
-                    error!("failed to parse {OPTION_ISOLATE} option: {e}");
-                    IsolateOption::Never
-                });
-
-                (container_addresses, nameservers) =
-                    match get_ipam_addresses(self.info.per_network_opts, self.info.network) {
-                        Ok(i) => (i.container_addresses, i.nameservers),
-                        Err(e) => {
+        let (container_addresses_ref, nameservers_ref, isolate, outbound_addr4, outbound_addr6) =
+            match &self.data {
+                Some(d) => (
+                    &d.ipam.container_addresses,
+                    &d.ipam.nameservers,
+                    d.isolate,
+                    d.outbound_addr4,
+                    d.outbound_addr6,
+                ),
+                None => {
+                    let isolate =
+                        get_isolate_option(&self.info.network.options).unwrap_or_else(|e| {
                             // just log we still try to do as much as possible for cleanup
-                            error!("failed to parse ipam options: {e}");
-                            (Vec::new(), Vec::new())
-                        }
-                    };
-                (&container_addresses, &nameservers, isolate)
-            }
-        };
+                            error!("failed to parse {OPTION_ISOLATE} option: {e}");
+                            IsolateOption::Never
+                        });
+
+                    // Parse outbound addresses for teardown case
+                    let outbound_addr4 =
+                        parse_option::<Ipv4Addr>(&self.info.network.options, OPTION_OUTBOUND_ADDR4)
+                            .unwrap_or_else(|e| {
+                                error!("failed to parse {OPTION_OUTBOUND_ADDR4} option: {e}");
+                                None
+                            });
+                    let outbound_addr6 =
+                        parse_option::<Ipv6Addr>(&self.info.network.options, OPTION_OUTBOUND_ADDR6)
+                            .unwrap_or_else(|e| {
+                                error!("failed to parse {OPTION_OUTBOUND_ADDR6} option: {e}");
+                                None
+                            });
+
+                    (container_addresses, nameservers) =
+                        match get_ipam_addresses(self.info.per_network_opts, self.info.network) {
+                            Ok(i) => (i.container_addresses, i.nameservers),
+                            Err(e) => {
+                                // just log we still try to do as much as possible for cleanup
+                                error!("failed to parse ipam options: {e}");
+                                (Vec::new(), Vec::new())
+                            }
+                        };
+                    (
+                        &container_addresses,
+                        &nameservers,
+                        isolate,
+                        outbound_addr4,
+                        outbound_addr6,
+                    )
+                }
+            };
 
         let (sn, spf) = self.get_firewall_conf(
             container_addresses_ref,
             nameservers_ref,
             isolate,
             bridge_name,
+            outbound_addr4,
+            outbound_addr6,
         )?;
 
         let tn = TearDownNetwork {
