@@ -61,7 +61,7 @@ jobs:
     needs: check
     steps:
     - name: Checkout Version
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         ref: ${{needs.check.outputs.version}}
     - name: Update Rust
@@ -93,7 +93,7 @@ jobs:
       VERSION: ${{needs.check.outputs.version}}
     steps:
     - name: Checkout Version
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         ref: ${{needs.check.outputs.version}}
     - name: Get release notes
@@ -160,7 +160,7 @@ jobs:
         sudo apt-get update
         sudo apt-get -y install protobuf-compiler libprotobuf-dev
     - name: Checkout Version
-      uses: actions/checkout@v5
+      uses: actions/checkout@v6
       with:
         ref: ${{needs.check.outputs.version}}
     - name: Publish crate
