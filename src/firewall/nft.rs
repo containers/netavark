@@ -29,6 +29,8 @@ const ISOLATION1CHAIN: &str = "NETAVARK-ISOLATION-1";
 const ISOLATION2CHAIN: &str = "NETAVARK-ISOLATION-2";
 const ISOLATION3CHAIN: &str = "NETAVARK-ISOLATION-3";
 
+pub(crate) const MAX_HASH_SIZE: usize = 13;
+
 const MASK: u32 = 0x2000;
 
 const MULTICAST_NET_V4: &str = "224.0.0.0/4";

@@ -4,7 +4,7 @@ use crate::network::internal_types::{
     PortForwardConfig, SetupNetwork, TearDownNetwork, TeardownPortForward,
 };
 
-// Iptables driver - uses direct iptables commands via the iptables crate.
+// Fwnone driver - No-op firewall implementation.
 pub struct Fwnone {}
 
 pub fn new() -> NetavarkResult<Box<dyn firewall::FirewallDriver>> {

@@ -14,15 +14,6 @@
 # Minimum X.Y dep for aardvark-dns
 %define major_minor %((v=%{version}; echo ${v%.*}))
 
-# Set default firewall to nftables on CentOS Stream 10+, RHEL 10+, Fedora 41+
-# and default to iptables on all other environments
-# The `rhel` macro is defined on CentOS Stream, RHEL as well as Fedora ELN.
-%if (%{defined rhel} && 0%{?rhel} >= 10) || (%{defined fedora} && 0%{?fedora} >= 41)
-%define default_fw nftables
-%else
-%define default_fw iptables
-%endif
-
 Name: netavark
 # Set a different Epoch for copr builds
 %if %{defined copr_username}
@@ -49,11 +40,7 @@ BuildRequires: %{_bindir}/go-md2man
 # aardvark-dns and %%{name} are usually released in sync
 Requires: aardvark-dns >=  %{epoch}:%{major_minor}
 Provides: container-network-stack = 2
-%if "%{default_fw}" == "nftables"
 Requires: nftables
-%else
-Requires: iptables
-%endif
 BuildRequires: make
 BuildRequires: protobuf-c
 BuildRequires: protobuf-compiler
@@ -82,7 +69,7 @@ Its features include:
     including MACVLAN networks
 * All required firewall configuration to perform NAT and port
     forwarding as required for containers
-* Support for iptables, firewalld and nftables
+* Support for firewalld and nftables
 * Support for rootless containers
 * Support for IPv4 and IPv6
 * Support for container DNS resolution via aardvark-dns.
@@ -102,7 +89,7 @@ tar fx %{SOURCE1}
 %endif
 
 %build
-NETAVARK_DEFAULT_FW=%{default_fw} %{__make} CARGO="%{__cargo}" build
+%{__make} CARGO="%{__cargo}" build
 %if (0%{?fedora} || 0%{?rhel} >= 10) && !%{defined copr_username}
 %cargo_license_summary
 %{cargo_license} > LICENSE.dependencies
