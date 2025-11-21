@@ -47,6 +47,7 @@ nix = { version = "0.30.1", features = ["net", "sched", "signal", "socket", "use
 rand = "0.9.2"
 sha2 = "0.10.9"
 netlink-packet-route = "0.25.1"
+netlink-packet-netfilter = { git = "https://github.com/shivkr6/netlink-packet-netfilter.git", branch = "conntrack-new" }
 netlink-packet-core = "0.8.1"
 netlink-sys = "0.8.7"
 nftables = "0.6.3"
