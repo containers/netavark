@@ -1,10 +1,14 @@
 #[cfg(test)]
 mod tests {
-    use std::net::{IpAddr, Ipv4Addr};
-
     use netavark::network::netlink::Socket;
+    use netavark::network::netlink_netfilter::{
+        parse_ct_new_msg, ConntrackFlow, FlowTuple, NetlinkNetfilter,
+    };
     use netavark::network::netlink_route::{CreateLinkOptions, LinkID, NetlinkRoute, Route};
+    use netlink_packet_netfilter::conntrack::Protocol;
+
     use netlink_packet_route::{address, link::InfoKind};
+    use std::net::{IpAddr, Ipv4Addr};
 
     macro_rules! test_setup {
         () => {
@@ -224,5 +228,168 @@ mod tests {
                 assert_eq!(ip, &IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)))
             }
         }
+    }
+
+    #[test]
+    fn test_dump_conntrack() {
+        test_setup!();
+        let mut sock = Socket::<NetlinkNetfilter>::new().expect("Socket::new()");
+
+        let tcp_src_ip = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 100));
+        let tcp_dst_ip = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
+        let tcp_src_port: u16 = 12345;
+        let tcp_dst_port: u16 = 80;
+
+        let udp_src_ip = IpAddr::V4(Ipv4Addr::new(172, 16, 30, 5));
+        let udp_dst_ip = IpAddr::V4(Ipv4Addr::new(8, 8, 4, 4));
+        let udp_src_port: u16 = 49152;
+        let udp_dst_port: u16 = 53;
+
+        let out = run_command!(
+            "conntrack",
+            "-I",
+            "-p",
+            "tcp",
+            "--src",
+            &tcp_src_ip.to_string(),
+            "--dst",
+            &tcp_dst_ip.to_string(),
+            "--sport",
+            &tcp_src_port.to_string(),
+            "--dport",
+            &tcp_dst_port.to_string(),
+            "--state",
+            "SYN_SENT",
+            "--timeout",
+            "60"
+        );
+        assert!(out.status.success(), "failed to add TCP conntrack entry");
+
+        let out = run_command!(
+            "conntrack",
+            "-I",
+            "-p",
+            "udp",
+            "--src",
+            &udp_src_ip.to_string(),
+            "--dst",
+            &udp_dst_ip.to_string(),
+            "--sport",
+            &udp_src_port.to_string(),
+            "--dport",
+            &udp_dst_port.to_string(),
+            "--timeout",
+            "30"
+        );
+        assert!(out.status.success(), "failed to add UDP conntrack entry");
+
+        let msgs = sock.dump_conntrack().expect("dump_conntrack failed");
+        assert!(msgs.len() == 2, "Expected two conntrack entries");
+
+        let mut found_tcp_flow = false;
+        let mut found_udp_flow = false;
+
+        for msg in &msgs {
+            if let Some(flow) = parse_ct_new_msg(msg) {
+                let origin = flow.origin.as_ref().unwrap();
+
+                match origin.protocol {
+                    Protocol::Tcp if origin.dst_port == tcp_dst_port => {
+                        assert_eq!(origin.src_ip, tcp_src_ip, "TCP origin source IP mismatch");
+                        assert_eq!(
+                            origin.src_port, tcp_src_port,
+                            "TCP origin source port mismatch"
+                        );
+                        found_tcp_flow = true;
+                    }
+                    Protocol::Udp if origin.dst_port == udp_dst_port => {
+                        assert_eq!(origin.src_ip, udp_src_ip, "UDP origin source IP mismatch");
+                        assert_eq!(
+                            origin.src_port, udp_src_port,
+                            "UDP origin source port mismatch"
+                        );
+                        found_udp_flow = true;
+                    }
+                    _ => (),
+                }
+            }
+        }
+
+        assert!(
+            found_tcp_flow,
+            "Did not find the expected TCP conntrack flow in the dump"
+        );
+        assert!(
+            found_udp_flow,
+            "Did not find the expected UDP conntrack flow in the dump"
+        );
+    }
+
+    #[test]
+    fn test_del_conntrack() {
+        test_setup!();
+        let mut sock = Socket::<NetlinkNetfilter>::new().expect("Socket::new()");
+
+        let src_ip = "192.168.1.100";
+        let src_port = "12345";
+        let dst_ip = "10.0.0.1";
+        let dst_port = "80";
+
+        let out = run_command!(
+            "conntrack",
+            "-I",
+            "-p",
+            "tcp",
+            "--src",
+            src_ip,
+            "--dst",
+            dst_ip,
+            "--sport",
+            src_port,
+            "--dport",
+            dst_port,
+            "--state",
+            "SYN_SENT",
+            "--timeout",
+            "60"
+        );
+        eprintln!("{}", String::from_utf8_lossy(&out.stderr));
+        assert!(
+            out.status.success(),
+            "failed to add conntrack entry via conntrack-tools"
+        );
+
+        let conntrack_flow = ConntrackFlow {
+            origin: Some(FlowTuple {
+                src_ip: IpAddr::V4(src_ip.parse().unwrap()),
+                dst_ip: IpAddr::V4(dst_ip.parse().unwrap()),
+                src_port: src_port.parse().unwrap(),
+                dst_port: dst_port.parse().unwrap(),
+                protocol: Protocol::Tcp,
+            }),
+            reply: None,
+        };
+
+        sock.del_conntrack(conntrack_flow)
+            .expect("del_conntrack failed");
+
+        let out = run_command!(
+            "conntrack",
+            "-G",
+            "-p",
+            "tcp",
+            "--src",
+            src_ip,
+            "--dst",
+            dst_ip,
+            "--sport",
+            src_port,
+            "--dport",
+            dst_port
+        );
+        assert!(
+            !out.status.success(),
+            "got deleted conntrack entry via conntrack-tools, i.e., deleting unsuccessful"
+        );
     }
 }
