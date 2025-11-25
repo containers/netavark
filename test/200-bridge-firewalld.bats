@@ -1,6 +1,6 @@
 #!/usr/bin/env bats   -*- bats -*-
 #
-# bridge firewalld iptables driver tests
+# bridge firewalld nftables driver tests
 #
 
 load helpers
@@ -386,7 +386,7 @@ function setup() {
 function strict_port_forwarding_enabled_should_deny_port_forwarding() {
     local fw_driver="$1"
     if [ -z "$fw_driver" ]; then
-        echo "Error: No fw_driver provided." >&2 
+        echo "Error: No fw_driver provided." >&2
         return 1
     fi
 
@@ -402,7 +402,7 @@ function strict_port_forwarding_enabled_should_deny_port_forwarding() {
 function strict_port_forwarding_disabled_should_allow_port_forwarding() {
     local fw_driver="$1"
     if [ -z "$fw_driver" ]; then
-        echo "Error: No fw_driver provided." >&2 
+        echo "Error: No fw_driver provided." >&2
         return 1
     fi
 
@@ -421,7 +421,7 @@ function strict_port_forwarding_disabled_should_allow_port_forwarding() {
 function strict_port_forwarding_invalid_value_should_warn_and_allow_port_forwarding() {
     local fw_driver="$1"
     if [ -z "$fw_driver" ]; then
-        echo "Error: No fw_driver provided." >&2 
+        echo "Error: No fw_driver provided." >&2
         return 1
     fi
 
@@ -443,14 +443,6 @@ function strict_port_forwarding_invalid_value_should_warn_and_allow_port_forward
     strict_port_forwarding_enabled_should_deny_port_forwarding nftables
 }
 
-@test "iptables - strict port forwarding enabled should deny port forwarding" {
-    strict_port_forwarding_enabled_should_deny_port_forwarding iptables
-}
-
-@test "iptables - strict port forwarding disabled should allow port forwarding" {
-    strict_port_forwarding_disabled_should_allow_port_forwarding iptables
-}
-
 @test "nftables - strict port forwarding disabled should allow port forwarding" {
     strict_port_forwarding_disabled_should_allow_port_forwarding nftables
 }
@@ -458,8 +450,3 @@ function strict_port_forwarding_invalid_value_should_warn_and_allow_port_forward
 @test "nftables - strict port forwarding invalid value should warn and allow port forwarding" {
     strict_port_forwarding_invalid_value_should_warn_and_allow_port_forwarding nftables
 }
-
-@test "iptables - strict port forwarding invalid value should warn and allow port forwarding" {
-    strict_port_forwarding_invalid_value_should_warn_and_allow_port_forwarding iptables
-}
-

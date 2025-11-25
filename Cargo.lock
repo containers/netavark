@@ -899,16 +899,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "iptables"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f30c9a636a0a728c67d1d420471c99b215708a17c222bb9afb16d0821e2d80d8"
-dependencies = [
- "lazy_static",
- "regex",
-]
-
-[[package]]
 name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -962,12 +952,6 @@ dependencies = [
  "once_cell",
  "wasm-bindgen",
 ]
-
-[[package]]
-name = "lazy_static"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "libc"
@@ -1061,7 +1045,6 @@ dependencies = [
  "futures-util",
  "hyper-util",
  "ipnet",
- "iptables",
  "libc",
  "log",
  "mozim",
