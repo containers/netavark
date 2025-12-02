@@ -726,3 +726,109 @@ function add_dummy_interface_on_host() {
     fi
     run_in_host_netns ip link set "$name" up
 }
+
+###################################
+#  test_macvlan_ipvlan_subnets    #
+###################################
+# Test subnet configuration for macvlan/ipvlan drivers
+# This function dynamically generates config and tests subnet scenarios
+# to avoid duplication between macvlan and ipvlan tests.
+#
+# Arguments:
+#   driver={macvlan,ipvlan} - the driver to test
+#   static_ips="comma-separated quoted IPs" - e.g., static_ips='"10.88.0.5", "10.88.0.10"'
+#   subnets="comma-separated subnet objects" - e.g., subnets='{"subnet":"10.88.0.0/16","gateway":"10.88.0.1"}'
+#   expected_rc=N - expected return code (default 0)
+#   error_match="pattern" - pattern to match in error output (for expected_rc != 0)
+#
+function test_macvlan_ipvlan_subnets() {
+    local driver=""
+    local static_ips=""
+    local subnets=""
+    local expected_rc=0
+    local error_match=""
+
+    # parse arguments
+    while [[ "$#" -gt 0 ]]; do
+        IFS='=' read -r arg value <<<"$1"
+        case "$arg" in
+        driver)
+            driver="$value"
+            ;;
+        static_ips)
+            static_ips="$value"
+            ;;
+        subnets)
+            subnets="$value"
+            ;;
+        expected_rc)
+            expected_rc="$value"
+            ;;
+        error_match)
+            error_match="$value"
+            ;;
+        *) die "unknown argument '$arg' for test_macvlan_ipvlan_subnets" ;;
+        esac
+        shift
+    done
+
+    if [[ -z "$driver" || -z "$static_ips" || -z "$subnets" ]]; then
+        die "test_macvlan_ipvlan_subnets requires driver=, static_ips=, and subnets= arguments"
+    fi
+
+    local container_id=$(random_string 64)
+    local container_name="name-$(random_string 10)"
+
+    read -r -d '\0' config <<EOF
+{
+   "container_id": "$container_id",
+   "container_name": "$container_name",
+   "networks": {
+      "podman": {
+         "static_ips": [$static_ips],
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "$(random_string 64)",
+         "driver": "$driver",
+         "network_interface": "dummy0",
+         "subnets": [$subnets],
+         "ipv6_enabled": false,
+         "internal": false,
+         "dns_enabled": false,
+         "ipam_options": {
+            "driver": "host-local"
+         }
+      }
+   }
+}\0
+EOF
+
+    if [ "$expected_rc" -eq 0 ]; then
+        # Success case
+        run_netavark setup $(get_container_netns_path) <<<"$config"
+        result="$output"
+
+        local ips_to_check=$(echo "$static_ips" | sed 's/"//g' | tr ',' '\n' | tr -d ' ')
+
+        run_in_container_netns ip addr show eth0
+        local ip_output="$output"
+
+        while IFS= read -r ip; do
+            if [[ -n "$ip" ]]; then
+                assert "$ip_output" "=~" "$ip" "IP $ip should be configured on eth0"
+            fi
+        done <<< "$ips_to_check"
+
+        run_netavark teardown $(get_container_netns_path) <<<"$config"
+    else
+        # Error case
+        expected_rc=$expected_rc run_netavark setup $(get_container_netns_path) <<<"$config"
+        if [[ -n "$error_match" ]]; then
+            assert "$output" "=~" "$error_match" "error message should match pattern"
+        fi
+    fi
+}

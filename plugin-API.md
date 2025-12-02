@@ -107,6 +107,14 @@ Example JSON input:
 }
 ```
 
+**Note on `static_ips`**: When multiple subnets are configured in the network, you can specify multiple static IP addresses. Each IP will be assigned to the subnet it belongs to. For example, with subnets `10.88.0.0/16` and `10.89.0.0/16`, you could specify:
+
+```
+"static_ips": ["10.88.0.50", "10.88.0.51", "10.89.0.100"]
+```
+
+All IPs matching a subnet's range will be assigned to that subnet. Networks with duplicate or overlapping subnet definitions will result in an error.
+
 Example JSON output:
 ```
 {
