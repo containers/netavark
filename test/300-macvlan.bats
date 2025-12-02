@@ -389,3 +389,76 @@ EOF
     assert_json "$default_route_v6" '.[0].dst' == "default" "Default route was selected"
     assert_json "$default_route_v6" '.[0].metric' == "200" "v6 route metric matches v4"
 }
+
+
+
+@test "macvlan multiple static ips single subnet" {
+   # Config file defines a single subnet:
+   # - 10.88.0.0/16
+   # Static IPs: 10.88.0.5, 10.88.0.10, 10.88.0.15
+
+   run_netavark --file ${TESTSDIR}/testfiles/macvlan-multiple-ips.json setup $(get_container_netns_path)
+   result="$output"
+
+   assert_json "$result" ".podman.interfaces.eth0.subnets | length" "==" "3" "three ips assigned"
+   assert_json "$result" ".podman.interfaces.eth0.subnets[0].ipnet" "==" "10.88.0.5/16"
+   assert_json "$result" ".podman.interfaces.eth0.subnets[1].ipnet" "==" "10.88.0.10/16"
+   assert_json "$result" ".podman.interfaces.eth0.subnets[2].ipnet" "==" "10.88.0.15/16"
+
+   run_in_container_netns ip addr show eth0
+   assert "$output" "=~" "10.88.0.5/16"
+   assert "$output" "=~" "10.88.0.10/16"
+   assert "$output" "=~" "10.88.0.15/16"
+
+   run_netavark --file ${TESTSDIR}/testfiles/macvlan-multiple-ips.json teardown $(get_container_netns_path)
+}
+
+@test "macvlan multiple static ips multiple subnets" {
+   # Config file defines two subnets:
+   # - 10.88.0.0/16 (gateway: 10.88.0.1)
+   # - 10.89.0.0/16 (gateway: 10.89.0.1)
+   # Static IPs: 10.88.0.5, 10.89.0.10, 10.88.0.15
+
+   run_netavark --file ${TESTSDIR}/testfiles/macvlan-multiple-subnets.json setup $(get_container_netns_path)
+   result="$output"
+
+   assert_json "$result" ".podman.interfaces.eth0.subnets | length" "==" "3" "three ips assigned"
+
+   assert_json "$result" ".podman.interfaces.eth0.subnets[0].ipnet" "==" "10.88.0.5/16"
+   assert_json "$result" ".podman.interfaces.eth0.subnets[0].gateway" "==" "10.88.0.1"
+   assert_json "$result" ".podman.interfaces.eth0.subnets[1].ipnet" "==" "10.88.0.15/16"
+   assert_json "$result" ".podman.interfaces.eth0.subnets[1].gateway" "==" "10.88.0.1"
+
+   assert_json "$result" ".podman.interfaces.eth0.subnets[2].ipnet" "==" "10.89.0.10/16"
+   assert_json "$result" ".podman.interfaces.eth0.subnets[2].gateway" "==" "10.89.0.1"
+
+
+   run_in_container_netns ip addr show eth0
+   assert "$output" "=~" "10.88.0.5/16"
+   assert "$output" "=~" "10.89.0.10/16"
+   assert "$output" "=~" "10.88.0.15/16"
+
+   run_netavark --file ${TESTSDIR}/testfiles/macvlan-multiple-subnets.json teardown $(get_container_netns_path)
+}
+
+@test "macvlan overlapping subnets error" {
+   # Config file defines overlapping subnets:
+   # - 10.1.2.0/23 covers 10.1.2.0-10.1.3.255
+   # - 10.1.3.248/30 covers 10.1.3.248-10.1.3.251 (subset of the /23)
+   # Static IPs: 10.1.2.5, 10.1.3.249, 10.1.2.100
+
+   expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/macvlan-overlapping-subnets.json setup $(get_container_netns_path)
+
+   assert "$output" "=~" "overlapping subnets" "error message should mention overlapping subnets"
+}
+
+@test "macvlan duplicate subnet definition error" {
+   # Config file defines the same subnet twice:
+   # - 10.88.0.0/16 (first definition)
+   # - 10.88.0.0/16 (duplicate)
+   # Static IPs: 10.88.0.5, 10.88.0.10, 10.88.0.15
+
+   expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/macvlan-duplicate-subnet.json setup $(get_container_netns_path)
+
+   assert "$output" "=~" "duplicate subnet" "error message should mention duplicate subnet"
+}
