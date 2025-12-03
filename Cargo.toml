@@ -38,7 +38,7 @@ clap = { version = "~4.5.53", features = ["derive", "env"] }
 env_logger = "0.11.8"
 ipnet = { version = "2.11.0", features = ["serde"] }
 libc = "0.2.157"
-log = "0.4.28"
+log = "0.4.29"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 zbus = { version = "5.12.0" }
