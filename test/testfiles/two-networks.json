@@ -3,27 +3,29 @@
     "container_name": "heuristic_archimedes",
     "port_mappings": [
         {
-          "host_ip": "",
-          "container_port": 8080,
-          "host_port": 8080,
-          "range": 1,
-          "protocol": "tcp"
+            "host_ip": "",
+            "container_port": 8080,
+            "host_port": 8080,
+            "range": 1,
+            "protocol": "tcp"
         }
-      ],
-    "networks": {
-        "t1": {
+    ],
+    "networks": [
+        {
+            "name": "t1",
             "static_ips": [
                 "10.89.1.2"
             ],
             "interface_name": "eth0"
         },
-        "t2": {
+        {
+            "name": "t2",
             "static_ips": [
                 "10.89.2.2"
             ],
             "interface_name": "eth1"
         }
-    },
+    ],
     "network_info": {
         "t1": {
             "name": "t1",

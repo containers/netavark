@@ -95,12 +95,14 @@ impl Teardown {
         let (mut hostns, mut netns) =
             core_utils::open_netlink_sockets(&self.network_namespace_path)?;
 
-        for (net_name, network) in network_options.network_info.iter() {
-            let per_network_opts = match network_options.networks.get(net_name) {
+        for named_network_opts in &network_options.networks {
+            let per_network_opts = &named_network_opts.opts;
+            let network = match network_options.network_info.get(&named_network_opts.name) {
                 Some(opts) => opts,
                 None => {
                     error_list.push(NetavarkError::Message(format!(
-                        "network options for network {net_name} not found"
+                        "network info for network {} not found",
+                        &named_network_opts.name
                     )));
                     continue;
                 }
