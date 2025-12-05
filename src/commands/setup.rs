@@ -66,11 +66,17 @@ impl Setup {
         let config_dir = get_config_dir(config_dir, "setup")?;
         let mut drivers = Vec::with_capacity(network_options.network_info.len());
 
-        // Perform per-network setup
-        for (net_name, network) in network_options.network_info.iter() {
-            let per_network_opts = network_options.networks.get(net_name).ok_or_else(|| {
-                NetavarkError::Message(format!("network options for network {net_name} not found"))
-            })?;
+        for named_network_opts in &network_options.networks {
+            let per_network_opts = &named_network_opts.opts;
+            let network = network_options
+                .network_info
+                .get(&named_network_opts.name)
+                .ok_or_else(|| {
+                    NetavarkError::Message(format!(
+                        "network info for network {} not found",
+                        &named_network_opts.name
+                    ))
+                })?;
 
             let mut driver = get_network_driver(
                 DriverInfo {

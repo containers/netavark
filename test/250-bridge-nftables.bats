@@ -1014,6 +1014,17 @@ net/ipv4/conf/podman1/rp_filter = 2"
     assert_json "$result" 'has("t1")' == "true" "t1 object key exists"
     assert_json "$result" 'has("t2")' == "true" "t2 object key exists"
 
+    # verify the setup order of the contianer interfaces by checking the interface index
+    run_in_container_netns ip -j addr show eth0
+    result="$output"
+    assert_json "$result" '.[0].ifindex' == "2" "eth0 interface must have index 2"
+    assert_json "$result" '.[0].addr_info.[0].local' == "10.89.1.2" "first ip adddress on eth0"
+
+    run_in_container_netns ip -j addr show eth1
+    result="$output"
+    assert_json "$result" '.[0].ifindex' == "3" "eth1 interface must have index 3"
+    assert_json "$result" '.[0].addr_info.[0].local' == "10.89.2.2" "first ip adddress on eth1"
+
     run_in_container_netns ip link del eth0
     run_in_container_netns ip link del eth1
 
@@ -1032,6 +1043,23 @@ net/ipv4/conf/podman1/rp_filter = 2"
     run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
     assert "$output" !~ "jump nv_d7322dfb_10_89_2_0_nm24_dnat" "network 1 fw rule should not exist"
     assert "$output" !~ "jump nv_fae505bb_10_89_1_0_nm24_dnat" "network 2 fw rule should not exist"
+}
+
+@test "$fw_driver - two networks reversed" {
+    # reverse the two networks to ensure the order is indeed depended on the array
+    run_netavark --file <(jq  ".networks |= reverse" ${TESTSDIR}/testfiles/two-networks.json) setup $(get_container_netns_path)
+
+    # verify the setup order of the contianer interfaces by checking the interface index
+    # it should be reversed now compared to the test above
+    run_in_container_netns ip -j addr show eth1
+    result="$output"
+    assert_json "$result" '.[0].ifindex' == "2" "eth1 interface must have index 2"
+    assert_json "$result" '.[0].addr_info.[0].local' == "10.89.2.2" "first ip adddress on eth1"
+
+    run_in_container_netns ip -j addr show eth0
+    result="$output"
+    assert_json "$result" '.[0].ifindex' == "3" "eth0 interface must have index 3"
+    assert_json "$result" '.[0].addr_info.[0].local' == "10.89.1.2" "first ip adddress on eth0"
 }
 
 @test "$fw_driver - ipv6 disabled error message" {
@@ -1227,7 +1255,7 @@ function check_simple_bridge_nftables() {
     assert "${lines[3]}" =~ "ip6 daddr != ff00::/8 snat ip6 to fd20:100:200::1"
 
     run_netavark --file ${TESTSDIR}/testfiles/bridge-outbound-addr6.json teardown $(get_container_netns_path)
- 
+
     # Check that the chain is removed
     expected_rc=1 run_in_host_netns nft list chain inet netavark nv_2f259bab_fd10-88-a--_nm64
 }
