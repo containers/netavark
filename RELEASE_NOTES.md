@@ -1,5 +1,9 @@
 # Release Notes
 
+## v1.17.1
+
+* Fixes a regression where the DHCP proxy would fail when no Renewal or Rebinding time was included in the DHCP message. ([#1368](https://github.com/containers/netavark/issues/1368))
+
 ## v1.17.0
 
 * The dhcp proxy now sends DHCPRELEASE on container teardown. ([#1271](https://github.com/containers/netavark/issues/1271))
