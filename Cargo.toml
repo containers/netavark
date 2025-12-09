@@ -1,6 +1,6 @@
 [package]
 name = "netavark"
-version = "1.17.0"
+version = "1.17.1"
 edition = "2021"
 authors = ["github.com/containers"]
 license = "Apache-2.0"
@@ -56,7 +56,7 @@ tokio-stream = { version = "0.1.17", features = ["net"] }
 tonic = "0.14.2"
 tonic-prost = "0.14.2"
 prost = "0.14.1"
-mozim = "0.3.0"
+mozim = "0.3.1"
 futures-channel = "0.3.31"
 futures-core = "0.3.31"
 futures-util = "0.3.31"
