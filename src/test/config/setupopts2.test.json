@@ -1,14 +1,15 @@
 {
    "container_id": "someID",
    "container_name": "someName",
-   "networks": {
-      "podman": {
+   "networks": [
+      {
+         "name": "podman",
          "static_ips": [
             "10.88.0.2"
          ],
          "interface_name": "ethsomething0"
       }
-   },
+   ],
    "network_info": {
       "podman": {
          "name": "podman",
