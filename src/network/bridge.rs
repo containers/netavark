@@ -5,7 +5,6 @@ use std::{
     os::fd::BorrowedFd,
 };
 
-use crate::dns::aardvark::SafeString;
 use crate::network::core_utils::get_default_route_interface;
 use crate::network::dhcp::{dhcp_teardown, get_dhcp_lease};
 use crate::network::netlink::Socket;
@@ -22,6 +21,7 @@ use crate::{
     },
     network::{constants, sysctl::disable_ipv6_autoconf, types},
 };
+use crate::{dns::aardvark::SafeString, network::netlink_netfilter::flush_udp_conntrack};
 use ipnet::IpNet;
 use log::{debug, error};
 use netlink_packet_route::address::{AddressAttribute, AddressScope};
@@ -542,7 +542,18 @@ impl<'a> Bridge<'a> {
 
         self.info.firewall.setup_network(sn, &system_dbus)?;
 
+        let port_mappings = spf.port_mappings;
+        let container_ip_v4 = spf.container_ip_v4;
+        let container_ip_v6 = spf.container_ip_v6;
+
         self.info.firewall.setup_port_forward(spf, &system_dbus)?;
+
+        if let Some(port_mappings) = port_mappings {
+            // Flush stale UDP conntrack entries to prevent dropped packets.
+            // See the function's doc comment for more details.
+            flush_udp_conntrack(port_mappings, container_ip_v4, container_ip_v6)?;
+        }
+
         Ok(())
     }
 
@@ -639,7 +650,18 @@ impl<'a> Bridge<'a> {
             complete_teardown,
         };
 
+        let port_mappings = tpf.config.port_mappings;
+        let container_ip_v4 = tpf.config.container_ip_v4;
+        let container_ip_v6 = tpf.config.container_ip_v6;
+
         self.info.firewall.teardown_port_forward(tpf)?;
+
+        if let Some(port_mappings) = port_mappings {
+            // Flush stale UDP conntrack entries to prevent dropped packets.
+            // See the function's doc comment for more details.
+            flush_udp_conntrack(port_mappings, container_ip_v4, container_ip_v6)?;
+        }
+
         Ok(())
     }
 }
