@@ -1,0 +1,38 @@
+{
+    "container_id": "someID",
+    "container_name": "someName",
+    "networks": {
+       "podman": {
+          "static_ips": [
+             "10.1.2.5",
+             "10.1.3.249",
+             "10.1.2.100"
+          ],
+          "interface_name": "eth0"
+       }
+    },
+    "network_info": {
+       "podman": {
+          "name": "podman",
+          "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+          "driver": "ipvlan",
+          "network_interface": "dummy0",
+          "subnets": [
+             {
+                "subnet": "10.1.2.0/23",
+                "gateway": "10.1.2.1"
+             },
+             {
+                "subnet": "10.1.3.248/30",
+                "gateway": "10.1.3.249"
+             }
+          ],
+          "ipv6_enabled": false,
+          "internal": false,
+          "dns_enabled": false,
+          "ipam_options": {
+             "driver": "host-local"
+          }
+       }
+    }
+ }
