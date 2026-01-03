@@ -1,0 +1,24 @@
+{
+  "network": {
+    "name": "options-net",
+    "id": "abc123def4567890123456789012345678901234567890123456789012345678",
+    "driver": "bridge",
+    "dns_enabled": false,
+    "internal": false,
+    "ipv6_enabled": false,
+    "options": {
+      "mtu": "1500"
+    }
+  },
+  "used": {
+    "interfaces": [],
+    "names": {},
+    "subnets": []
+  },
+  "options": {
+    "subnet_pools": [{"base": "10.89.0.0/16", "size": 24}],
+    "default_interface_name": "podman",
+    "check_used_subnets": false
+  }
+}
+
