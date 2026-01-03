@@ -50,7 +50,7 @@ netlink-packet-core = "0.8.1"
 netlink-sys = "0.8.7"
 nftables = "0.6.3"
 fs2 = "0.4.3"
-tokio = { version = "1.48.0", features = ["rt", "rt-multi-thread", "signal", "fs", "time"] }
+tokio = { version = "1.49.0", features = ["rt", "rt-multi-thread", "signal", "fs", "time"] }
 tokio-stream = { version = "0.1.17", features = ["net"] }
 tonic = "0.14.2"
 tonic-prost = "0.14.2"
