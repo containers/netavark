@@ -34,14 +34,7 @@ pub(crate) fn handle_plugin_error(
         }
     };
 
-    if let Some(name) = plugin_name {
-        NetavarkError::msg(format!(
-            "plugin {:?} failed with exit code {}, message: {}",
-            name, code, err.error
-        ))
-    } else {
-        NetavarkError::msg(format!("exit code {}, message: {}", code, err.error))
-    }
+    NetavarkError::msg(format!("exit code {}, message: {}", code, err.error))
 }
 
 /// Common plugin execution logic that handles spawning the plugin, writing input,
@@ -133,7 +126,6 @@ impl NetworkDriver for PluginDriver<'_> {
         ))?;
         Ok(())
     }
-
     fn network_name(&self) -> String {
         self.info.network.name.clone()
     }

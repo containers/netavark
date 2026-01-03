@@ -2,6 +2,7 @@ use std::ffi::OsString;
 
 use clap::{Parser, Subcommand};
 
+use netavark::commands::create;
 use netavark::commands::dhcp_proxy;
 use netavark::commands::firewall_reload;
 use netavark::commands::firewalld_reload;
@@ -39,6 +40,8 @@ struct Opts {
 
 #[derive(Subcommand, Debug)]
 enum SubCommand {
+    /// Create a network config
+    Create(create::Create),
     /// Configures the given network namespace with the given configuration.
     Setup(setup::Setup),
     /// Updates network dns servers for an already configured network.
@@ -68,6 +71,7 @@ fn main() {
         .aardvark_binary
         .unwrap_or_else(|| OsString::from("/usr/libexec/podman/aardvark-dns"));
     let result = match opts.subcmd {
+        SubCommand::Create(create) => create.exec(opts.file, opts.plugin_directories),
         SubCommand::Setup(setup) => setup.exec(
             opts.file,
             config,

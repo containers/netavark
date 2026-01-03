@@ -27,6 +27,11 @@ pub const OPTION_HOST_INTERFACE_NAME: &str = "host_interface_name";
 pub const OPTION_OUTBOUND_ADDR4: &str = "outbound_addr4";
 pub const OPTION_OUTBOUND_ADDR6: &str = "outbound_addr6";
 
+pub const MACVLAN_MODE_PRIVATE: &str = "private";
+pub const MACVLAN_MODE_VEPA: &str = "vepa";
+pub const MACVLAN_MODE_BRIDGE: &str = "bridge";
+pub const MACVLAN_MODE_PASSTHRU: &str = "passthru";
+
 /// 100 is the default metric for most Linux networking tools.
 pub const DEFAULT_METRIC: u32 = 100;
 
@@ -34,3 +39,25 @@ pub const NO_CONTAINER_INTERFACE_ERROR: &str = "no container interface name give
 
 /// make sure this is the same rootful default as used in podman.
 pub const DEFAULT_CONFIG_DIR: &str = "/run/containers/networks";
+
+pub const MAX_INTERFACE_NAME_LEN: usize = 15;
+
+// ValidMacVlanModes is the list of valid option constants for the macvlan driver.
+pub const VALID_BRIDGE_OPTS: &[&str] = &[
+    OPTION_MODE,
+    OPTION_MTU,
+    OPTION_ISOLATE,
+    OPTION_METRIC,
+    OPTION_NO_DEFAULT_ROUTE,
+    OPTION_VRF,
+    OPTION_VLAN,
+];
+
+// ValidMacVlanModes is the list of valid option constants for the macvlan driver.
+pub const VALID_VLAN_OPTS: &[&str] = &[
+    OPTION_MODE,
+    OPTION_MTU,
+    OPTION_METRIC,
+    OPTION_NO_DEFAULT_ROUTE,
+    OPTION_BCLIM,
+];

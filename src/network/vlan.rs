@@ -22,7 +22,7 @@ use crate::{
 use super::{
     constants::{
         NO_CONTAINER_INTERFACE_ERROR, OPTION_BCLIM, OPTION_METRIC, OPTION_MODE, OPTION_MTU,
-        OPTION_NO_DEFAULT_ROUTE,
+        OPTION_NO_DEFAULT_ROUTE, VALID_VLAN_OPTS,
     },
     core_utils::{self, get_ipam_addresses, get_mac_address, parse_option, CoreUtils},
     driver::{self, DriverInfo},
@@ -355,4 +355,42 @@ fn setup(
     }
 
     get_mac_address(dev.attributes)
+}
+
+pub fn parse_vlan_opts(
+    opts: &Option<HashMap<String, String>>,
+    strict: bool,
+) -> NetavarkResult<VlanOptions> {
+    if strict {
+        if let Some(invalid_key) = opts
+            .as_ref()
+            .and_then(|m| m.keys().find(|k| !VALID_VLAN_OPTS.contains(&k.as_str())))
+        {
+            return Err(NetavarkError::msg(format!(
+                "unsupported vlan network option: {}",
+                invalid_key
+            )));
+        }
+    }
+
+    let mode = parse_option(opts, OPTION_MODE)?;
+    let mtu = parse_option(opts, OPTION_MTU)?;
+    let metric = parse_option(opts, OPTION_METRIC)?;
+    let no_default_route = parse_option(opts, OPTION_NO_DEFAULT_ROUTE)?;
+    let bclim = parse_option(opts, OPTION_BCLIM)?;
+    Ok(VlanOptions {
+        mode,
+        mtu,
+        metric,
+        no_default_route,
+        bclim,
+    })
+}
+
+pub struct VlanOptions {
+    pub mode: Option<String>,
+    pub mtu: Option<u32>,
+    pub metric: Option<u32>,
+    pub no_default_route: Option<bool>,
+    pub bclim: Option<i32>,
 }
