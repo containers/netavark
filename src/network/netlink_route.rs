@@ -311,13 +311,20 @@ impl Socket<NetlinkRoute> {
         Ok(())
     }
 
-    pub fn dump_routes(&mut self) -> NetavarkResult<Vec<RouteMessage>> {
-        let mut msg = RouteMessage::default();
+    /// dump all routes, if no table id is specified the default main table is used.
+    pub fn dump_routes(&mut self, table: Option<u32>) -> NetavarkResult<Vec<RouteMessage>> {
+        let mut msg: RouteMessage = RouteMessage::default();
 
-        msg.header.table = libc::RT_TABLE_MAIN;
+        msg.header.table = libc::RT_TABLE_UNSPEC;
         msg.header.protocol = RouteProtocol::Unspec;
         msg.header.scope = RouteScope::Universe;
         msg.header.kind = RouteType::Unicast;
+
+        msg.attributes
+            .push(netlink_packet_route::route::RouteAttribute::Table(
+                // default to the main table instead of dumping all tables
+                table.unwrap_or(libc::RT_TABLE_MAIN.into()),
+            ));
 
         let results =
             self.make_netlink_request(RouteNetlinkMessage::GetRoute(msg), NLM_F_DUMP | NLM_F_ACK)?;
