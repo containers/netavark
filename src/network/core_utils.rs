@@ -399,7 +399,7 @@ pub fn is_using_systemd() -> bool {
 
 /// Returns the *first* interface with a default route or an error if no default route interface exists.
 pub fn get_default_route_interface(host: &mut Socket<NetlinkRoute>) -> NetavarkResult<LinkMessage> {
-    let routes = host.dump_routes().wrap("dump routes")?;
+    let routes = host.dump_routes(None).wrap("dump routes")?;
 
     for route in routes {
         let mut dest = false;
