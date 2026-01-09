@@ -245,7 +245,7 @@ fn setup(
     kind_data: &KindData,
 ) -> NetavarkResult<String> {
     let link = match data.host_interface_name.as_ref() {
-        "" => get_default_route_interface(host)?,
+        "" => get_default_route_interface(host, None)?,
         host_name => host.get_link(LinkID::Name(host_name.to_string()))?,
     };
 
