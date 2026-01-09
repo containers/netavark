@@ -398,8 +398,12 @@ pub fn is_using_systemd() -> bool {
 }
 
 /// Returns the *first* interface with a default route or an error if no default route interface exists.
-pub fn get_default_route_interface(host: &mut Socket<NetlinkRoute>) -> NetavarkResult<LinkMessage> {
-    let routes = host.dump_routes().wrap("dump routes")?;
+/// If no table is given we lokup in the main routing table otherwise use the given table id.
+pub fn get_default_route_interface(
+    host: &mut Socket<NetlinkRoute>,
+    table: Option<u32>,
+) -> NetavarkResult<LinkMessage> {
+    let routes = host.dump_routes(table).wrap("dump routes")?;
 
     for route in routes {
         let mut dest = false;

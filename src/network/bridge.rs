@@ -24,12 +24,15 @@ use crate::{
 };
 use ipnet::IpNet;
 use log::{debug, error};
-use netlink_packet_route::address::{AddressAttribute, AddressScope};
 use netlink_packet_route::link::{
     BridgeVlanInfoFlags, InfoBridge, InfoData, InfoKind, InfoVeth, LinkAttribute, LinkInfo,
     LinkMessage,
 };
 use netlink_packet_route::AddressFamily;
+use netlink_packet_route::{
+    address::{AddressAttribute, AddressScope},
+    link::InfoVrf,
+};
 
 use super::{
     constants::{
@@ -759,10 +762,21 @@ fn create_interfaces(
                     InfoKind::Bridge,
                 );
 
+                let mut table = None;
+                if let Some(vrf_name) = &data.vrf {
+                    let (vrf_id, vrf_table) =
+                        match host.get_link(LinkID::Name(vrf_name.to_string())) {
+                            Ok(vrf) => validate_vrf_link(vrf, vrf_name)?,
+                            Err(err) => return Err(err).wrap("get vrf to set up bridge interface"),
+                        };
+                    create_link_opts.primary_index = vrf_id;
+                    table = vrf_table;
+                }
+
                 let mut mtu = data.mtu;
                 if mtu == 0 {
                     // if we have a default route, use its mtu as default
-                    if let Ok(link) = get_default_route_interface(host) {
+                    if let Ok(link) = get_default_route_interface(host, table) {
                         match core_utils::get_mtu_from_iface_attributes(&link.attributes) {
                             Ok(iface_mtu) => {
                                 debug!("Using mtu {iface_mtu} from default route interface for the network");
@@ -779,14 +793,6 @@ fn create_interfaces(
                 if data.vlan.is_some() {
                     create_link_opts.info_data =
                         Some(InfoData::Bridge(vec![InfoBridge::VlanFiltering(true)]));
-                }
-
-                if let Some(vrf_name) = &data.vrf {
-                    let vrf = match host.get_link(LinkID::Name(vrf_name.to_string())) {
-                        Ok(vrf) => check_link_is_vrf(vrf, vrf_name)?,
-                        Err(err) => return Err(err).wrap("get vrf to set up bridge interface"),
-                    };
-                    create_link_opts.primary_index = vrf.header.index;
                 }
 
                 host.create_link(create_link_opts).wrap("create bridge")?;
@@ -1069,22 +1075,39 @@ fn validate_bridge_link(
 }
 
 /// make sure the LinkMessage is the kind VRF
-fn check_link_is_vrf(msg: LinkMessage, vrf_name: &str) -> NetavarkResult<LinkMessage> {
+/// Returns the interface id and the table id if found.
+fn validate_vrf_link(msg: LinkMessage, vrf_name: &str) -> NetavarkResult<(u32, Option<u32>)> {
+    let mut id = None;
+    let mut table = None;
     for nla in msg.attributes.iter() {
         if let LinkAttribute::LinkInfo(info) = nla {
             for inf in info.iter() {
                 if let LinkInfo::Kind(kind) = inf {
                     if *kind == InfoKind::Vrf {
-                        return Ok(msg);
+                        id = Some(msg.header.index);
                     } else {
                         return Err(NetavarkError::Message(format!(
                             "vrf {vrf_name} already exists but is a {kind:?} interface"
                         )));
                     }
                 }
+
+                if let LinkInfo::Data(InfoData::Vrf(info_vrf)) = inf {
+                    for vrf in info_vrf {
+                        if let InfoVrf::TableId(id) = vrf {
+                            debug!("Using routing table {id} from vrf {vrf_name} for default route lookup");
+                            table = Some(*id);
+                        }
+                    }
+                }
             }
         }
     }
+
+    if let Some(id) = id {
+        return Ok((id, table));
+    }
+
     Err(NetavarkError::Message(format!(
         "could not determine namespace link kind for vrf {vrf_name}"
     )))

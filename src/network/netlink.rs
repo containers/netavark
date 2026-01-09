@@ -90,6 +90,10 @@ where
         };
         packet.finalize();
 
+        // Zero out buffer to work around a bug in the serialize call that does not overwrite all bytes.
+        // Can be removed again once https://github.com/rust-netlink/netlink-packet-route/pull/224 lands here.
+        self.buffer.fill(0);
+
         packet.serialize(&mut self.buffer[..]);
         trace!("send netlink packet: {packet:?}");
 
@@ -101,7 +105,6 @@ where
     where
         P::Message: NetlinkDeserializable + std::fmt::Debug,
     {
-        let mut offset = 0;
         let mut result = Vec::new();
 
         // if multi is set we expect a multi part message
@@ -111,9 +114,11 @@ where
                 "recv from netlink"
             )?;
 
+            // only use the amount of bytes we actually read
+            let mut buffer = &self.buffer[..size];
+
             loop {
-                let bytes = &self.buffer[offset..];
-                let rx_packet: NetlinkMessage<P::Message> = NetlinkMessage::deserialize(bytes)
+                let rx_packet: NetlinkMessage<P::Message> = NetlinkMessage::deserialize(buffer)
                     .map_err(|e| {
                         NetavarkError::Message(format!(
                             "failed to deserialize netlink message: {e}",
@@ -155,11 +160,12 @@ where
                     _ => {}
                 };
 
-                offset += rx_packet.header.length as usize;
-                if offset == size || rx_packet.header.length == 0 {
-                    offset = 0;
+                let len = rx_packet.header.length as usize;
+                if buffer.len() == len || len == 0 {
                     break;
                 }
+                // move the buffer to the next message
+                buffer = &buffer[len..];
             }
         }
     }
