@@ -90,6 +90,10 @@ where
         };
         packet.finalize();
 
+        // Zero out buffer to work around a bug in the serialize call that does not overwrite all bytes.
+        // Can be removed again once https://github.com/rust-netlink/netlink-packet-route/pull/224 lands here.
+        self.buffer.fill(0);
+
         packet.serialize(&mut self.buffer[..]);
         trace!("send netlink packet: {packet:?}");
 
