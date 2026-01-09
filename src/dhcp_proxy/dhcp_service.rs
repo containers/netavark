@@ -1,6 +1,9 @@
 use std::{net::Ipv4Addr, sync::Arc};
 
-use crate::network::netlink_route::{LinkID, Route};
+use crate::network::{
+    netlink,
+    netlink_route::{LinkID, NetlinkRoute, Route},
+};
 use log::debug;
 use mozim::{DhcpV4Client, DhcpV4Config, DhcpV4Lease as MozimV4Lease, DhcpV4State};
 use tokio::sync::Mutex;
@@ -53,6 +56,14 @@ impl DhcpV4Service {
         let mut config = DhcpV4Config::new_proxy(&nc.host_iface, &nc.container_mac_addr)
             .map_err(|e| DhcpServiceError::new(InvalidArgument, e.to_string()))?;
         config.set_timeout_sec(timeout);
+
+        let mut socket = netlink::Socket::<NetlinkRoute>::new()
+            .map_err(|e| DhcpServiceError::new(InvalidArgument, e.to_string()))?;
+        let link = socket
+            .get_link(LinkID::Name(nc.host_iface.clone()))
+            .map_err(|e| DhcpServiceError::new(InvalidArgument, e.to_string()))?;
+
+        config.set_iface_index(link.header.index);
 
         // Sending the hostname to the DHCP server is optional but it can be
         // useful in environments where DDNS is used to create or update
