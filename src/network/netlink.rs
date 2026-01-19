@@ -16,11 +16,13 @@ pub trait NetlinkFamily {
     type Message;
 }
 
+const NLMSG_GOODSIZE: usize = 8192;
+
 pub struct Socket<P: NetlinkFamily> {
     socket: netlink_sys::Socket,
     sequence_number: u32,
     ///  buffer size for reading netlink messages, see NLMSG_GOODSIZE in the kernel
-    buffer: [u8; 8192],
+    buffer: [u8; NLMSG_GOODSIZE],
     _protocol: PhantomData<P>,
 }
 
@@ -90,14 +92,22 @@ where
         };
         packet.finalize();
 
+        let len = packet.buffer_len();
+        let buffer = self.buffer.get_mut(..len).ok_or_else(|| {
+            NetavarkError::msg(format!(
+                "netlink request size {len} to large for buffer with len {}",
+                NLMSG_GOODSIZE
+            ))
+        })?;
+
         // Zero out buffer to work around a bug in the serialize call that does not overwrite all bytes.
         // Can be removed again once https://github.com/rust-netlink/netlink-packet-route/pull/224 lands here.
-        self.buffer.fill(0);
+        buffer.fill(0);
 
-        packet.serialize(&mut self.buffer[..]);
+        packet.serialize(buffer);
         trace!("send netlink packet: {packet:?}");
 
-        self.socket.send(&self.buffer[..packet.buffer_len()], 0)?;
+        self.socket.send(buffer, 0)?;
         Ok(())
     }
 
