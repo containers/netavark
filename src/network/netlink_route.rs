@@ -326,8 +326,7 @@ impl Socket<NetlinkRoute> {
                 table.unwrap_or(libc::RT_TABLE_MAIN.into()),
             ));
 
-        let results =
-            self.make_netlink_request(RouteNetlinkMessage::GetRoute(msg), NLM_F_DUMP | NLM_F_ACK)?;
+        let results = self.make_netlink_request(RouteNetlinkMessage::GetRoute(msg), NLM_F_DUMP)?;
 
         let mut routes = Vec::with_capacity(results.len());
 
@@ -352,8 +351,7 @@ impl Socket<NetlinkRoute> {
         let mut msg = LinkMessage::default();
         msg.attributes.append(nlas);
 
-        let results =
-            self.make_netlink_request(RouteNetlinkMessage::GetLink(msg), NLM_F_DUMP | NLM_F_ACK)?;
+        let results = self.make_netlink_request(RouteNetlinkMessage::GetLink(msg), NLM_F_DUMP)?;
 
         let mut links = Vec::with_capacity(results.len());
 
