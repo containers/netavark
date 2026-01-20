@@ -59,7 +59,7 @@ mozim = { version = "0.3.1", default-features = false }
 futures-channel = "0.3.31"
 futures-core = "0.3.31"
 futures-util = "0.3.31"
-tower = { version = "0.5.2", features = ["util"] }
+tower = { version = "0.5.3", features = ["util"] }
 hyper-util = "0.1.19"
 
 [build-dependencies]
