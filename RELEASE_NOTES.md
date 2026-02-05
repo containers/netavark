@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.17.2
+
+* Fixed a bug from v1.16.0 where the default mtu detection might consult the wrong routing table and as such pick the incorrect mtu. ([#1381](https://github.com/containers/netavark/issues/1381))
+* If the bridge driver is configured to use an vrf interface then pick the routing table from that vrf instead for the mtu detection.
+* Fixed a bug in the netlink code which may result in unexpected EINVAL errors due an incorrect netlink message serialization.
+
 ## v1.17.1
 
 * Fixes a regression where the DHCP proxy would fail when no Renewal or Rebinding time was included in the DHCP message. ([#1368](https://github.com/containers/netavark/issues/1368))
