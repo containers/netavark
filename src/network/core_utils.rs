@@ -62,6 +62,31 @@ where
     Ok(Some(val))
 }
 
+fn validate_subnets(network: &types::Network) -> NetavarkResult<()> {
+    let subnets: Vec<&types::Subnet> = network.subnets.iter().flatten().collect();
+    for (i, subnet1) in subnets.iter().enumerate() {
+        for subnet2 in subnets.iter().skip(i + 1) {
+            // Check for exact duplicate
+            if subnet1.subnet == subnet2.subnet {
+                return Err(NetavarkError::msg(format!(
+                    "duplicate subnet defined: {}",
+                    subnet1.subnet
+                )));
+            }
+            // Check for overlap (one contains the other)
+            if subnet1.subnet.contains(&subnet2.subnet.network())
+                || subnet2.subnet.contains(&subnet1.subnet.network())
+            {
+                return Err(NetavarkError::msg(format!(
+                    "overlapping subnets: {} and {}",
+                    subnet1.subnet, subnet2.subnet
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn get_ipam_addresses<'a>(
     per_network_opts: &'a types::PerNetworkOptions,
     network: &'a types::Network,
@@ -91,8 +116,11 @@ pub fn get_ipam_addresses<'a>(
                 Some(i) => i,
             };
 
-            // prepare a vector of static aps with appropriate cidr
-            for (idx, subnet) in network.subnets.iter().flatten().enumerate() {
+            // check for duplicates and overlaps subnets
+            validate_subnets(network)?;
+
+            // prepare a vector of static ips with appropriate cidr
+            for subnet in network.subnets.iter().flatten() {
                 let subnet_mask_cidr = subnet.subnet.prefix_len();
                 if let Some(gw) = subnet.gateway {
                     let gw_net = match ipnet::IpNet::new(gw, subnet_mask_cidr) {
@@ -112,20 +140,25 @@ pub fn get_ipam_addresses<'a>(
                     ipv6_enabled = true;
                 }
 
-                // Build up response information
-                let container_address: ipnet::IpNet =
-                    match format!("{}/{}", static_ips[idx], subnet_mask_cidr).parse() {
-                        Ok(i) => i,
-                        Err(e) => {
-                            return Err(NetavarkError::SubnetParse(e));
-                        }
-                    };
-                // Add the IP to the address_vector
-                container_addresses.push(container_address);
-                net_addresses.push(types::NetAddress {
-                    gateway: subnet.gateway,
-                    ipnet: container_address,
-                });
+                // build up response information - add all static IPs that match this subnet
+                for static_ip in static_ips {
+                    // check if the static IP belongs to this subnet
+                    if subnet.subnet.contains(static_ip) {
+                        let container_address: ipnet::IpNet =
+                            match format!("{}/{}", static_ip, subnet_mask_cidr).parse() {
+                                Ok(i) => i,
+                                Err(e) => {
+                                    return Err(NetavarkError::SubnetParse(e));
+                                }
+                            };
+                        // add the IP to the address_vector
+                        container_addresses.push(container_address);
+                        net_addresses.push(types::NetAddress {
+                            gateway: subnet.gateway,
+                            ipnet: container_address,
+                        });
+                    }
+                }
             }
 
             let routes: Vec<Route> = match create_route_list(&network.routes) {
