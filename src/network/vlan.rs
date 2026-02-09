@@ -96,15 +96,15 @@ impl driver::NetworkDriver for Vlan<'_> {
         if self.info.per_network_opts.interface_name.is_empty() {
             return Err(NetavarkError::msg(NO_CONTAINER_INTERFACE_ERROR));
         }
+        let opts = parse_vlan_opts(&self.info.network.options, false)?;
 
-        let mode: Option<String> = parse_option(&self.info.network.options, OPTION_MODE)?;
+        let mode: Option<String> = opts.mode.clone();
+        let mtu = opts.mtu.unwrap_or(0);
+        let metric = opts.metric.unwrap_or(100);
+        let no_default_route: bool = opts.no_default_route.unwrap_or(false);
+        let bclim = opts.bclim;
 
         let mut ipam = get_ipam_addresses(self.info.per_network_opts, self.info.network)?;
-
-        let mtu = parse_option(&self.info.network.options, OPTION_MTU)?.unwrap_or(0);
-        let metric = parse_option(&self.info.network.options, OPTION_METRIC)?.unwrap_or(100);
-        let no_default_route: bool =
-            parse_option(&self.info.network.options, OPTION_NO_DEFAULT_ROUTE)?.unwrap_or(false);
 
         // Remove gateways when marked as internal network
         if self.info.network.internal {
@@ -126,17 +126,14 @@ impl driver::NetworkDriver for Vlan<'_> {
                 super::constants::DRIVER_IPVLAN => KindData::IpVlan {
                     mode: CoreUtils::get_ipvlan_mode_from_string(mode.as_deref())?,
                 },
-                super::constants::DRIVER_MACVLAN => {
-                    let bclim = parse_option(&self.info.network.options, OPTION_BCLIM)?;
-                    KindData::MacVlan {
-                        mode: CoreUtils::get_macvlan_mode_from_string(mode.as_deref())?,
-                        mac_address: match &self.info.per_network_opts.static_mac {
-                            Some(mac) => Some(CoreUtils::decode_address_from_hex(mac)?),
-                            None => None,
-                        },
-                        bclim,
-                    }
-                }
+                super::constants::DRIVER_MACVLAN => KindData::MacVlan {
+                    mode: CoreUtils::get_macvlan_mode_from_string(mode.as_deref())?,
+                    mac_address: match &self.info.per_network_opts.static_mac {
+                        Some(mac) => Some(CoreUtils::decode_address_from_hex(mac)?),
+                        None => None,
+                    },
+                    bclim,
+                },
                 other => return Err(NetavarkError::msg(format!("unsupported VLAN type {other}"))),
             },
             no_default_route,
