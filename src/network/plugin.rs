@@ -1,6 +1,7 @@
 use std::{
+    ffi::OsStr,
     io::Read,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -16,6 +17,95 @@ use super::{
 };
 use crate::network::netlink::Socket;
 use crate::network::netlink_route::NetlinkRoute;
+
+/// Result of plugin execution
+pub(crate) enum PluginResult {
+    Success(Vec<u8>),
+    Error { code: i32, buffer: Vec<u8> },
+    Killed,
+}
+
+/// Handle plugin error result by deserializing JsonError and formatting error message.
+pub(crate) fn handle_plugin_error(
+    code: i32,
+    buffer: &[u8],
+    plugin_name: Option<&OsStr>,
+) -> NetavarkError {
+    let err: JsonError = match serde_json::from_slice(buffer) {
+        Ok(e) => e,
+        Err(e) => {
+            return NetavarkError::msg(format!(
+                "plugin {:?} failed with exit code {}, and failed to parse error message: {}",
+                plugin_name.unwrap_or_default(),
+                code,
+                e
+            ));
+        }
+    };
+
+    if let Some(name) = plugin_name {
+        NetavarkError::msg(format!(
+            "plugin {:?} failed with exit code {}, message: {}",
+            name, code, err.error
+        ))
+    } else {
+        NetavarkError::msg(format!("exit code {}, message: {}", code, err.error))
+    }
+}
+
+/// Handle plugin killed result by formatting error message.
+pub(crate) fn handle_plugin_killed(plugin_name: Option<&OsStr>) -> NetavarkError {
+    if let Some(name) = plugin_name {
+        NetavarkError::msg(format!("plugin {:?} killed by signal", name))
+    } else {
+        NetavarkError::msg("plugin killed by signal")
+    }
+}
+
+/// Common plugin execution logic that handles spawning the plugin, writing input,
+/// reading output, and checking exit status.
+pub(crate) fn exec_plugin_common<T: serde::Serialize>(
+    plugin_path: &Path,
+    args: &[&str],
+    input: &T,
+) -> NetavarkResult<PluginResult> {
+    let mut child = Command::new(plugin_path)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()?;
+
+    let stdin = child.stdin.take().unwrap();
+    serde_json::to_writer(&stdin, input)?;
+    // Close stdin here to avoid that the plugin waits forever for an EOF.
+    // And then we would wait for the child to exit which would cause a hang.
+    drop(stdin);
+
+    // Note: We need to buffer the output and then deserialize into the correct type after
+    // the plugin exits, since the plugin can return two different json types depending on
+    // the exit code.
+    let mut buffer: Vec<u8> = Vec::new();
+
+    let mut stdout = child.stdout.take().unwrap();
+    // Do not handle error here, we have to wait for the child first.
+    let result = stdout.read_to_end(&mut buffer);
+
+    let exit_status = wrap!(child.wait(), "wait for plugin to exit")?;
+    if let Some(rc) = exit_status.code() {
+        // make sure the buffer is correct
+        wrap!(result, "read into buffer")?;
+        if rc == 0 {
+            Ok(PluginResult::Success(buffer))
+        } else {
+            Ok(PluginResult::Error { code: rc, buffer })
+        }
+    } else {
+        // If we could not get the exit code then the process was killed by a signal.
+        // I don't think it is necessary to read and return the signal so we just return a generic error.
+        Ok(PluginResult::Killed)
+    }
+}
 
 pub struct PluginDriver<'a> {
     path: PathBuf,
@@ -79,52 +169,20 @@ impl PluginDriver<'_> {
             network_options: self.info.per_network_opts.clone(),
         };
 
-        let mut child = Command::new(&self.path)
-            .arg(if setup { "setup" } else { "teardown" })
-            .arg(netns)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()?;
+        let args = vec![if setup { "setup" } else { "teardown" }, netns];
+        let result = exec_plugin_common(&self.path, &args, &input)?;
 
-        let stdin = child.stdin.take().unwrap();
-        serde_json::to_writer(&stdin, &input)?;
-        // Close stdin here to avoid that the plugin waits forever for an EOF.
-        // And then we would wait for the child to exit which would cause a hang.
-        drop(stdin);
-
-        // Note: We need to buffer the output and then deserialize into the correct type after
-        // the plugin exits, Since the plugin can return two different json types depending on
-        // the exit code.
-        let mut buffer: Vec<u8> = Vec::new();
-
-        let mut stdout = child.stdout.take().unwrap();
-        // Do not handle error here, we have to wait for the child first.
-        let result = stdout.read_to_end(&mut buffer);
-
-        let exit_status = wrap!(child.wait(), "wait for plugin to exit")?;
-        if let Some(rc) = exit_status.code() {
-            // make sure the buffer is correct
-            wrap!(result, "read into buffer")?;
-            if rc == 0 {
-                // read status block and setup
+        match result {
+            PluginResult::Success(buffer) => {
                 if setup {
                     let status = serde_json::from_slice(&buffer)?;
-                    return Ok(Some(status));
+                    Ok(Some(status))
                 } else {
-                    return Ok(None);
+                    Ok(None)
                 }
-            } else {
-                // exit code not 0 => error
-                let err: JsonError = serde_json::from_slice(&buffer)?;
-                return Err(NetavarkError::msg(format!(
-                    "exit code {}, message: {}",
-                    rc, err.error
-                )));
             }
+            PluginResult::Error { code, buffer } => Err(handle_plugin_error(code, &buffer, None)),
+            PluginResult::Killed => Err(handle_plugin_killed(None)),
         }
-        // If we could not get the exit code then the process was killed by a signal.
-        // I don't think it is necessary to read and return the signal so we just return a generic error.
-        Err(NetavarkError::msg("plugin killed by signal"))
     }
 }
