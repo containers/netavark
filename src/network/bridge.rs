@@ -125,14 +125,15 @@ impl driver::NetworkDriver for Bridge<'_> {
         }
         let ipam = get_ipam_addresses(self.info.per_network_opts, self.info.network)?;
 
-        let mode: Option<String> = parse_option(&self.info.network.options, OPTION_MODE)?;
-        let mtu: u32 = parse_option(&self.info.network.options, OPTION_MTU)?.unwrap_or(0);
-        let isolate: IsolateOption = get_isolate_option(&self.info.network.options)?;
-        let metric: u32 = parse_option(&self.info.network.options, OPTION_METRIC)?.unwrap_or(100);
-        let no_default_route: bool =
-            parse_option(&self.info.network.options, OPTION_NO_DEFAULT_ROUTE)?.unwrap_or(false);
-        let vrf: Option<String> = parse_option(&self.info.network.options, OPTION_VRF)?;
-        let vlan: Option<u16> = parse_option(&self.info.network.options, OPTION_VLAN)?;
+        let opts = parse_bridge_opts(&self.info.network.options, false)?;
+        let mode: Option<String> = opts.mode.clone();
+        let mtu: u32 = opts.mtu.unwrap_or(0);
+        let isolate: IsolateOption = opts.isolate;
+        let metric: u32 = opts.metric.unwrap_or(100);
+        let no_default_route: bool = opts.no_default_route.unwrap_or(false);
+        let vrf: Option<String> = opts.vrf.clone();
+        let vlan: Option<u16> = opts.vlan;
+
         let host_interface_name = parse_option(
             &self.info.per_network_opts.options,
             OPTION_HOST_INTERFACE_NAME,
