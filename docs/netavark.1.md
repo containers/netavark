@@ -16,6 +16,12 @@ Instead of reading from STDIN, read the configuration to be applied from the giv
 
 ## COMMANDS
 
+### netavark create
+
+The create command takes a partially configured network and completes the remaining configuration.
+The create command input is describled in [netavark-create-input.md](https://github.com/containers/netavark/blob/main/docs/netavark-create-input.md). The output of the
+create command is a network config json. 
+
 ### netavark setup
 
 The setup command configures the given network namespace with the given configuration, creating any interfaces and firewall rules necessary.
@@ -23,6 +29,7 @@ The setup command configures the given network namespace with the given configur
 ### netavark teardown
 
 The teardown command is the inverse of the setup command, undoing any configuration applied. Some interfaces may not be deleted (bridge interfaces, for example, will not be removed). 
+
 
 ### CONFIGURATION FORMAT
 

@@ -61,6 +61,9 @@ futures-core = "0.3.31"
 futures-util = "0.3.31"
 tower = { version = "0.5.3", features = ["util"] }
 hyper-util = "0.1.20"
+regex = "1.12.2"
+serde_with = "3.16.1"
+chrono = { version = "0.4.42", features = ["serde"] }
 
 [build-dependencies]
 chrono = { version = "0.4.43", default-features = false, features = ["clock"] }
