@@ -27,8 +27,10 @@ env:
 
 gcp_credentials: ENCRYPTED[d6efdb7d6d4c61e3831df2193ca6348bb02f26cd931695f69d41930b1965f7dab72a838ca0902f6ed8cde66c7deddae2]
 
-aws_credentials: ENCRYPTED[9f65dd26c4b7dc54c72ce2061d22e6719c8c39cc452456e4ca02001039ad8ceee93ad35ed1782d87d71e340af94efa79]
-
+aws_credentials:
+  role_arn: arn:aws:iam::449134212816:role/netavark-ci-role
+  role_session_name: cirrus
+  region: us-east-1  
 
 build_task:
   alias: "build"
