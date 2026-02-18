@@ -389,3 +389,49 @@ EOF
     assert_json "$default_route_v6" '.[0].dst' == "default" "Default route was selected"
     assert_json "$default_route_v6" '.[0].metric' == "200" "v6 route metric matches v4"
 }
+
+
+
+@test "macvlan multiple static ips single subnet" {
+   test_macvlan_ipvlan_subnets driver=macvlan \
+      static_ips='"10.88.0.5", "10.88.0.10", "10.88.0.15"' \
+      subnets='{"subnet":"10.88.0.0/16","gateway":"10.88.0.1"}'
+}
+
+@test "macvlan multiple static ips multiple subnets" {
+   test_macvlan_ipvlan_subnets driver=macvlan \
+      static_ips='"10.88.0.5", "10.89.0.10", "10.88.0.15"' \
+      subnets='{"subnet":"10.88.0.0/16","gateway":"10.88.0.1"}, {"subnet":"10.89.0.0/16","gateway":"10.89.0.1"}'
+}
+
+@test "macvlan overlapping subnets error" {
+   test_macvlan_ipvlan_subnets driver=macvlan \
+      static_ips='"10.1.2.5", "10.1.3.249", "10.1.2.100"' \
+      subnets='{"subnet":"10.1.2.0/23","gateway":"10.1.2.1"}, {"subnet":"10.1.3.248/30","gateway":"10.1.3.249"}' \
+      expected_rc=1 \
+      error_match="overlapping subnets"
+}
+
+@test "macvlan duplicate subnet definition error" {
+   test_macvlan_ipvlan_subnets driver=macvlan \
+      static_ips='"10.88.0.5", "10.88.0.10", "10.88.0.15"' \
+      subnets='{"subnet":"10.88.0.0/16","gateway":"10.88.0.1"}, {"subnet":"10.88.0.0/16","gateway":"10.88.0.1"}' \
+      expected_rc=1 \
+      error_match="duplicate subnet"
+}
+
+@test "macvlan not all static ips match a subnet error" {
+   test_macvlan_ipvlan_subnets driver=macvlan \
+      static_ips='"10.88.0.5", "10.89.0.10", "10.90.0.15"' \
+      subnets='{"subnet":"10.88.0.0/16","gateway":"10.88.0.1"}, {"subnet":"10.89.0.0/16","gateway":"10.89.0.1"}' \
+      expected_rc=1 \
+      error_match="not all static IPs matched a subnet"
+}
+
+@test "macvlan static ip outside configured subnet error" {
+   test_macvlan_ipvlan_subnets driver=macvlan \
+      static_ips='"10.88.0.5", "10.88.0.10", "10.89.0.15"' \
+      subnets='{"subnet":"10.88.0.0/16","gateway":"10.88.0.1"}' \
+      expected_rc=1 \
+      error_match="not all static IPs matched a subnet"
+}

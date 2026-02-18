@@ -62,6 +62,161 @@ where
     Ok(Some(val))
 }
 
+fn validate_subnets(subnets: &Option<Vec<types::Subnet>>) -> NetavarkResult<()> {
+    for (i, subnet1) in subnets.iter().flatten().enumerate() {
+        for subnet2 in subnets.iter().flatten().skip(i + 1) {
+            // Check for exact duplicate
+            if subnet1.subnet == subnet2.subnet {
+                return Err(NetavarkError::msg(format!(
+                    "duplicate subnet defined: {}",
+                    subnet1.subnet
+                )));
+            }
+            // Check for overlap (one contains the other)
+            if subnet1.subnet.contains(&subnet2.subnet.network())
+                || subnet2.subnet.contains(&subnet1.subnet.network())
+            {
+                return Err(NetavarkError::msg(format!(
+                    "overlapping subnets: {} and {}",
+                    subnet1.subnet, subnet2.subnet
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestCase {
+        name: &'static str,
+        subnets: Option<Vec<(&'static str, &'static str)>>,
+        should_pass: bool,
+        expected_error: Option<&'static str>,
+    }
+
+    #[test]
+    fn test_validate_subnets() {
+        let test_cases = vec![
+            TestCase {
+                name: "empty subnets",
+                subnets: None,
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "single subnet",
+                subnets: Some(vec![("10.0.0.0/24", "10.0.0.1")]),
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "two non-overlapping subnets",
+                subnets: Some(vec![
+                    ("10.0.0.0/24", "10.0.0.1"),
+                    ("10.0.1.0/24", "10.0.1.1"),
+                ]),
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "ipv4 and ipv6 subnets",
+                subnets: Some(vec![("10.0.0.0/24", "10.0.0.1"), ("fd00::/64", "fd00::1")]),
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "duplicate subnets",
+                subnets: Some(vec![
+                    ("10.0.0.0/24", "10.0.0.1"),
+                    ("10.0.0.0/24", "10.0.0.1"),
+                ]),
+                should_pass: false,
+                expected_error: Some("duplicate subnet"),
+            },
+            TestCase {
+                name: "overlapping subnets",
+                subnets: Some(vec![
+                    ("10.0.0.0/16", "10.0.0.1"),
+                    ("10.0.1.0/24", "10.0.1.1"),
+                ]),
+                should_pass: false,
+                expected_error: Some("overlapping subnets"),
+            },
+            TestCase {
+                name: "ipv6 overlapping subnets",
+                subnets: Some(vec![
+                    ("fd00::/48", "fd00::1"),
+                    ("fd00:0:0:1::/64", "fd00:0:0:1::1"),
+                ]),
+                should_pass: false,
+                expected_error: Some("overlapping subnets"),
+            },
+            TestCase {
+                name: "ipv6 duplicate subnets",
+                subnets: Some(vec![("fd00::/48", "fd00::1"), ("fd00::/48", "fd00::1")]),
+                should_pass: false,
+                expected_error: Some("duplicate subnet"),
+            },
+            TestCase {
+                name: "single ipv6 subnet",
+                subnets: Some(vec![("fd00::/48", "fd00::1")]),
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "two non-overlapping ipv6 subnets",
+                subnets: Some(vec![
+                    ("fd00:0:0:1::/64", "fd00:0:0:1::1"),
+                    ("fd00:0:0:2::/64", "fd00:0:0:2::1"),
+                ]),
+                should_pass: true,
+                expected_error: None,
+            },
+        ];
+
+        for tc in test_cases {
+            let subnets: Option<Vec<_>> = tc.subnets.as_ref().map(|subnet_strs| {
+                subnet_strs
+                    .iter()
+                    .map(|(subnet_str, gw_str)| types::Subnet {
+                        subnet: subnet_str.parse().unwrap(),
+                        gateway: Some(gw_str.parse().unwrap()),
+                        lease_range: None,
+                    })
+                    .collect()
+            });
+
+            let result = validate_subnets(&subnets);
+
+            if tc.should_pass {
+                assert!(
+                    result.is_ok(),
+                    "Test case '{}' should pass but failed with: {:?}",
+                    tc.name,
+                    result.err()
+                );
+            } else {
+                assert!(
+                    result.is_err(),
+                    "Test case '{}' should fail but passed",
+                    tc.name
+                );
+                if let Some(expected_msg) = tc.expected_error {
+                    assert!(
+                        result.unwrap_err().to_string().contains(expected_msg),
+                        "Test case '{}' error message doesn't contain '{}'",
+                        tc.name,
+                        expected_msg
+                    );
+                }
+            }
+        }
+    }
+}
+
 pub fn get_ipam_addresses<'a>(
     per_network_opts: &'a types::PerNetworkOptions,
     network: &'a types::Network,
@@ -91,8 +246,11 @@ pub fn get_ipam_addresses<'a>(
                 Some(i) => i,
             };
 
-            // prepare a vector of static aps with appropriate cidr
-            for (idx, subnet) in network.subnets.iter().flatten().enumerate() {
+            // check for duplicates and overlaps subnets
+            validate_subnets(&network.subnets)?;
+
+            // prepare a vector of static ips with appropriate cidr
+            for subnet in network.subnets.iter().flatten() {
                 let subnet_mask_cidr = subnet.subnet.prefix_len();
                 if let Some(gw) = subnet.gateway {
                     let gw_net = match ipnet::IpNet::new(gw, subnet_mask_cidr) {
@@ -112,20 +270,35 @@ pub fn get_ipam_addresses<'a>(
                     ipv6_enabled = true;
                 }
 
-                // Build up response information
-                let container_address: ipnet::IpNet =
-                    match format!("{}/{}", static_ips[idx], subnet_mask_cidr).parse() {
-                        Ok(i) => i,
-                        Err(e) => {
-                            return Err(NetavarkError::SubnetParse(e));
-                        }
-                    };
-                // Add the IP to the address_vector
-                container_addresses.push(container_address);
-                net_addresses.push(types::NetAddress {
-                    gateway: subnet.gateway,
-                    ipnet: container_address,
-                });
+                // build up response information - add all static IPs that match this subnet
+                for static_ip in static_ips {
+                    // check if the static IP belongs to this subnet
+                    if subnet.subnet.contains(static_ip) {
+                        let container_address =
+                            match ipnet::IpNet::new(*static_ip, subnet_mask_cidr) {
+                                Ok(i) => i,
+                                Err(err) => {
+                                    return Err(NetavarkError::msg(format!(
+                                    "failed to parse address {static_ip}/{subnet_mask_cidr}: {err}"
+                                )))
+                                }
+                            };
+                        // add the IP to the address_vector
+                        container_addresses.push(container_address);
+                        net_addresses.push(types::NetAddress {
+                            gateway: subnet.gateway,
+                            ipnet: container_address,
+                        });
+                    }
+                }
+            }
+
+            if network.subnets.is_some() && container_addresses.len() != static_ips.len() {
+                return Err(NetavarkError::msg(format!(
+                    "not all static IPs matched a subnet: expected {}, got {}",
+                    static_ips.len(),
+                    container_addresses.len()
+                )));
             }
 
             let routes: Vec<Route> = match create_route_list(&network.routes) {
