@@ -39,7 +39,7 @@ use super::{
         ISOLATE_OPTION_FALSE, ISOLATE_OPTION_STRICT, ISOLATE_OPTION_TRUE,
         NO_CONTAINER_INTERFACE_ERROR, OPTION_HOST_INTERFACE_NAME, OPTION_ISOLATE, OPTION_METRIC,
         OPTION_MODE, OPTION_MTU, OPTION_NO_DEFAULT_ROUTE, OPTION_OUTBOUND_ADDR4,
-        OPTION_OUTBOUND_ADDR6, OPTION_VLAN, OPTION_VRF,
+        OPTION_OUTBOUND_ADDR6, OPTION_VLAN, OPTION_VRF, VALID_BRIDGE_OPTS,
     },
     core_utils::{self, get_ipam_addresses, is_using_systemd, join_netns, parse_option, CoreUtils},
     driver::{self, DriverInfo},
@@ -125,14 +125,15 @@ impl driver::NetworkDriver for Bridge<'_> {
         }
         let ipam = get_ipam_addresses(self.info.per_network_opts, self.info.network)?;
 
-        let mode: Option<String> = parse_option(&self.info.network.options, OPTION_MODE)?;
-        let mtu: u32 = parse_option(&self.info.network.options, OPTION_MTU)?.unwrap_or(0);
-        let isolate: IsolateOption = get_isolate_option(&self.info.network.options)?;
-        let metric: u32 = parse_option(&self.info.network.options, OPTION_METRIC)?.unwrap_or(100);
-        let no_default_route: bool =
-            parse_option(&self.info.network.options, OPTION_NO_DEFAULT_ROUTE)?.unwrap_or(false);
-        let vrf: Option<String> = parse_option(&self.info.network.options, OPTION_VRF)?;
-        let vlan: Option<u16> = parse_option(&self.info.network.options, OPTION_VLAN)?;
+        let opts = parse_bridge_opts(&self.info.network.options, false)?;
+        let mode: Option<String> = opts.mode.clone();
+        let mtu: u32 = opts.mtu.unwrap_or(0);
+        let isolate: IsolateOption = opts.isolate;
+        let metric: u32 = opts.metric.unwrap_or(100);
+        let no_default_route: bool = opts.no_default_route.unwrap_or(false);
+        let vrf: Option<String> = opts.vrf.clone();
+        let vlan: Option<u16> = opts.vlan;
+
         let host_interface_name = parse_option(
             &self.info.per_network_opts.options,
             OPTION_HOST_INTERFACE_NAME,
@@ -1172,4 +1173,52 @@ fn maybe_add_alias<'a>(names: &mut Vec<SafeString<'a>>, name: &'a str) {
         Ok(name) => names.push(name),
         Err(err) => log::warn!("invalid network alias {name:?}: {err}, ignoring this name"),
     }
+}
+
+pub fn parse_bridge_opts(
+    opts: &Option<HashMap<String, String>>,
+    strict: bool,
+) -> NetavarkResult<BridgeOptions> {
+    if strict {
+        if let Some(invalid_key) = opts
+            .as_ref()
+            .and_then(|m| m.keys().find(|k| !VALID_BRIDGE_OPTS.contains(&k.as_str())))
+        {
+            return Err(NetavarkError::msg(format!(
+                "unsupported bridge network option: {}",
+                invalid_key
+            )));
+        }
+    }
+    let mode = parse_option(opts, OPTION_MODE)?;
+    let mtu = parse_option(opts, OPTION_MTU)?;
+    let isolate: IsolateOption = get_isolate_option(opts)?;
+    let metric = parse_option(opts, OPTION_METRIC)?;
+    let no_default_route = parse_option(opts, OPTION_NO_DEFAULT_ROUTE)?;
+    let vrf = parse_option(opts, OPTION_VRF)?;
+    let vlan = parse_option(opts, OPTION_VLAN)?;
+    if vlan.is_some() && vlan.unwrap() > 4094 {
+        return Err(NetavarkError::msg(
+            "vlan must be between 0 and 4094".to_string(),
+        ));
+    }
+    Ok(BridgeOptions {
+        mode,
+        mtu,
+        isolate,
+        metric,
+        no_default_route,
+        vrf,
+        vlan,
+    })
+}
+
+pub struct BridgeOptions {
+    pub mode: Option<String>,
+    pub mtu: Option<u32>,
+    pub isolate: IsolateOption,
+    pub metric: Option<u32>,
+    pub no_default_route: Option<bool>,
+    pub vrf: Option<String>,
+    pub vlan: Option<u16>,
 }

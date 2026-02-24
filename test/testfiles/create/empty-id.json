@@ -1,0 +1,21 @@
+{
+  "network": {
+    "name": "testnet",
+    "id": "",
+    "driver": "bridge",
+    "dns_enabled": false,
+    "internal": false,
+    "ipv6_enabled": false
+  },
+  "used": {
+    "interfaces": [],
+    "names": {},
+    "subnets": []
+  },
+  "options": {
+    "subnet_pools": [{"base": "10.89.0.0/16", "size": 24}],
+    "default_interface_name": "podman",
+    "check_used_subnets": false
+  }
+}
+
