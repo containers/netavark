@@ -238,9 +238,12 @@ pub struct Subnet {
 /// Static routes for a network.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Route {
-    /// Gateway IP for this route.
+    /// Gateway IP for this route. Required for unicast routes, must not be
+    /// set for blackhole/unreachable/prohibit routes.
     #[serde(rename = "gateway")]
-    pub gateway: IpAddr,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub gateway: Option<IpAddr>,
 
     /// Destination for this route in CIDR form.
     #[serde(rename = "destination")]
@@ -249,6 +252,13 @@ pub struct Route {
     /// Route Metric
     #[serde(rename = "metric")]
     pub metric: Option<u32>,
+
+    /// Route type, accepts the same values as ip route: unicast, blackhole,
+    /// unreachable, prohibit. Defaults to unicast.
+    #[serde(rename = "route_type")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub route_type: Option<String>,
 }
 
 /// LeaseRange contains the range where IP are leased.

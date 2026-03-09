@@ -43,31 +43,49 @@ pub enum LinkID {
 pub enum Route {
     Ipv4 {
         dest: ipnet::Ipv4Net,
-        gw: Ipv4Addr,
+        gw: Option<Ipv4Addr>,
         metric: Option<u32>,
+        route_type: RouteType,
     },
     Ipv6 {
         dest: ipnet::Ipv6Net,
-        gw: Ipv6Addr,
+        gw: Option<Ipv6Addr>,
         metric: Option<u32>,
+        route_type: RouteType,
     },
 }
 
 impl std::fmt::Display for Route {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (dest, gw, metric) = match self {
-            Route::Ipv4 { dest, gw, metric } => (
+        let (dest, gw, metric, rtype) = match self {
+            Route::Ipv4 {
+                dest,
+                gw,
+                metric,
+                route_type,
+            } => (
                 dest.to_string(),
-                gw.to_string(),
+                gw.map_or(String::new(), |g| g.to_string()),
                 metric.unwrap_or(constants::DEFAULT_METRIC),
+                route_type,
             ),
-            Route::Ipv6 { dest, gw, metric } => (
+            Route::Ipv6 {
+                dest,
+                gw,
+                metric,
+                route_type,
+            } => (
                 dest.to_string(),
-                gw.to_string(),
+                gw.map_or(String::new(), |g| g.to_string()),
                 metric.unwrap_or(constants::DEFAULT_METRIC),
+                route_type,
             ),
         };
-        write!(f, "(dest: {dest} ,gw: {gw}, metric {metric})")
+        if gw.is_empty() {
+            write!(f, "({rtype:?} dest: {dest}, metric {metric})")
+        } else {
+            write!(f, "(dest: {dest}, gw: {gw}, metric {metric})")
+        }
     }
 }
 
@@ -251,38 +269,52 @@ impl Socket<NetlinkRoute> {
         msg.header.table = libc::RT_TABLE_MAIN;
         msg.header.protocol = RouteProtocol::Static;
         msg.header.scope = RouteScope::Universe;
-        msg.header.kind = RouteType::Unicast;
 
-        let (dest, dest_prefix, gateway, final_metric) = match route {
-            Route::Ipv4 { dest, gw, metric } => {
+        let (dest, dest_prefix, gateway, final_metric, rtype) = match route {
+            Route::Ipv4 {
+                dest,
+                gw,
+                metric,
+                route_type,
+            } => {
                 msg.header.address_family = AddressFamily::Inet;
                 (
                     RouteAddress::Inet(dest.addr()),
                     dest.prefix_len(),
-                    RouteAddress::Inet(*gw),
+                    gw.map(RouteAddress::Inet),
                     metric.unwrap_or(constants::DEFAULT_METRIC),
+                    *route_type,
                 )
             }
-            Route::Ipv6 { dest, gw, metric } => {
+            Route::Ipv6 {
+                dest,
+                gw,
+                metric,
+                route_type,
+            } => {
                 msg.header.address_family = AddressFamily::Inet6;
                 (
                     RouteAddress::Inet6(dest.addr()),
                     dest.prefix_len(),
-                    RouteAddress::Inet6(*gw),
+                    gw.map(RouteAddress::Inet6),
                     metric.unwrap_or(constants::DEFAULT_METRIC),
+                    *route_type,
                 )
             }
         };
 
+        msg.header.kind = rtype;
         msg.header.destination_prefix_length = dest_prefix;
         msg.attributes
             .push(netlink_packet_route::route::RouteAttribute::Destination(
                 dest,
             ));
-        msg.attributes
-            .push(netlink_packet_route::route::RouteAttribute::Gateway(
-                gateway,
-            ));
+
+        if let Some(gw) = gateway {
+            msg.attributes
+                .push(netlink_packet_route::route::RouteAttribute::Gateway(gw));
+        }
+
         msg.attributes
             .push(netlink_packet_route::route::RouteAttribute::Priority(
                 final_metric,
