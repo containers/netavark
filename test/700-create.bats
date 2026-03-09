@@ -149,3 +149,34 @@ load helpers
     assert_json "$result" ".subnets[0].subnet" =~ "^10\\.89\\." "Output subnet is within the pool range"
 }
 
+@test "create - network with unicast routes" {
+    run_netavark create < ${TESTSDIR}/testfiles/create/routes-unicast.json
+    result="$output"
+
+    assert_json "$result" ".name" == "routetest" "Network name matches"
+    assert_json "$result" '.routes | length' == "1" "One route is present"
+    assert_json "$result" '.routes[0].destination' == "10.89.0.0/24" "Route destination matches"
+    assert_json "$result" '.routes[0].gateway' == "10.88.0.2" "Route gateway matches"
+}
+
+@test "create - network with blackhole routes" {
+    run_netavark create < ${TESTSDIR}/testfiles/create/routes-blackhole.json
+    result="$output"
+
+    assert_json "$result" ".name" == "blackholetest" "Network name matches"
+    assert_json "$result" '.routes | length' == "1" "One route is present"
+    assert_json "$result" '.routes[0].destination' == "10.89.0.0/24" "Route destination matches"
+    assert_json "$result" '.routes[0].route_type' == "blackhole" "Route type is blackhole"
+    assert_json "$result" '.routes[0] | has("gateway")' == "false" "Blackhole route has no gateway"
+}
+
+@test "create - fail with unicast route missing gateway" {
+    expected_rc=1 run_netavark create < ${TESTSDIR}/testfiles/create/routes-unicast-no-gateway.json
+    assert_json ".error" "route 10.89.0.0/24 requires a gateway for type unicast" "Error message for missing gateway"
+}
+
+@test "create - fail with blackhole route having gateway" {
+    expected_rc=1 run_netavark create < ${TESTSDIR}/testfiles/create/routes-blackhole-with-gateway.json
+    assert_json ".error" "route 10.89.0.0/24 must not have a gateway for type blackhole" "Error message for gateway on blackhole"
+}
+

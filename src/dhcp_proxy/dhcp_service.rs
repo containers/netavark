@@ -6,6 +6,7 @@ use crate::network::{
 };
 use log::debug;
 use mozim::{DhcpV4Client, DhcpV4Config, DhcpV4Lease as MozimV4Lease, DhcpV4State};
+use netlink_packet_route::route::RouteType;
 use tokio::sync::Mutex;
 use tonic::{Code, Status};
 
@@ -282,8 +283,9 @@ fn update_lease_ip(
             if let Some(gw) = old_gw {
                 let route = Route::Ipv4 {
                     dest: ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0)?,
-                    gw: *gw,
+                    gw: Some(*gw),
                     metric: None,
+                    route_type: RouteType::Unicast,
                 };
                 match sock.del_route(&route) {
                     Ok(_) => {}
@@ -300,8 +302,9 @@ fn update_lease_ip(
             if let Some(gw) = new_gw {
                 let route = Route::Ipv4 {
                     dest: ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0)?,
-                    gw: *gw,
+                    gw: Some(*gw),
                     metric: None,
+                    route_type: RouteType::Unicast,
                 };
                 sock.add_route(&route)?;
             }
