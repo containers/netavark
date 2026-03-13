@@ -91,6 +91,14 @@ client: bin $(CARGO_TARGET_DIR)
 docs: ## build the docs on the host
 	$(MAKE) -C docs
 
+.PHONY: install.netavark
+install.netavark:
+	install ${SELINUXOPT} -D -m0755 bin/netavark $(DESTDIR)$(LIBEXECPODMAN)/netavark
+
+.PHONY: install.docs
+install.docs:
+	$(MAKE) -C docs install
+
 NV_UNIT_FILES = contrib/systemd/system/netavark-dhcp-proxy.service \
 				contrib/systemd/system/netavark-firewalld-reload.service \
 				contrib/systemd/system/netavark-nftables-reload.service
@@ -99,15 +107,17 @@ NV_UNIT_FILES = contrib/systemd/system/netavark-dhcp-proxy.service \
 	sed -e 's;@@NETAVARK@@;$(LIBEXECPODMAN)/netavark;g' $< >$@.tmp.$$ \
 		&& mv -f $@.tmp.$$ $@
 
-.PHONY: install
-install: $(NV_UNIT_FILES)
-	install ${SELINUXOPT} -D -m0755 bin/netavark $(DESTDIR)$(LIBEXECPODMAN)/netavark
-	$(MAKE) -C docs install
+.PHONY: install.systemd
+install.systemd: $(NV_UNIT_FILES)
 	install ${SELINUXOPT} -m 755 -d ${DESTDIR}${SYSTEMDDIR}
 	install ${SELINUXOPT} -m 644 contrib/systemd/system/netavark-dhcp-proxy.socket ${DESTDIR}${SYSTEMDDIR}/netavark-dhcp-proxy.socket
 	install ${SELINUXOPT} -m 644 contrib/systemd/system/netavark-dhcp-proxy.service ${DESTDIR}${SYSTEMDDIR}/netavark-dhcp-proxy.service
 	install ${SELINUXOPT} -m 644 contrib/systemd/system/netavark-firewalld-reload.service ${DESTDIR}${SYSTEMDDIR}/netavark-firewalld-reload.service
 	install ${SELINUXOPT} -m 644 contrib/systemd/system/netavark-nftables-reload.service ${DESTDIR}${SYSTEMDDIR}/netavark-nftables-reload.service
+
+
+.PHONY: install
+install: install.netavark install.docs install.systemd
 
 .PHONY: uninstall
 uninstall:
