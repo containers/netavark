@@ -63,7 +63,7 @@ tower = { version = "0.5.3", features = ["util"] }
 hyper-util = "0.1.20"
 regex = "1.12.3"
 serde_with = "3.16.1"
-chrono = { version = "0.4.42", features = ["serde"] }
+chrono = { version = "0.4.44", features = ["serde"] }
 
 [build-dependencies]
 chrono = { version = "0.4.44", default-features = false, features = ["clock"] }
