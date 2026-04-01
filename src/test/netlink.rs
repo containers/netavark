@@ -4,7 +4,7 @@ mod tests {
 
     use netavark::network::netlink::Socket;
     use netavark::network::netlink_route::{CreateLinkOptions, LinkID, NetlinkRoute, Route};
-    use netlink_packet_route::{address, link::InfoKind};
+    use netlink_packet_route::{address, link::InfoKind, route::RouteType};
 
     macro_rules! test_setup {
         () => {
@@ -147,8 +147,9 @@ mod tests {
 
         sock.del_route(&Route::Ipv4 {
             dest: net.parse().unwrap(),
-            gw: gw.parse().unwrap(),
+            gw: Some(gw.parse().unwrap()),
             metric: None,
+            route_type: RouteType::Unicast,
         })
         .expect("del_route failed");
 
