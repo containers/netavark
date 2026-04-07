@@ -214,13 +214,21 @@ function setup() {
 @test "create - ipv6_enabled with ipv4 subnet adds ipv6" {
     run_netavark create < ${TESTSDIR}/testfiles/create/ipv6-with-ipv4-subnet.json
     result="$output"
-    
+
     assert_json "$result" ".ipv6_enabled" == "true" "IPv6 is enabled"
     assert_json "$result" ".subnets | length" == "2" "Two subnets created"
     assert_json "$result" ".subnets[0].subnet" == "10.100.0.0/24" "IPv4 subnet matches"
 
     # Check second subnet is IPv6
     assert_json "$result" ".subnets[1].subnet" "=~" ":" "Second subnet should be IPv6"
+}
+
+@test "create - ipv6 subnet auto-detects and sets ipv6_enabled" {
+    run_netavark create < ${TESTSDIR}/testfiles/create/ipv6-subnet.json
+    result="$output"
+
+    assert_json "$result" ".ipv6_enabled" == "true" "IPv6 is auto-detected and enabled"
+    assert_json "$result" ".subnets[0].subnet" == "fdcc::/64" "IPv6 subnet matches"
 }
 
 # NetworkDNSServers Tests

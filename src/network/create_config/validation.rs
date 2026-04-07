@@ -119,6 +119,11 @@ pub fn validate_subnets(
 
     for subnet in subnets {
         validate_subnet(subnet, add_gateway, check_used, used_networks)?;
+
+        // Auto-detect IPv6 and set ipv6_enabled flag
+        if subnet.subnet.addr().is_ipv6() {
+            network.ipv6_enabled = true;
+        }
     }
 
     Ok(())
