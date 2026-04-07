@@ -1,0 +1,27 @@
+{
+  "network": {
+    "name": "macvlansubnet",
+    "id": "7334567890123456789012345678901234567890123456789012345678901234",
+    "driver": "macvlan",
+    "dns_enabled": false,
+    "internal": false,
+    "ipv6_enabled": false,
+    "network_interface": "dummy0",
+    "subnets": [
+      {
+        "subnet": "10.200.0.0/24",
+        "gateway": "10.200.0.1"
+      }
+    ]
+  },
+  "used": {
+    "interfaces": [],
+    "names": {},
+    "subnets": []
+  },
+  "options": {
+    "subnet_pools": [{"base": "10.89.0.0/16", "size": 24}],
+    "default_interface_name": "podman",
+    "check_used_subnets": false
+  }
+}
