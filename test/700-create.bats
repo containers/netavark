@@ -380,3 +380,14 @@ function setup() {
     expected_rc=1 run_netavark create < ${TESTSDIR}/testfiles/create/subnet-duplicate-used.json
     assert_json "$output" ".error" "=~" "already used" "Error message contains 'already used'"
 }
+
+# Tests for subnet validation within same network
+@test "create - fail when subnets overlap within same network" {
+    expected_rc=1 run_netavark create < ${TESTSDIR}/testfiles/create/subnet-overlap-within.json
+    assert_json "$output" ".error" "=~" "overlapping subnets detected" "Error message about overlapping subnets"
+}
+
+@test "create - fail when subnets are duplicated within same network" {
+    expected_rc=1 run_netavark create < ${TESTSDIR}/testfiles/create/subnet-duplicate-within.json
+    assert_json "$output" ".error" "=~" "duplicate subnets detected" "Error message about duplicate subnets"
+}

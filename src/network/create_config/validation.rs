@@ -1,6 +1,6 @@
 use crate::error::{NetavarkError, NetavarkResult};
 use crate::network::constants;
-use crate::network::create_config::subnet::network_intersects_with_networks;
+use crate::network::create_config::subnet::{network_intersects_with_networks, networks_intersect};
 use crate::network::types::{Network, Route, Subnet};
 use ipnet::IpNet;
 use regex::Regex;
@@ -116,6 +116,30 @@ pub fn validate_subnets(
     let Some(subnets) = &mut network.subnets else {
         return Ok(());
     };
+
+    // Check for duplicate and overlapping subnets within the same network
+    for i in 0..subnets.len() {
+        for j in (i + 1)..subnets.len() {
+            let subnet_a = &subnets[i].subnet;
+            let subnet_b = &subnets[j].subnet;
+
+            // Check for duplicate subnets
+            if subnet_a == subnet_b {
+                return Err(NetavarkError::msg(format!(
+                    "duplicate subnets detected: {}",
+                    subnet_a
+                )));
+            }
+
+            // Check for overlapping subnets
+            if networks_intersect(subnet_a, subnet_b) {
+                return Err(NetavarkError::msg(format!(
+                    "overlapping subnets detected: {} and {}",
+                    subnet_a, subnet_b
+                )));
+            }
+        }
+    }
 
     for subnet in subnets {
         validate_subnet(subnet, add_gateway, check_used, used_networks)?;
