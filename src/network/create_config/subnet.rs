@@ -4,19 +4,24 @@ use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use rand::random;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
+/// Check if two networks overlap/intersect with each other.
+pub fn networks_intersect(a: &IpNet, b: &IpNet) -> bool {
+    match (a, b) {
+        (IpNet::V4(net_a), IpNet::V4(net_b)) => {
+            net_a.contains(&net_b.network()) || net_b.contains(&net_a.network())
+        }
+        (IpNet::V6(net_a), IpNet::V6(net_b)) => {
+            net_a.contains(&net_b.network()) || net_b.contains(&net_a.network())
+        }
+        _ => false,
+    }
+}
+
 /// Check if a network intersects with any of the used networks.
 pub fn network_intersects_with_networks(network: &IpNet, used_networks: &[IpNet]) -> bool {
     used_networks
         .iter()
-        .any(|used_net| match (network, used_net) {
-            (IpNet::V4(net_v4), IpNet::V4(used_v4)) => {
-                net_v4.contains(&used_v4.network()) || used_v4.contains(&net_v4.network())
-            }
-            (IpNet::V6(net_v6), IpNet::V6(used_v6)) => {
-                net_v6.contains(&used_v6.network()) || used_v6.contains(&net_v6.network())
-            }
-            _ => false,
-        })
+        .any(|used_net| networks_intersect(network, used_net))
 }
 
 /// Get the next subnet by incrementing the network address by the subnet size.
