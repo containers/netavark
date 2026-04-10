@@ -260,7 +260,8 @@ pub fn validate_routes(network: &mut Network) -> NetavarkResult<()> {
 }
 
 /// Validate a single route.
-/// Ensures that the destination is a valid network address (not a host address).
+/// Ensures that the destination is a valid network address (not a host address)
+/// and that the route type and gateway are valid.
 fn validate_route(route: &Route) -> NetavarkResult<()> {
     // Check that destination is a network and not an address
     // The address part of the destination must equal the network address
@@ -274,6 +275,33 @@ fn validate_route(route: &Route) -> NetavarkResult<()> {
             if net_v6.addr() != net_v6.network() {
                 return Err(NetavarkError::msg("route destination invalid"));
             }
+        }
+    }
+
+    // Validate route type and gateway
+    let route_type = route.route_type.as_deref().unwrap_or("unicast");
+    match route_type {
+        "unicast" | "" => {
+            if route.gateway.is_none() {
+                return Err(NetavarkError::msg(format!(
+                    "route {} requires a gateway for type unicast",
+                    route.destination
+                )));
+            }
+        }
+        "blackhole" | "unreachable" | "prohibit" => {
+            if route.gateway.is_some() {
+                return Err(NetavarkError::msg(format!(
+                    "route {} must not have a gateway for type {}",
+                    route.destination, route_type
+                )));
+            }
+        }
+        _ => {
+            return Err(NetavarkError::msg(format!(
+                "invalid route type \"{}\"",
+                route_type
+            )));
         }
     }
 
