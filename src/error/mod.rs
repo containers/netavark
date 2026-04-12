@@ -159,7 +159,18 @@ impl fmt::Display for NetavarkError {
                     Ok(())
                 }
             }
-            NetavarkError::Nftables(e) => write!(f, "nftables error: {e}"),
+            NetavarkError::Nftables(e) => match e {
+                nftables::helper::NftablesError::NftFailed {
+                    program,
+                    hint,
+                    stdout: _stdout,
+                    stderr,
+                } => write!(
+                    f,
+                    "nftables error: {program:?} did not return successfully while {hint}: {stderr}",
+                ),
+                _ => write!(f, "nftables error: {e}"),
+            },
             NetavarkError::SubnetParse(e) => write!(f, "parsing IP subnet error: {e}"),
             NetavarkError::AddrParse(e) => write!(f, "parsing IP address error: {e}"),
         }
