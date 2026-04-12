@@ -1289,3 +1289,17 @@ function check_simple_bridge_nftables() {
     run_helper ps "$aardvark_pid"
     assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p 53 run" "aardvark not running or bad options"
 }
+
+@test "$fw_driver - nft error" {
+    local nft="$NETAVARK_TMPDIR/nft"
+    cat > "$nft" <<EOF
+#!/usr/bin/env bash
+echo 'nft custom error message' 1>&2
+exit 1
+EOF
+
+    chmod +x $nft
+
+    PATH="$NETAVARK_TMPDIR:$PATH" expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+    assert_json ".error" 'nftables error: "nft" did not return successfully while getting the current ruleset: nft custom error message' "error message from nft is included"
+}
