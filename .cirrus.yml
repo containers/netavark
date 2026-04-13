@@ -83,6 +83,7 @@ build_aarch64_task:
     type: $EC2_INST_TYPE
     region: us-east-1
     architecture: arm64  # CAUTION: This has to be "arm64", not "aarch64"
+    spot: true
   cargo_cache: &cargo_cache_aarch64
     folder: "$CARGO_HOME"
     # N/B: Should exactly match (except for arch) line from build_task (above).
