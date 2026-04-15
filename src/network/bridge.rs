@@ -1147,7 +1147,11 @@ fn remove_link(
 }
 
 fn get_isolate_option(opts: &Option<HashMap<String, String>>) -> NetavarkResult<IsolateOption> {
-    let isolate = parse_option(opts, OPTION_ISOLATE)?.unwrap_or(ISOLATE_OPTION_FALSE.to_string());
+    let isolate: String = match parse_option(opts, OPTION_ISOLATE)? {
+        Some(i) => i,
+        // if no option default to strict isolation
+        None => return Ok(IsolateOption::Strict),
+    };
     // return isolate option value "false" if unknown value or no value passed
     Ok(match isolate.as_str() {
         ISOLATE_OPTION_STRICT => IsolateOption::Strict,

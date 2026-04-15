@@ -794,7 +794,7 @@ EOF
 
     # podman: 10.88.0.2/16
     create_container_ns
-    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path 4)
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge-isolate-false.json setup $(get_container_netns_path 4)
 
     # check nftables NETAVARK-ISOLATION-3 chain
     run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-3
@@ -814,7 +814,7 @@ EOF
     expected_rc=1 run_in_container_netns 4 ping -w 1 -c 1 10.89.3.2
 
     # teardown all networks
-    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path 4)
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge-isolate-false.json teardown $(get_container_netns_path 4)
     run_netavark --file ${TESTSDIR}/testfiles/isolate4.json teardown $(get_container_netns_path 3)
     run_netavark --file ${TESTSDIR}/testfiles/isolate3.json teardown $(get_container_netns_path 2)
     run_netavark --file ${TESTSDIR}/testfiles/isolate2.json teardown $(get_container_netns_path 1)
@@ -1188,6 +1188,9 @@ function check_simple_bridge_nftables() {
     assert "${lines[5]}" =~ "ip daddr 10.88.0.0/16 ct state established,related accept" "Related,established rule"
     assert "${lines[6]}" =~ "ip saddr 10.88.0.0/16 accept" "Subnet saddr accept rule"
     assert "${#lines[@]}" = 9 "too many FORWARD rules"
+
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-1
+    assert "${lines[2]}" =~ "iifname \"podman0\" oifname != \"podman0\" jump NETAVARK-ISOLATION-3" "strict isolation as default chain"
 }
 
 # regression test for https://github.com/containers/netavark/issues/1068
