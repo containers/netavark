@@ -5,9 +5,13 @@ use std::{
     env, fs,
     fs::File,
     io::Write,
-    os::unix::{io::FromRawFd, net::UnixListener as stdUnixListener},
+    os::{
+        fd::AsFd,
+        unix::{io::FromRawFd, net::UnixListener as stdUnixListener},
+    },
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
+    thread,
 };
 
 use clap::Parser;
@@ -17,8 +21,7 @@ use tokio::net::UnixListener;
 #[cfg(unix)]
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::{
-    sync::{mpsc, mpsc::Sender, oneshot, oneshot::error::TryRecvError},
-    task::AbortHandle,
+    sync::{mpsc, mpsc::Sender, oneshot, oneshot::error::TryRecvError, watch},
     time::{timeout, Duration},
 };
 #[cfg(unix)]
@@ -47,7 +50,30 @@ use crate::{
     network::core_utils,
 };
 
-type TaskData = (Arc<tokio::sync::Mutex<DhcpV4Service>>, AbortHandle);
+struct DhcpWorker {
+    handle: DhcpWorkerHandle,
+    initial_lease_rx: oneshot::Receiver<Result<NetavarkLease, Status>>,
+}
+
+#[derive(Debug)]
+struct DhcpWorkerHandle {
+    shutdown_tx: watch::Sender<bool>,
+    thread: Option<thread::JoinHandle<()>>,
+}
+
+impl DhcpWorkerHandle {
+    fn shutdown(mut self) -> NetavarkResult<()> {
+        let _ = self.shutdown_tx.send(true);
+
+        match self.thread.take() {
+            Some(thread) => match thread.join() {
+                Ok(()) => Ok(()),
+                Err(_) => Err(NetavarkError::msg("DHCP worker thread panicked")),
+            },
+            None => Ok(()),
+        }
+    }
+}
 
 #[derive(Debug)]
 /// This is the tonic netavark proxy service that is required to impl the
@@ -68,9 +94,9 @@ struct NetavarkProxyService<W: Write + Clear> {
     dora_timeout: u32,
     // channel send-side for resetting the inactivity timeout
     timeout_sender: Option<Arc<Mutex<Sender<i32>>>>,
-    // All dhcp poll will be spawned on a new task, keep track of it so
-    // we can remove it on teardown. The key is the container mac.
-    task_map: Arc<Mutex<HashMap<String, TaskData>>>,
+    // Keep a handle for each namespace-bound DHCP worker so teardown can shut
+    // it down cleanly. The key is the container mac.
+    task_map: Arc<Mutex<HashMap<String, DhcpWorkerHandle>>>,
 }
 
 impl<W: Write + Clear> NetavarkProxyService<W> {
@@ -119,25 +145,7 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
                 log::debug!("Request dropped, aborting DORA");
                 return Err(Status::new(Code::Aborted, "client disconnected"));
             }
-            let get_lease = process_setup(network_config, timeout, cache, task_map);
-            // watch the client and the lease, which ever finishes first return
-            let get_lease: NetavarkLease = tokio::select! {
-                _ = &mut rx => {
-                    // we never send to tx, so this completing means that the other end, tx, was dropped!
-                    log::debug!("Request dropped, aborting DORA");
-                    return Err(Status::new(Code::Aborted, "client disconnected"))
-                }
-                lease = get_lease => {
-                    Ok::<NetavarkLease, Status>(lease?)
-                }
-            }?;
-            // check after lease was found that the client is still there
-            if rx.try_recv() == Err(TryRecvError::Closed) {
-                log::debug!("Request dropped, aborting DORA");
-                return Err(Status::new(Code::Aborted, "client disconnected"));
-            }
-
-            Ok(get_lease)
+            process_setup(network_config, timeout, cache, task_map, &mut rx).await
         })
         .await;
         return match lease {
@@ -161,25 +169,12 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
         let cache = self.cache.clone();
         let tasks = self.task_map.clone();
 
-        let maybe_service_arc = {
-            // Scope for the std::sync::MutexGuard
+        let maybe_worker = {
             let mut tasks_guard = tasks.lock().expect("lock tasks");
-
-            if let Some((service_arc, handle)) = tasks_guard.remove(&nc.container_mac_addr) {
-                handle.abort();
-                Some(service_arc)
-            } else {
-                None
-            }
+            tasks_guard.remove(&nc.container_mac_addr)
         };
-        if let Some(service_arc) = maybe_service_arc {
-            let mut service = service_arc.lock().await;
-            if let Err(e) = service.release_lease().await {
-                warn!(
-                    "Failed to send DHCPRELEASE for {}: {}",
-                    &nc.container_mac_addr, e
-                );
-            }
+        if let Some(worker) = maybe_worker {
+            stop_dhcp_worker(&nc.container_mac_addr, worker).await;
         }
 
         // Remove the client from the cache dir
@@ -421,6 +416,167 @@ fn is_catch_empty<W: Write + Clear>(current_cache: Arc<Mutex<LeaseCache<W>>>) ->
     }
 }
 
+fn spawn_dhcp_worker(network_config: NetworkConfig, timeout: u32) -> Result<DhcpWorker, Status> {
+    let thread_name = format!("netavark-dhcp-{}", network_config.container_mac_addr);
+    let (shutdown_tx, shutdown_rx) = watch::channel(false);
+    let (initial_lease_tx, initial_lease_rx) = oneshot::channel();
+
+    let thread = thread::Builder::new()
+        .name(thread_name)
+        .spawn(move || dhcp_worker_thread(network_config, timeout, shutdown_rx, initial_lease_tx))
+        .map_err(|e| Status::new(Code::Internal, format!("failed to spawn DHCP worker: {e}")))?;
+
+    Ok(DhcpWorker {
+        handle: DhcpWorkerHandle {
+            shutdown_tx,
+            thread: Some(thread),
+        },
+        initial_lease_rx,
+    })
+}
+
+async fn stop_dhcp_worker(container_mac_addr: &str, worker: DhcpWorkerHandle) {
+    match tokio::task::spawn_blocking(move || worker.shutdown()).await {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => {
+            warn!(
+                "Failed to stop DHCP worker for {}: {}",
+                container_mac_addr, err
+            );
+        }
+        Err(err) => {
+            warn!(
+                "Failed to join DHCP worker for {}: {}",
+                container_mac_addr, err
+            );
+        }
+    }
+}
+
+fn dhcp_worker_thread(
+    network_config: NetworkConfig,
+    timeout: u32,
+    shutdown_rx: watch::Receiver<bool>,
+    initial_lease_tx: oneshot::Sender<Result<NetavarkLease, Status>>,
+) {
+    let host_ns = match File::open("/proc/self/ns/net") {
+        Ok(file) => file,
+        Err(err) => {
+            let _ = initial_lease_tx.send(Err(Status::new(
+                Code::Internal,
+                format!("failed to open host network namespace: {err}"),
+            )));
+            return;
+        }
+    };
+
+    let container_ns = match File::open(&network_config.ns_path) {
+        Ok(file) => file,
+        Err(err) => {
+            let _ = initial_lease_tx.send(Err(Status::new(
+                Code::Internal,
+                format!(
+                    "failed to open target network namespace {}: {err}",
+                    network_config.ns_path
+                ),
+            )));
+            return;
+        }
+    };
+
+    if let Err(err) = core_utils::join_netns(container_ns.as_fd()) {
+        let _ = initial_lease_tx.send(Err(Status::new(
+            Code::Internal,
+            format!(
+                "failed to join target network namespace {}: {err}",
+                network_config.ns_path
+            ),
+        )));
+        return;
+    }
+
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            let _ = initial_lease_tx.send(Err(Status::new(
+                Code::Internal,
+                format!("failed to build DHCP worker runtime: {err}"),
+            )));
+            let _ = core_utils::join_netns(host_ns.as_fd());
+            return;
+        }
+    };
+
+    runtime.block_on(run_dhcp_worker(
+        network_config,
+        timeout,
+        shutdown_rx,
+        initial_lease_tx,
+    ));
+
+    if let Err(err) = core_utils::join_netns(host_ns.as_fd()) {
+        warn!("Failed to restore host network namespace for DHCP worker: {err}");
+    }
+}
+
+async fn run_dhcp_worker(
+    network_config: NetworkConfig,
+    timeout: u32,
+    mut shutdown_rx: watch::Receiver<bool>,
+    initial_lease_tx: oneshot::Sender<Result<NetavarkLease, Status>>,
+) {
+    let container_mac_addr = network_config.container_mac_addr.clone();
+
+    let mut service = match DhcpV4Service::new(network_config, timeout).await {
+        Ok(service) => service,
+        Err(err) => {
+            let _ = initial_lease_tx.send(Err(Status::from(err)));
+            return;
+        }
+    };
+
+    let initial_lease = tokio::select! {
+        changed = shutdown_rx.changed() => {
+            match changed {
+                Ok(_) if *shutdown_rx.borrow_and_update() => return,
+                Ok(_) => return,
+                Err(_) => return,
+            }
+        }
+        lease = service.get_lease() => {
+            match lease {
+                Ok(lease) => lease,
+                Err(err) => {
+                    let _ = initial_lease_tx.send(Err(Status::from(err)));
+                    return;
+                }
+            }
+        }
+    };
+
+    if initial_lease_tx.send(Ok(initial_lease)).is_err() {
+        if let Err(err) = service.release_lease().await {
+            warn!(
+                "Failed to release DHCP lease for {} after setup cancellation: {}",
+                container_mac_addr, err
+            );
+        }
+        return;
+    }
+
+    process_client_stream(&mut service, &mut shutdown_rx).await;
+
+    if let Err(err) = service.release_lease().await {
+        warn!(
+            "Failed to send DHCPRELEASE for {}: {}",
+            container_mac_addr, err
+        );
+    }
+}
+
 /// Process network config into a lease and setup the ip
 ///
 /// # Arguments
@@ -434,7 +590,8 @@ async fn process_setup<W: Write + Clear>(
     network_config: NetworkConfig,
     timeout: u32,
     cache: Arc<Mutex<LeaseCache<W>>>,
-    tasks: Arc<Mutex<HashMap<String, TaskData>>>,
+    tasks: Arc<Mutex<HashMap<String, DhcpWorkerHandle>>>,
+    client_disconnect: &mut oneshot::Receiver<()>,
 ) -> Result<NetavarkLease, Status> {
     let container_network_interface = network_config.container_iface.clone();
     let ns_path = network_config.ns_path.clone();
@@ -442,21 +599,69 @@ async fn process_setup<W: Write + Clear>(
     // test if mac is valid
     core_utils::CoreUtils::decode_address_from_hex(&network_config.container_mac_addr)
         .map_err(|e| Status::new(InvalidArgument, format!("{e}")))?;
-    let mac = &network_config.container_mac_addr.clone();
+    let mac = network_config.container_mac_addr.clone();
 
     let nv_lease = match network_config.version {
         //V4
         0 => {
-            let mut service = DhcpV4Service::new(network_config, timeout).await?;
+            let worker = spawn_dhcp_worker(network_config, timeout)?;
+            let mut initial_lease_rx = worker.initial_lease_rx;
+            let mut worker_handle = Some(worker.handle);
 
-            let lease = service.get_lease().await?;
-            let service_arc = Arc::new(tokio::sync::Mutex::new(service));
-            let service_arc_clone = service_arc.clone();
-            let task_handle = tokio::spawn(process_client_stream(service_arc_clone));
-            tasks
-                .lock()
-                .expect("lock tasks")
-                .insert(mac.to_string(), (service_arc, task_handle.abort_handle()));
+            let lease = tokio::select! {
+                _ = client_disconnect => {
+                    if let Some(handle) = worker_handle.take() {
+                        stop_dhcp_worker(&mac, handle).await;
+                    }
+                    return Err(Status::new(Code::Aborted, "client disconnected"));
+                }
+                result = &mut initial_lease_rx => {
+                    result
+                        .map_err(|_| Status::new(Code::Internal, "DHCP worker exited before returning a lease"))??
+                }
+            };
+
+            let cache_add_result = {
+                cache
+                    .lock()
+                    .expect("Could not unlock cache. A thread was poisoned")
+                    .add_lease(&mac, &lease)
+            };
+            if let Err(e) = cache_add_result {
+                if let Some(handle) = worker_handle.take() {
+                    stop_dhcp_worker(&mac, handle).await;
+                }
+                return Err(Status::new(
+                    Internal,
+                    format!("Error caching the lease: {e}"),
+                ));
+            }
+
+            if let Err(err) = ip::setup(&lease, &container_network_interface, &ns_path) {
+                let _ = {
+                    cache
+                        .lock()
+                        .expect("Could not unlock cache. A thread was poisoned")
+                        .remove_lease(&mac)
+                };
+                if let Some(handle) = worker_handle.take() {
+                    stop_dhcp_worker(&mac, handle).await;
+                }
+                return Err(Status::from(err));
+            }
+
+            let replaced_worker = {
+                let mut tasks_guard = tasks.lock().expect("lock tasks");
+                tasks_guard.insert(
+                    mac.clone(),
+                    worker_handle.take().expect("worker handle must be present"),
+                )
+            };
+            if let Some(worker) = replaced_worker {
+                warn!("Replacing existing DHCP worker for {}", mac);
+                stop_dhcp_worker(&mac, worker).await;
+            }
+
             lease
         }
         //V6 TODO implement DHCPv6
@@ -468,17 +673,5 @@ async fn process_setup<W: Write + Clear>(
         }
     };
 
-    if let Err(e) = cache
-        .lock()
-        .expect("Could not unlock cache. A thread was poisoned")
-        .add_lease(mac, &nv_lease)
-    {
-        return Err(Status::new(
-            Internal,
-            format!("Error caching the lease: {e}"),
-        ));
-    }
-
-    ip::setup(&nv_lease, &container_network_interface, &ns_path)?;
     Ok(nv_lease)
 }

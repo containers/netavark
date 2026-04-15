@@ -1,4 +1,4 @@
-use std::{net::Ipv4Addr, sync::Arc};
+use std::net::Ipv4Addr;
 
 use crate::network::{
     netlink,
@@ -6,7 +6,7 @@ use crate::network::{
 };
 use log::debug;
 use mozim::{DhcpV4Client, DhcpV4Config, DhcpV4Lease as MozimV4Lease, DhcpV4State};
-use tokio::sync::Mutex;
+use tokio::sync::watch;
 use tonic::{Code, Status};
 
 use crate::{
@@ -53,14 +53,14 @@ pub struct DhcpV4Service {
 
 impl DhcpV4Service {
     pub async fn new(nc: NetworkConfig, timeout: u32) -> Result<Self, DhcpServiceError> {
-        let mut config = DhcpV4Config::new_proxy(&nc.host_iface, &nc.container_mac_addr)
+        let mut config = DhcpV4Config::new_proxy(&nc.container_iface, &nc.container_mac_addr)
             .map_err(|e| DhcpServiceError::new(InvalidArgument, e.to_string()))?;
         config.set_timeout_sec(timeout);
 
         let mut socket = netlink::Socket::<NetlinkRoute>::new()
             .map_err(|e| DhcpServiceError::new(InvalidArgument, e.to_string()))?;
         let link = socket
-            .get_link(LinkID::Name(nc.host_iface.clone()))
+            .get_link(LinkID::Name(nc.container_iface.clone()))
             .map_err(|e| DhcpServiceError::new(InvalidArgument, e.to_string()))?;
 
         config.set_iface_index(link.header.index);
@@ -128,7 +128,7 @@ impl DhcpV4Service {
                 Ok(state) => {
                     log::debug!(
                         "DHCPv4 proxy on {} for {} enter {state} state",
-                        self.network_config.host_iface,
+                        self.network_config.container_iface,
                         self.network_config.container_mac_addr
                     );
                 }
@@ -195,30 +195,46 @@ impl From<DhcpServiceError> for Status {
     }
 }
 
-pub async fn process_client_stream(service_arc: Arc<Mutex<DhcpV4Service>>) {
-    let mut client = service_arc.lock().await;
+pub async fn process_client_stream(
+    service: &mut DhcpV4Service,
+    shutdown_rx: &mut watch::Receiver<bool>,
+) {
     loop {
-        let lease_result = client.client.run().await;
+        if *shutdown_rx.borrow() {
+            return;
+        }
+
+        let lease_result = tokio::select! {
+            changed = shutdown_rx.changed() => {
+                match changed {
+                    Ok(_) if *shutdown_rx.borrow_and_update() => return,
+                    Ok(_) => continue,
+                    Err(_) => return,
+                }
+            }
+            result = service.client.run() => result,
+        };
+
         match lease_result {
             Ok(DhcpV4State::Done(lease)) => {
                 log::info!(
                     "got new lease for mac {}: {:?}",
-                    &client.network_config.container_mac_addr,
+                    &service.network_config.container_mac_addr,
                     &lease
                 );
 
-                if let Some(old_lease) = &client.previous_lease {
+                if let Some(old_lease) = &service.previous_lease {
                     if old_lease.yiaddr != lease.yiaddr
                         || old_lease.subnet_mask != lease.subnet_mask
                         || old_lease.gateways != lease.gateways
                     {
                         log::info!(
                             "ip or gateway for mac {} changed, update address",
-                            &client.network_config.container_mac_addr
+                            &service.network_config.container_mac_addr
                         );
                         if let Err(err) = update_lease_ip(
-                            &client.network_config.ns_path,
-                            &client.network_config.container_iface,
+                            &service.network_config.ns_path,
+                            &service.network_config.container_iface,
                             old_lease,
                             &lease,
                         ) {
@@ -226,25 +242,25 @@ pub async fn process_client_stream(service_arc: Arc<Mutex<DhcpV4Service>>) {
                         }
                     }
                 }
-                client.previous_lease = Some(*lease);
+                service.previous_lease = Some(*lease);
             }
             Ok(state) => {
                 log::debug!(
                     "DHCPv4 proxy on {} for {} enter {state} state",
-                    client.network_config.host_iface,
-                    client.network_config.container_mac_addr
+                    service.network_config.container_iface,
+                    service.network_config.container_mac_addr
                 );
             }
             Err(err) => {
                 log::error!(
                     "Failed to acquire DHCPv4 lease for {}: {err}",
-                    &client.network_config.container_mac_addr
+                    &service.network_config.container_mac_addr
                 );
                 log::info!(
                     "Retrying DHCPv4 proxy for {}",
-                    &client.network_config.container_mac_addr
+                    &service.network_config.container_mac_addr
                 );
-                client.client.clean_up();
+                service.client.clean_up();
             }
         }
     }
