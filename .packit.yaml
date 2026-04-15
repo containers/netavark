@@ -15,8 +15,14 @@ packages:
 
 srpm_build_deps:
   - cargo
+  - git-archive-all
   - make
   - openssl-devel
+
+# https://packit.dev/docs/configuration/actions
+# fix-spec-file only operates on copr builds and doesn't affect official distro builds
+actions:
+  fix-spec-file: "bash .packit-copr-rpm.sh"
 
 jobs:
   - job: copr_build

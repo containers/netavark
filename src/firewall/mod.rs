@@ -7,12 +7,9 @@ use zbus::blocking::Connection;
 
 pub mod firewalld;
 pub mod fwnone;
-pub mod iptables;
 pub mod nft;
 pub mod state;
-mod varktables;
 
-const IPTABLES: &str = "iptables";
 const FIREWALLD: &str = "firewalld";
 const NFTABLES: &str = "nftables";
 const NONE: &str = "none";
@@ -44,7 +41,6 @@ pub trait FirewallDriver {
 
 /// Types of firewall backend
 enum FirewallImpl {
-    Iptables,
     Firewalld(Connection),
     Nftables,
     Fwnone,
@@ -52,7 +48,7 @@ enum FirewallImpl {
 
 /// What firewall implementations does this system support?
 fn get_firewall_impl(driver_name: Option<String>) -> NetavarkResult<FirewallImpl> {
-    // It respects "firewalld", "iptables", "nftables", "none".
+    // It respects "firewalld", "nftables", "none".
     if let Some(driver) = driver_name {
         debug!("Forcibly using firewall driver {driver}");
         match driver.to_lowercase().as_str() {
@@ -68,7 +64,6 @@ fn get_firewall_impl(driver_name: Option<String>) -> NetavarkResult<FirewallImpl
                 };
                 return Ok(FirewallImpl::Firewalld(conn));
             }
-            IPTABLES => return Ok(FirewallImpl::Iptables),
             NFTABLES => return Ok(FirewallImpl::Nftables),
             NONE => return Ok(FirewallImpl::Fwnone),
             any => {
@@ -84,7 +79,7 @@ fn get_firewall_impl(driver_name: Option<String>) -> NetavarkResult<FirewallImpl
     // Is firewalld running?
     // let conn = match Connection::system() {
     //     Ok(conn) => conn,
-    //     Err(_) => return FirewallImpl::Iptables,
+    //     Err(_) => return FirewallImpl::Nftables,
     // };
     // match conn.call_method(
     //     Some("org.freedesktop.DBus"),
@@ -94,18 +89,13 @@ fn get_firewall_impl(driver_name: Option<String>) -> NetavarkResult<FirewallImpl
     //     &"org.fedoraproject.FirewallD1",
     // ) {
     //     Ok(_) => FirewallImpl::Firewalld(conn),
-    //     Err(_) => FirewallImpl::Iptables,
+    //     Err(_) => FirewallImpl::Nftables,
     // }
 }
 
 #[cfg(default_fw = "nftables")]
 fn get_default_fw_impl() -> NetavarkResult<FirewallImpl> {
     Ok(FirewallImpl::Nftables)
-}
-
-#[cfg(default_fw = "iptables")]
-fn get_default_fw_impl() -> NetavarkResult<FirewallImpl> {
-    Ok(FirewallImpl::Iptables)
 }
 
 #[cfg(default_fw = "none")]
@@ -120,10 +110,6 @@ pub fn get_supported_firewall_driver(
 ) -> NetavarkResult<Box<dyn FirewallDriver>> {
     match get_firewall_impl(driver_name) {
         Ok(fw) => match fw {
-            FirewallImpl::Iptables => {
-                info!("Using iptables firewall driver");
-                iptables::new()
-            }
             FirewallImpl::Firewalld(conn) => {
                 info!("Using firewalld firewall driver");
                 firewalld::new(conn)

@@ -1,12 +1,22 @@
 // Crate contains the types which are accepted by netavark.
 
+use chrono::{DateTime, Utc};
 use ipnet::IpNet;
+use serde::de;
+use serde_with::skip_serializing_none;
 use std::collections::HashMap;
+use std::fmt::Formatter;
+use std::marker::PhantomData;
 use std::net::IpAddr;
 
 // Network describes the Network attributes.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[skip_serializing_none]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Network {
+    // Creation time of the Network.
+    #[serde(rename = "created")]
+    pub created: Option<DateTime<Utc>>,
+
     /// Set up dns for this network
     #[serde(rename = "dns_enabled")]
     pub dns_enabled: bool,
@@ -57,12 +67,51 @@ pub struct Network {
     /// Network DNS servers for aardvark-dns.
     #[serde(rename = "network_dns_servers")]
     pub network_dns_servers: Option<Vec<IpAddr>>,
+
+    #[serde(rename = "labels")]
+    pub labels: Option<HashMap<String, String>>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NetworkCreateConfig {
+    #[serde(rename = "network")]
+    pub network: Network,
+    #[serde(rename = "used")]
+    pub used: Used,
+    #[serde(rename = "options")]
+    pub create_opts: CreateOpts,
 }
 
-/// NetworkOptions for a given container.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CreateOpts {
+    #[serde(rename = "subnet_pools")]
+    pub subnet_pools: Vec<SubnetPool>,
+    #[serde(rename = "default_interface_name")]
+    pub default_interface_name: Option<String>,
+    #[serde(rename = "check_used_subnets")]
+    pub check_used_subnets: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SubnetPool {
+    #[serde(rename = "base")]
+    pub base: IpNet,
+    #[serde(rename = "size")]
+    pub size: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Used {
+    #[serde(rename = "interfaces")]
+    pub interfaces: Vec<String>,
+    #[serde(rename = "names")]
+    pub names: HashMap<String, String>,
+    #[serde(rename = "subnets")]
+    pub subnets: Vec<IpNet>,
+}
+/// NetworkOptions for a given container.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct NetworkOptions {
-    /// The container id, used for iptables comments and ipam allocation.
+    /// The container id, used for ipam allocation.
     #[serde(rename = "container_id")]
     pub container_id: String,
 
@@ -78,7 +127,8 @@ pub struct NetworkOptions {
     /// The networks listed in "network_info" have to match this,
     /// both use the network name as key for the map.
     #[serde(rename = "networks")]
-    pub networks: HashMap<String, PerNetworkOptions>,
+    #[serde(deserialize_with = "deserialize_network_options_map_or_vec")]
+    pub networks: Vec<NamedPerNetworkOptions>,
 
     /// The networks which are needed to run this.
     /// It has to match the networks listed in "networks",
@@ -95,8 +145,18 @@ pub struct NetworkOptions {
     pub dns_servers: Option<Vec<IpAddr>>,
 }
 
+/// NamedPerNetworkOptions are the container specific network setup options.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct NamedPerNetworkOptions {
+    /// The name of the network.
+    pub name: String,
+
+    #[serde(flatten)]
+    pub opts: PerNetworkOptions,
+}
+
 /// PerNetworkOptions are options which should be set on a per network basis
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct PerNetworkOptions {
     /// Aliases contains a list of names which the dns server should resolve
     /// to this container. Should only be set when DNSEnabled is true on the Network.
@@ -123,7 +183,7 @@ pub struct PerNetworkOptions {
 }
 
 /// PortMapping is one or more ports that will be mapped into the container.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct PortMapping {
     /// ContainerPort is the port number that will be exposed from the
     /// container.
@@ -206,7 +266,8 @@ pub struct NetAddress {
 }
 
 /// Subnet for a network.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[skip_serializing_none]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Subnet {
     /// Gateway IP for this Network.
     #[serde(rename = "gateway")]
@@ -222,7 +283,7 @@ pub struct Subnet {
 }
 
 /// Static routes for a network.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Route {
     /// Gateway IP for this route.
     #[serde(rename = "gateway")]
@@ -238,7 +299,7 @@ pub struct Route {
 }
 
 /// LeaseRange contains the range where IP are leased.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct LeaseRange {
     /// EndIP last IP in the subnet which should be used to assign ips.
     #[serde(rename = "end_ip")]
@@ -267,4 +328,44 @@ pub struct NetworkPluginExec {
     pub network: Network,
     /// The special network options for this specific container
     pub network_options: PerNetworkOptions,
+}
+
+pub fn deserialize_network_options_map_or_vec<'a, 'de, D>(
+    deserializer: D,
+) -> Result<Vec<NamedPerNetworkOptions>, D::Error>
+where
+    D: de::Deserializer<'de>,
+{
+    struct MapOrVec(PhantomData<Vec<NamedPerNetworkOptions>>);
+    impl<'de> de::Visitor<'de> for MapOrVec {
+        type Value = Vec<NamedPerNetworkOptions>;
+
+        fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+            formatter.write_str("array of network options or map")
+        }
+
+        fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+        where
+            M: de::MapAccess<'de>,
+        {
+            let mut arr = Vec::with_capacity(map.size_hint().unwrap_or_default());
+
+            while let Some((key, value)) = map.next_entry()? {
+                arr.push(NamedPerNetworkOptions {
+                    name: key,
+                    opts: value,
+                });
+            }
+            Ok(arr)
+        }
+
+        fn visit_seq<S>(self, visitor: S) -> Result<Self::Value, S::Error>
+        where
+            S: de::SeqAccess<'de>,
+        {
+            serde::Deserialize::deserialize(de::value::SeqAccessDeserializer::new(visitor))
+        }
+    }
+
+    deserializer.deserialize_any(MapOrVec(PhantomData))
 }

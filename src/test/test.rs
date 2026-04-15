@@ -7,13 +7,43 @@ mod tests {
     use netavark::network;
     #[test]
     // Test setup options loader
-    fn test_setup_opts_load() {
-        match network::types::NetworkOptions::load(Some(OsString::from(
+    fn test_setup_opts_load_map() {
+        let a = network::types::NetworkOptions::load(Some(OsString::from(
             "src/test/config/setupopts.test.json",
-        ))) {
-            Ok(_) => {}
-            Err(e) => panic!("{}", e),
-        }
+        )))
+        .unwrap();
+        assert_eq!(a.networks.len(), 1);
+    }
+
+    #[test]
+    fn test_setup_opts_load_vec() {
+        let a = network::types::NetworkOptions::load(Some(OsString::from(
+            "src/test/config/setupopts2.test.json",
+        )))
+        .unwrap();
+        assert_eq!(a.networks.len(), 1);
+    }
+
+    #[test]
+    // Test setup options loader
+    fn test_load_two_networks() {
+        let array = network::types::NetworkOptions::load(Some(OsString::from(
+            "src/test/config/twoNetworks-array.json",
+        )))
+        .unwrap();
+        assert_eq!(array.networks.len(), 2);
+        assert_eq!(array.networks[0].name, "podman1");
+        assert_eq!(array.networks[0].opts.interface_name, "eth0");
+        assert_eq!(array.networks[1].name, "podman2");
+        assert_eq!(array.networks[1].opts.interface_name, "eth1");
+
+        let map = network::types::NetworkOptions::load(Some(OsString::from(
+            "src/test/config/twoNetworks-map.json",
+        )))
+        .unwrap();
+
+        // both the parsed array or map version should result in the same value
+        assert_eq!(array, map);
     }
 
     // Test if we can deserialize values correctly

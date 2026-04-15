@@ -1,0 +1,32 @@
+{
+    "container_id": "someID",
+    "container_name": "someName",
+    "networks": {
+        "podman1": {
+            "interface_name": "eth0",
+            "static_ips": [
+                "10.89.0.2"
+            ]
+        }
+    },
+    "network_info": {
+        "podman1": {
+            "name": "podman1",
+            "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a9fc6",
+            "driver": "bridge",
+            "network_interface": "podman1",
+            "subnets": [
+                {
+                    "gateway": "10.89.0.1",
+                    "subnet": "10.89.0.0/24"
+                }
+            ],
+            "ipv6_enabled": false,
+            "internal": false,
+            "dns_enabled": true,
+            "options": {
+                "outbound_addr4": "100.1.100.1"
+            }
+        }
+    }
+}

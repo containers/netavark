@@ -29,7 +29,12 @@ const ISOLATION1CHAIN: &str = "NETAVARK-ISOLATION-1";
 const ISOLATION2CHAIN: &str = "NETAVARK-ISOLATION-2";
 const ISOLATION3CHAIN: &str = "NETAVARK-ISOLATION-3";
 
+pub(crate) const MAX_HASH_SIZE: usize = 13;
+
 const MASK: u32 = 0x2000;
+
+const MULTICAST_NET_V4: &str = "224.0.0.0/4";
+const MULTICAST_NET_V6: &str = "ff00::/8";
 
 /// The dnat priority for chains
 /// This (and the below) are based on https://wiki.nftables.org/wiki-nftables/index.php/Netfilter_hooks#Priority_within_hook
@@ -175,10 +180,12 @@ impl firewall::FirewallDriver for Nftables {
                         key: expr::MetaKey::Mark,
                     })),
                     value: expr::Expression::BinaryOperation(Box::new(expr::BinaryOperation::OR(
-                        expr::Expression::Named(expr::NamedExpression::Meta(expr::Meta {
-                            key: expr::MetaKey::Mark,
-                        })),
-                        expr::Expression::Number(MASK),
+                        vec![
+                            expr::Expression::Named(expr::NamedExpression::Meta(expr::Meta {
+                                key: expr::MetaKey::Mark,
+                            })),
+                            expr::Expression::Number(MASK),
+                        ],
                     ))),
                 })]),
             ));
@@ -376,18 +383,91 @@ impl firewall::FirewallDriver for Nftables {
                     ]),
                 ));
 
-                // Subnet chain: ip daddr != 224.0.0.0/4 masquerade
+                // Subnet chain: ip daddr != 224.0.0.0/4 snat/masquerade
                 let multicast_address: IpNet = match subnet {
-                    IpNet::V4(_) => "224.0.0.0/4".parse()?,
-                    IpNet::V6(_) => "ff::00/8".parse()?,
+                    IpNet::V4(_) => MULTICAST_NET_V4.parse()?,
+                    IpNet::V6(_) => MULTICAST_NET_V6.parse()?,
                 };
-                batch.add(make_rule(
-                    chain.clone(),
-                    Cow::Owned(vec![
-                        get_subnet_match(&multicast_address, "daddr", stmt::Operator::NEQ),
-                        stmt::Statement::Masquerade(None),
-                    ]),
-                ));
+
+                // Use appropriate outbound address based on subnet type
+                match subnet {
+                    IpNet::V4(_) => {
+                        if let Some(addr4) = network_setup.outbound_addr4 {
+                            log::trace!("Creating IPv4 SNAT rule with outbound address {addr4}");
+                            batch.add(make_rule(
+                                chain.clone(),
+                                Cow::Owned(vec![
+                                    get_subnet_match(
+                                        &multicast_address,
+                                        "daddr",
+                                        stmt::Operator::NEQ,
+                                    ),
+                                    stmt::Statement::SNAT(Some(stmt::NAT {
+                                        addr: Some(expr::Expression::String(
+                                            addr4.to_string().into(),
+                                        )),
+                                        family: Some(stmt::NATFamily::IP),
+                                        port: None,
+                                        flags: None,
+                                    })),
+                                ]),
+                            ));
+                        } else {
+                            log::trace!(
+                                "No IPv4 outbound address set, using default MASQUERADE rule"
+                            );
+                            batch.add(make_rule(
+                                chain.clone(),
+                                Cow::Owned(vec![
+                                    get_subnet_match(
+                                        &multicast_address,
+                                        "daddr",
+                                        stmt::Operator::NEQ,
+                                    ),
+                                    stmt::Statement::Masquerade(None),
+                                ]),
+                            ));
+                        }
+                    }
+                    IpNet::V6(_) => {
+                        if let Some(addr6) = network_setup.outbound_addr6 {
+                            log::trace!("Creating IPv6 SNAT rule with outbound address {addr6}");
+                            batch.add(make_rule(
+                                chain.clone(),
+                                Cow::Owned(vec![
+                                    get_subnet_match(
+                                        &multicast_address,
+                                        "daddr",
+                                        stmt::Operator::NEQ,
+                                    ),
+                                    stmt::Statement::SNAT(Some(stmt::NAT {
+                                        addr: Some(expr::Expression::String(
+                                            addr6.to_string().into(),
+                                        )),
+                                        family: Some(stmt::NATFamily::IP6),
+                                        port: None,
+                                        flags: None,
+                                    })),
+                                ]),
+                            ));
+                        } else {
+                            log::trace!(
+                                "No IPv6 outbound address set, using default MASQUERADE rule"
+                            );
+                            batch.add(make_rule(
+                                chain.clone(),
+                                Cow::Owned(vec![
+                                    get_subnet_match(
+                                        &multicast_address,
+                                        "daddr",
+                                        stmt::Operator::NEQ,
+                                    ),
+                                    stmt::Statement::Masquerade(None),
+                                ]),
+                            ));
+                        }
+                    }
+                }
 
                 // Next, populate basic chains with forwarding rules
                 // Input chain: ip saddr <subnet> udp dport 53 accept
@@ -791,7 +871,7 @@ fn delete_port_rules<'a>(
 }
 
 /// Convert a subnet into a chain name.
-fn get_subnet_chain_name(subnet: IpNet, net_id: &str, dnat: bool) -> Cow<str> {
+fn get_subnet_chain_name(subnet: IpNet, net_id: &str, dnat: bool) -> Cow<'_, str> {
     // nftables is very lenient around chain name lengths.
     // So let's use the full IP to be unambiguous.
     // Replace . and : with _, and / with _nm (netmask), to remove special characters.
@@ -815,7 +895,7 @@ fn get_subnet_chain_name(subnet: IpNet, net_id: &str, dnat: bool) -> Cow<str> {
 
 /// Get a statement to match the given destination bridge.
 /// Always matches using ==.
-fn get_dest_bridge_match(bridge: &str) -> stmt::Statement {
+fn get_dest_bridge_match(bridge: &str) -> stmt::Statement<'_> {
     stmt::Statement::Match(stmt::Match {
         left: expr::Expression::Named(expr::NamedExpression::Meta(expr::Meta {
             key: expr::MetaKey::Oifname,
@@ -883,7 +963,7 @@ fn subnet_to_payload<'a>(net: &IpNet, field: &'a str) -> expr::Expression<'a> {
 
 /// Get a condition to match destination port/ports based on a given PortMapping.
 /// Properly handles port ranges, protocol, etc.
-fn get_dport_cond(port: &PortMapping) -> stmt::Statement {
+fn get_dport_cond(port: &PortMapping) -> stmt::Statement<'_> {
     stmt::Statement::Match(stmt::Match {
         left: expr::Expression::Named(expr::NamedExpression::Payload(expr::Payload::PayloadField(
             expr::PayloadField {
@@ -1089,7 +1169,7 @@ fn get_dnat_rules_for_addr_family<'a>(
 }
 
 /// Make a DNAT rule to allow DNS traffic to a DNS server on a non-standard port (53 -> actual port).
-fn make_dns_dnat_rule(dns_ip: &IpAddr, dns_port: u16) -> schema::NfListObject {
+fn make_dns_dnat_rule(dns_ip: &IpAddr, dns_port: u16) -> schema::NfListObject<'_> {
     let rule = schema::Rule {
         family: types::NfFamily::INet,
         table: Cow::Borrowed(TABLENAME),
@@ -1156,7 +1236,7 @@ fn make_complex_chain(
     chain_type: types::NfChainType,
     hook: types::NfHook,
     priority: i32,
-) -> schema::NfListObject {
+) -> schema::NfListObject<'_> {
     schema::NfListObject::Chain(schema::Chain {
         family: types::NfFamily::INet,
         table: Cow::Borrowed(TABLENAME),

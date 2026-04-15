@@ -18,6 +18,8 @@ use std::path::Path;
 use std::str::FromStr;
 
 use super::netlink;
+use crate::network::netlink::Socket;
+use crate::network::netlink_route::{LinkID, NetlinkRoute, Route};
 
 use netlink_packet_route::link::LinkAttribute;
 
@@ -60,6 +62,161 @@ where
     Ok(Some(val))
 }
 
+fn validate_subnets(subnets: &Option<Vec<types::Subnet>>) -> NetavarkResult<()> {
+    for (i, subnet1) in subnets.iter().flatten().enumerate() {
+        for subnet2 in subnets.iter().flatten().skip(i + 1) {
+            // Check for exact duplicate
+            if subnet1.subnet == subnet2.subnet {
+                return Err(NetavarkError::msg(format!(
+                    "duplicate subnet defined: {}",
+                    subnet1.subnet
+                )));
+            }
+            // Check for overlap (one contains the other)
+            if subnet1.subnet.contains(&subnet2.subnet.network())
+                || subnet2.subnet.contains(&subnet1.subnet.network())
+            {
+                return Err(NetavarkError::msg(format!(
+                    "overlapping subnets: {} and {}",
+                    subnet1.subnet, subnet2.subnet
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestCase {
+        name: &'static str,
+        subnets: Option<Vec<(&'static str, &'static str)>>,
+        should_pass: bool,
+        expected_error: Option<&'static str>,
+    }
+
+    #[test]
+    fn test_validate_subnets() {
+        let test_cases = vec![
+            TestCase {
+                name: "empty subnets",
+                subnets: None,
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "single subnet",
+                subnets: Some(vec![("10.0.0.0/24", "10.0.0.1")]),
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "two non-overlapping subnets",
+                subnets: Some(vec![
+                    ("10.0.0.0/24", "10.0.0.1"),
+                    ("10.0.1.0/24", "10.0.1.1"),
+                ]),
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "ipv4 and ipv6 subnets",
+                subnets: Some(vec![("10.0.0.0/24", "10.0.0.1"), ("fd00::/64", "fd00::1")]),
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "duplicate subnets",
+                subnets: Some(vec![
+                    ("10.0.0.0/24", "10.0.0.1"),
+                    ("10.0.0.0/24", "10.0.0.1"),
+                ]),
+                should_pass: false,
+                expected_error: Some("duplicate subnet"),
+            },
+            TestCase {
+                name: "overlapping subnets",
+                subnets: Some(vec![
+                    ("10.0.0.0/16", "10.0.0.1"),
+                    ("10.0.1.0/24", "10.0.1.1"),
+                ]),
+                should_pass: false,
+                expected_error: Some("overlapping subnets"),
+            },
+            TestCase {
+                name: "ipv6 overlapping subnets",
+                subnets: Some(vec![
+                    ("fd00::/48", "fd00::1"),
+                    ("fd00:0:0:1::/64", "fd00:0:0:1::1"),
+                ]),
+                should_pass: false,
+                expected_error: Some("overlapping subnets"),
+            },
+            TestCase {
+                name: "ipv6 duplicate subnets",
+                subnets: Some(vec![("fd00::/48", "fd00::1"), ("fd00::/48", "fd00::1")]),
+                should_pass: false,
+                expected_error: Some("duplicate subnet"),
+            },
+            TestCase {
+                name: "single ipv6 subnet",
+                subnets: Some(vec![("fd00::/48", "fd00::1")]),
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "two non-overlapping ipv6 subnets",
+                subnets: Some(vec![
+                    ("fd00:0:0:1::/64", "fd00:0:0:1::1"),
+                    ("fd00:0:0:2::/64", "fd00:0:0:2::1"),
+                ]),
+                should_pass: true,
+                expected_error: None,
+            },
+        ];
+
+        for tc in test_cases {
+            let subnets: Option<Vec<_>> = tc.subnets.as_ref().map(|subnet_strs| {
+                subnet_strs
+                    .iter()
+                    .map(|(subnet_str, gw_str)| types::Subnet {
+                        subnet: subnet_str.parse().unwrap(),
+                        gateway: Some(gw_str.parse().unwrap()),
+                        lease_range: None,
+                    })
+                    .collect()
+            });
+
+            let result = validate_subnets(&subnets);
+
+            if tc.should_pass {
+                assert!(
+                    result.is_ok(),
+                    "Test case '{}' should pass but failed with: {:?}",
+                    tc.name,
+                    result.err()
+                );
+            } else {
+                assert!(
+                    result.is_err(),
+                    "Test case '{}' should fail but passed",
+                    tc.name
+                );
+                if let Some(expected_msg) = tc.expected_error {
+                    assert!(
+                        result.unwrap_err().to_string().contains(expected_msg),
+                        "Test case '{}' error message doesn't contain '{}'",
+                        tc.name,
+                        expected_msg
+                    );
+                }
+            }
+        }
+    }
+}
+
 pub fn get_ipam_addresses<'a>(
     per_network_opts: &'a types::PerNetworkOptions,
     network: &'a types::Network,
@@ -89,8 +246,11 @@ pub fn get_ipam_addresses<'a>(
                 Some(i) => i,
             };
 
-            // prepare a vector of static aps with appropriate cidr
-            for (idx, subnet) in network.subnets.iter().flatten().enumerate() {
+            // check for duplicates and overlaps subnets
+            validate_subnets(&network.subnets)?;
+
+            // prepare a vector of static ips with appropriate cidr
+            for subnet in network.subnets.iter().flatten() {
                 let subnet_mask_cidr = subnet.subnet.prefix_len();
                 if let Some(gw) = subnet.gateway {
                     let gw_net = match ipnet::IpNet::new(gw, subnet_mask_cidr) {
@@ -110,23 +270,38 @@ pub fn get_ipam_addresses<'a>(
                     ipv6_enabled = true;
                 }
 
-                // Build up response information
-                let container_address: ipnet::IpNet =
-                    match format!("{}/{}", static_ips[idx], subnet_mask_cidr).parse() {
-                        Ok(i) => i,
-                        Err(e) => {
-                            return Err(NetavarkError::SubnetParse(e));
-                        }
-                    };
-                // Add the IP to the address_vector
-                container_addresses.push(container_address);
-                net_addresses.push(types::NetAddress {
-                    gateway: subnet.gateway,
-                    ipnet: container_address,
-                });
+                // build up response information - add all static IPs that match this subnet
+                for static_ip in static_ips {
+                    // check if the static IP belongs to this subnet
+                    if subnet.subnet.contains(static_ip) {
+                        let container_address =
+                            match ipnet::IpNet::new(*static_ip, subnet_mask_cidr) {
+                                Ok(i) => i,
+                                Err(err) => {
+                                    return Err(NetavarkError::msg(format!(
+                                    "failed to parse address {static_ip}/{subnet_mask_cidr}: {err}"
+                                )))
+                                }
+                            };
+                        // add the IP to the address_vector
+                        container_addresses.push(container_address);
+                        net_addresses.push(types::NetAddress {
+                            gateway: subnet.gateway,
+                            ipnet: container_address,
+                        });
+                    }
+                }
             }
 
-            let routes: Vec<netlink::Route> = match create_route_list(&network.routes) {
+            if network.subnets.is_some() && container_addresses.len() != static_ips.len() {
+                return Err(NetavarkError::msg(format!(
+                    "not all static IPs matched a subnet: expected {}, got {}",
+                    static_ips.len(),
+                    container_addresses.len()
+                )));
+            }
+
+            let routes: Vec<Route> = match create_route_list(&network.routes) {
                 Ok(r) => r,
                 Err(e) => {
                     return Err(e);
@@ -274,7 +449,7 @@ pub struct NamespaceOptions {
     /// Note we have to return the File object since the fd is only valid
     /// as long as the File object is valid
     pub file: File,
-    pub netlink: netlink::Socket,
+    pub netlink: Socket<NetlinkRoute>,
 }
 
 pub fn open_netlink_sockets(
@@ -283,11 +458,11 @@ pub fn open_netlink_sockets(
     let netns = open_netlink_socket(netns_path).wrap("open container netns")?;
     let hostns = open_netlink_socket("/proc/self/ns/net").wrap("open host netns")?;
 
-    let host_socket = netlink::Socket::new().wrap("host netlink socket")?;
+    let host_socket = netlink::Socket::<NetlinkRoute>::new().wrap("host netlink socket")?;
     let netns_sock = exec_netns!(
         hostns.as_fd(),
         netns.as_fd(),
-        netlink::Socket::new().wrap("netns netlink socket")
+        netlink::Socket::<NetlinkRoute>::new().wrap("netns netlink socket")
     )?;
 
     Ok((
@@ -307,7 +482,7 @@ fn open_netlink_socket(netns_path: &str) -> NetavarkResult<File> {
 }
 
 pub fn add_default_routes(
-    sock: &mut netlink::Socket,
+    sock: &mut Socket<NetlinkRoute>,
     gws: &[ipnet::IpNet],
     metric: Option<u32>,
 ) -> NetavarkResult<()> {
@@ -321,7 +496,7 @@ pub fn add_default_routes(
                 }
                 ipv4 = true;
 
-                netlink::Route::Ipv4 {
+                Route::Ipv4 {
                     dest: ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0)?,
                     gw: v4.addr(),
                     metric,
@@ -333,7 +508,7 @@ pub fn add_default_routes(
                 }
                 ipv6 = true;
 
-                netlink::Route::Ipv6 {
+                Route::Ipv6 {
                     dest: ipnet::Ipv6Net::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0)?,
                     gw: v6.addr(),
                     metric,
@@ -346,9 +521,7 @@ pub fn add_default_routes(
     Ok(())
 }
 
-pub fn create_route_list(
-    routes: &Option<Vec<types::Route>>,
-) -> NetavarkResult<Vec<netlink::Route>> {
+pub fn create_route_list(routes: &Option<Vec<types::Route>>) -> NetavarkResult<Vec<Route>> {
     match routes {
         Some(rs) => rs
             .iter()
@@ -357,12 +530,12 @@ pub fn create_route_list(
                 let dst = r.destination;
                 let mtr = r.metric;
                 match (gw, dst) {
-                    (IpAddr::V4(gw4), IpNet::V4(dst4)) => Ok(netlink::Route::Ipv4 {
+                    (IpAddr::V4(gw4), IpNet::V4(dst4)) => Ok(Route::Ipv4 {
                         dest: dst4,
                         gw: gw4,
                         metric: mtr,
                     }),
-                    (IpAddr::V6(gw6), IpNet::V6(dst6)) => Ok(netlink::Route::Ipv6 {
+                    (IpAddr::V6(gw6), IpNet::V6(dst6)) => Ok(Route::Ipv6 {
                         dest: dst6,
                         gw: gw6,
                         metric: mtr,
@@ -398,8 +571,12 @@ pub fn is_using_systemd() -> bool {
 }
 
 /// Returns the *first* interface with a default route or an error if no default route interface exists.
-pub fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult<LinkMessage> {
-    let routes = host.dump_routes().wrap("dump routes")?;
+/// If no table is given we lokup in the main routing table otherwise use the given table id.
+pub fn get_default_route_interface(
+    host: &mut Socket<NetlinkRoute>,
+    table: Option<u32>,
+) -> NetavarkResult<LinkMessage> {
+    let routes = host.dump_routes(table).wrap("dump routes")?;
 
     for route in routes {
         let mut dest = false;
@@ -416,7 +593,7 @@ pub fn get_default_route_interface(host: &mut netlink::Socket) -> NetavarkResult
         // if there is no dest we have a default route
         // return the output interface for this route
         if !dest && out_if > 0 {
-            return host.get_link(netlink::LinkID::ID(out_if));
+            return host.get_link(LinkID::ID(out_if));
         }
     }
     Err(NetavarkError::msg("failed to get default route interface"))

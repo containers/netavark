@@ -16,7 +16,7 @@ env:
     CARGO_TARGET_DIR: "$CIRRUS_WORKING_DIR/targets"
     # Save a little typing (path relative to $CIRRUS_WORKING_DIR)
     SCRIPT_BASE: "./contrib/cirrus"
-    IMAGE_SUFFIX: "c20250422t130822z-f42f41d13"
+    IMAGE_SUFFIX: "c20260310t170224z-f43f42d14"
     FEDORA_NETAVARK_IMAGE: "fedora-netavark-${IMAGE_SUFFIX}"
     AARDVARK_DNS_BRANCH: "main"
     AARDVARK_DNS_URL: "https://api.cirrus-ci.com/v1/artifact/github/containers/aardvark-dns/success/binary.zip?branch=${AARDVARK_DNS_BRANCH}"
@@ -27,8 +27,10 @@ env:
 
 gcp_credentials: ENCRYPTED[d6efdb7d6d4c61e3831df2193ca6348bb02f26cd931695f69d41930b1965f7dab72a838ca0902f6ed8cde66c7deddae2]
 
-aws_credentials: ENCRYPTED[36b3e82f72ec2c909235b69d88b835a09e230aa289e2925d949b0dc4c813c1b468655aabb05edf3f7dcfed430c320b87]
-
+aws_credentials:
+  role_arn: arn:aws:iam::449134212816:role/netavark-ci-role
+  role_session_name: cirrus
+  region: us-east-1  
 
 build_task:
   alias: "build"
@@ -220,7 +222,7 @@ meta_task:
         EC2IMGNAMES: "${FEDORA_NETAVARK_AARCH64_AMI}"
         BUILDID: "${CIRRUS_BUILD_ID}"
         REPOREF: "${CIRRUS_REPO_NAME}"
-        AWSINI: ENCRYPTED[34663ab52255921d163085d348f5695b19ae49b8fec398282b9cd9aecadcb0144544e203ec553d38734f201b6885fd0a]
+        AWSINI: ENCRYPTED[47c697527e37e5016df8f14473b160200324532e0f1af8d2deeb28f4f92810b69bc42e661df0dc9e614bbef399552ce8]
         GCPJSON: ENCRYPTED[e7e6e13b98eb34f480a12412a048e3fb78a02239c229659e136b7a27e2ab25a5bbb61ab6016e322cb6f777fa2c9f9520]
         GCPNAME: ENCRYPTED[f3fc6da8fe283ef506d7b18467a81153ea8e18b1d3cd76e79dcd6f566f20fdd3651522432d3d232f4d69eeb1502d1f6b]
         GCPPROJECT: libpod-218412
@@ -236,7 +238,7 @@ msrv_build_task:
         cpu: 2 # Do not increase, will result in scheduling delays
         memory: "8Gb"
         # When bumping the image always remember to update the README MSRV as well.
-        image: quay.io/libpod/nv-rust:1.83
+        image: quay.io/libpod/nv-rust:1.86
     script:
         - make build
 

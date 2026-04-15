@@ -2,6 +2,8 @@ use log::{debug, error};
 use std::os::fd::BorrowedFd;
 use std::{collections::HashMap, net::IpAddr};
 
+use crate::network::netlink::Socket;
+use crate::network::netlink_route::{CreateLinkOptions, LinkID, NetlinkRoute};
 use netlink_packet_route::link::{
     InfoData, InfoIpVlan, InfoKind, InfoMacVlan, IpVlanMode, MacVlanMode,
 };
@@ -20,12 +22,11 @@ use crate::{
 use super::{
     constants::{
         NO_CONTAINER_INTERFACE_ERROR, OPTION_BCLIM, OPTION_METRIC, OPTION_MODE, OPTION_MTU,
-        OPTION_NO_DEFAULT_ROUTE,
+        OPTION_NO_DEFAULT_ROUTE, VALID_VLAN_OPTS,
     },
     core_utils::{self, get_ipam_addresses, get_mac_address, parse_option, CoreUtils},
     driver::{self, DriverInfo},
     internal_types::IPAMAddresses,
-    netlink::{self, CreateLinkOptions},
     types::{NetInterface, StatusBlock},
 };
 
@@ -95,15 +96,15 @@ impl driver::NetworkDriver for Vlan<'_> {
         if self.info.per_network_opts.interface_name.is_empty() {
             return Err(NetavarkError::msg(NO_CONTAINER_INTERFACE_ERROR));
         }
+        let opts = parse_vlan_opts(&self.info.network.options, false)?;
 
-        let mode: Option<String> = parse_option(&self.info.network.options, OPTION_MODE)?;
+        let mode: Option<String> = opts.mode.clone();
+        let mtu = opts.mtu.unwrap_or(0);
+        let metric = opts.metric.unwrap_or(100);
+        let no_default_route: bool = opts.no_default_route.unwrap_or(false);
+        let bclim = opts.bclim;
 
         let mut ipam = get_ipam_addresses(self.info.per_network_opts, self.info.network)?;
-
-        let mtu = parse_option(&self.info.network.options, OPTION_MTU)?.unwrap_or(0);
-        let metric = parse_option(&self.info.network.options, OPTION_METRIC)?.unwrap_or(100);
-        let no_default_route: bool =
-            parse_option(&self.info.network.options, OPTION_NO_DEFAULT_ROUTE)?.unwrap_or(false);
 
         // Remove gateways when marked as internal network
         if self.info.network.internal {
@@ -125,17 +126,14 @@ impl driver::NetworkDriver for Vlan<'_> {
                 super::constants::DRIVER_IPVLAN => KindData::IpVlan {
                     mode: CoreUtils::get_ipvlan_mode_from_string(mode.as_deref())?,
                 },
-                super::constants::DRIVER_MACVLAN => {
-                    let bclim = parse_option(&self.info.network.options, OPTION_BCLIM)?;
-                    KindData::MacVlan {
-                        mode: CoreUtils::get_macvlan_mode_from_string(mode.as_deref())?,
-                        mac_address: match &self.info.per_network_opts.static_mac {
-                            Some(mac) => Some(CoreUtils::decode_address_from_hex(mac)?),
-                            None => None,
-                        },
-                        bclim,
-                    }
-                }
+                super::constants::DRIVER_MACVLAN => KindData::MacVlan {
+                    mode: CoreUtils::get_macvlan_mode_from_string(mode.as_deref())?,
+                    mac_address: match &self.info.per_network_opts.static_mac {
+                        Some(mac) => Some(CoreUtils::decode_address_from_hex(mac)?),
+                        None => None,
+                    },
+                    bclim,
+                },
                 other => return Err(NetavarkError::msg(format!("unsupported VLAN type {other}"))),
             },
             no_default_route,
@@ -145,8 +143,8 @@ impl driver::NetworkDriver for Vlan<'_> {
 
     fn setup(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
-    ) -> Result<(StatusBlock, Option<AardvarkEntry>), NetavarkError> {
+        netlink_sockets: (&mut Socket<NetlinkRoute>, &mut Socket<NetlinkRoute>),
+    ) -> Result<(StatusBlock, Option<AardvarkEntry<'_>>), NetavarkError> {
         let data = match &self.data {
             Some(d) => d,
             None => return Err(NetavarkError::msg("must call validate() before setup()")),
@@ -218,7 +216,7 @@ impl driver::NetworkDriver for Vlan<'_> {
 
     fn teardown(
         &self,
-        netlink_sockets: (&mut netlink::Socket, &mut netlink::Socket),
+        netlink_sockets: (&mut Socket<NetlinkRoute>, &mut Socket<NetlinkRoute>),
     ) -> NetavarkResult<()> {
         dhcp_teardown(&self.info, netlink_sockets.1)?;
 
@@ -227,7 +225,7 @@ impl driver::NetworkDriver for Vlan<'_> {
             netlink_sockets.1.del_route(route)?;
         }
 
-        netlink_sockets.1.del_link(netlink::LinkID::Name(
+        netlink_sockets.1.del_link(LinkID::Name(
             self.info.per_network_opts.interface_name.to_string(),
         ))?;
         Ok(())
@@ -235,8 +233,8 @@ impl driver::NetworkDriver for Vlan<'_> {
 }
 
 fn setup(
-    host: &mut netlink::Socket,
-    netns: &mut netlink::Socket,
+    host: &mut Socket<NetlinkRoute>,
+    netns: &mut Socket<NetlinkRoute>,
     if_name: &str,
     data: &InternalData,
     hostns_fd: BorrowedFd<'_>,
@@ -244,8 +242,8 @@ fn setup(
     kind_data: &KindData,
 ) -> NetavarkResult<String> {
     let link = match data.host_interface_name.as_ref() {
-        "" => get_default_route_interface(host)?,
-        host_name => host.get_link(netlink::LinkID::Name(host_name.to_string()))?,
+        "" => get_default_route_interface(host, None)?,
+        host_name => host.get_link(LinkID::Name(host_name.to_string()))?,
     };
 
     let opts = match kind_data {
@@ -307,7 +305,7 @@ fn setup(
                     }
 
                     let link = netns
-                        .get_link(netlink::LinkID::Name(tmp_name.clone()))
+                        .get_link(LinkID::Name(tmp_name.clone()))
                         .wrap(format!("get tmp {kind_data} interface"))?;
                     netns
                         .set_link_name(link.header.index, if_name.to_string())
@@ -315,8 +313,7 @@ fn setup(
                         .inspect_err(|_| {
                             // If there is an error here most likely the name in the netns is already used,
                             // make sure to delete the tmp interface.
-                            if let Err(err) = netns.del_link(netlink::LinkID::ID(link.header.index))
-                            {
+                            if let Err(err) = netns.del_link(LinkID::ID(link.header.index)) {
                                 error!("failed to delete tmp {kind_data} link {tmp_name}: {err}");
                             };
                         })?;
@@ -332,7 +329,7 @@ fn setup(
     exec_netns!(hostns_fd, netns_fd, { disable_ipv6_autoconf(if_name) })?;
 
     let dev = netns
-        .get_link(netlink::LinkID::Name(if_name.to_string()))
+        .get_link(LinkID::Name(if_name.to_string()))
         .wrap(format!("get {kind_data} interface"))?;
 
     for addr in &data.ipam.container_addresses {
@@ -342,7 +339,7 @@ fn setup(
     }
 
     netns
-        .set_up(netlink::LinkID::ID(dev.header.index))
+        .set_up(LinkID::ID(dev.header.index))
         .wrap(format!("set {kind_data} up"))?;
 
     if !data.no_default_route {
@@ -355,4 +352,42 @@ fn setup(
     }
 
     get_mac_address(dev.attributes)
+}
+
+pub fn parse_vlan_opts(
+    opts: &Option<HashMap<String, String>>,
+    strict: bool,
+) -> NetavarkResult<VlanOptions> {
+    if strict {
+        if let Some(invalid_key) = opts
+            .as_ref()
+            .and_then(|m| m.keys().find(|k| !VALID_VLAN_OPTS.contains(&k.as_str())))
+        {
+            return Err(NetavarkError::msg(format!(
+                "unsupported vlan network option: {}",
+                invalid_key
+            )));
+        }
+    }
+
+    let mode = parse_option(opts, OPTION_MODE)?;
+    let mtu = parse_option(opts, OPTION_MTU)?;
+    let metric = parse_option(opts, OPTION_METRIC)?;
+    let no_default_route = parse_option(opts, OPTION_NO_DEFAULT_ROUTE)?;
+    let bclim = parse_option(opts, OPTION_BCLIM)?;
+    Ok(VlanOptions {
+        mode,
+        mtu,
+        metric,
+        no_default_route,
+        bclim,
+    })
+}
+
+pub struct VlanOptions {
+    pub mode: Option<String>,
+    pub mtu: Option<u32>,
+    pub metric: Option<u32>,
+    pub no_default_route: Option<bool>,
+    pub bclim: Option<i32>,
 }

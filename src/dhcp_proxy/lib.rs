@@ -45,9 +45,9 @@ pub mod g_rpc {
             let mtu = l.mtu.unwrap_or(0) as u32;
 
             Lease {
-                t1: l.t1,
-                t2: l.t2,
-                lease_time: l.lease_time,
+                t1: l.t1_sec,
+                t2: l.t2_sec,
+                lease_time: l.lease_time_sec,
                 mtu,
                 domain_name,
                 mac_address: "".to_string(),
@@ -95,9 +95,9 @@ pub mod g_rpc {
             let mut lease = DhcpV4Lease::default();
             lease.siaddr = Ipv4Addr::from_str(&l.siaddr)?;
             lease.yiaddr = Ipv4Addr::from_str(&l.yiaddr)?;
-            lease.t1 = l.t1;
-            lease.t2 = l.t2;
-            lease.lease_time = l.lease_time;
+            lease.t1_sec = l.t1;
+            lease.t2_sec = l.t2;
+            lease.lease_time_sec = l.lease_time;
             lease.srv_id = Ipv4Addr::from_str(&l.srv_id)?;
             lease.subnet_mask = Ipv4Addr::from_str(&l.subnet_mask)?;
             lease.broadcast_addr = broadcast_addr;

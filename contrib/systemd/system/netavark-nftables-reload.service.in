@@ -1,0 +1,16 @@
+[Unit]
+Description=Restore Netavark firewall rules after nftables service is reloaded
+# This ensures our service is always started/restarted along with nftables.
+# It also ensures this service is stopped if nftables is stopped.
+PartOf=nftables.service
+# This ensures nftables has finished starting before we run.
+After=nftables.service
+
+[Service]
+Type=oneshot
+# This uses the placeholder, which will be replaced by the Makefile during the build.
+ExecStart=@@NETAVARK@@ firewall-reload
+
+[Install]
+# This tells systemd that this service should be enabled when nftables is enabled.
+WantedBy=nftables.service

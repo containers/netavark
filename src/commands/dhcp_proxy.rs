@@ -1,55 +1,66 @@
 #![cfg_attr(not(unix), allow(unused_imports))]
 
-use crate::dhcp_proxy::cache::{Clear, LeaseCache};
-use crate::dhcp_proxy::dhcp_service::{process_client_stream, DhcpV4Service};
-use crate::dhcp_proxy::ip;
-use crate::dhcp_proxy::lib::g_rpc::netavark_proxy_server::{NetavarkProxy, NetavarkProxyServer};
-use crate::dhcp_proxy::lib::g_rpc::{
-    Empty, Lease as NetavarkLease, NetworkConfig, OperationResponse,
+use std::{
+    collections::HashMap,
+    env, fs,
+    fs::File,
+    io::Write,
+    os::unix::{io::FromRawFd, net::UnixListener as stdUnixListener},
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
-use crate::dhcp_proxy::proxy_conf::{
-    get_cache_fqname, get_proxy_sock_fqname, DEFAULT_INACTIVITY_TIMEOUT, DEFAULT_TIMEOUT,
-};
-use crate::error::{NetavarkError, NetavarkResult};
-use crate::network::core_utils;
+
 use clap::Parser;
 use log::{debug, error, warn};
-use tokio::task::AbortHandle;
-
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::Write;
-use std::os::unix::io::FromRawFd;
-use std::os::unix::net::UnixListener as stdUnixListener;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use std::{env, fs};
 #[cfg(unix)]
 use tokio::net::UnixListener;
 #[cfg(unix)]
 use tokio::signal::unix::{signal, SignalKind};
-use tokio::sync::mpsc::Sender;
-use tokio::sync::oneshot::error::TryRecvError;
-use tokio::sync::{mpsc, oneshot};
-use tokio::time::{timeout, Duration};
+use tokio::{
+    sync::{mpsc, mpsc::Sender, oneshot, oneshot::error::TryRecvError},
+    task::AbortHandle,
+    time::{timeout, Duration},
+};
 #[cfg(unix)]
 use tokio_stream::wrappers::UnixListenerStream;
 use tonic::{
-    transport::Server, Code, Code::Internal, Code::InvalidArgument, Request, Response, Status,
+    transport::Server,
+    Code,
+    Code::{Internal, InvalidArgument},
+    Request, Response, Status,
 };
 
+use crate::{
+    dhcp_proxy::{
+        cache::{Clear, LeaseCache},
+        dhcp_service::{process_client_stream, DhcpV4Service},
+        ip,
+        lib::g_rpc::{
+            netavark_proxy_server::{NetavarkProxy, NetavarkProxyServer},
+            Empty, Lease as NetavarkLease, NetworkConfig, OperationResponse,
+        },
+        proxy_conf::{
+            get_cache_fqname, get_proxy_sock_fqname, DEFAULT_INACTIVITY_TIMEOUT, DEFAULT_TIMEOUT,
+        },
+    },
+    error::{NetavarkError, NetavarkResult},
+    network::core_utils,
+};
+
+type TaskData = (Arc<tokio::sync::Mutex<DhcpV4Service>>, AbortHandle);
+
 #[derive(Debug)]
-/// This is the tonic netavark proxy service that is required to impl the Netavark Proxy trait which
-/// includes the gRPC methods defined in proto/proxy.proto. We can store a atomically referenced counted
-/// mutex cache in the structure tuple.
+/// This is the tonic netavark proxy service that is required to impl the
+/// Netavark Proxy trait which includes the gRPC methods defined in
+/// proto/proxy.proto. We can store a atomically referenced counted mutex cache
+/// in the structure tuple.
 ///
-/// The cache needs to be **safely mutable across multiple threads**. We need to share the lease cache
-/// across multiple threads for 2 reasons
+/// The cache needs to be **safely mutable across multiple threads**. We need to
+/// share the lease cache across multiple threads for 2 reasons
 /// 1. Each tonic request is spawned in its own new thread.
-/// 2. A new thread must be spawned in any request that uses mozim, such as get_lease. This is because
-///    tonic creates its own runtime for each request and mozim trys to make its own runtime inside of
-///    a runtime.
-///
+/// 2. A new thread must be spawned in any request that uses mozim, such as
+///    get_lease. This is because tonic creates its own runtime for each request
+///    and mozim trys to make its own runtime inside of a runtime.
 struct NetavarkProxyService<W: Write + Clear> {
     // cache is the lease hashmap
     cache: Arc<Mutex<LeaseCache<W>>>,
@@ -59,7 +70,7 @@ struct NetavarkProxyService<W: Write + Clear> {
     timeout_sender: Option<Arc<Mutex<Sender<i32>>>>,
     // All dhcp poll will be spawned on a new task, keep track of it so
     // we can remove it on teardown. The key is the container mac.
-    task_map: Arc<Mutex<HashMap<String, AbortHandle>>>,
+    task_map: Arc<Mutex<HashMap<String, TaskData>>>,
 }
 
 impl<W: Write + Clear> NetavarkProxyService<W> {
@@ -99,8 +110,8 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
 
         // setup client side streaming
         let network_config = request.into_inner();
-        // _tx will be dropped when the request is dropped, this will trigger rx, which means the
-        // client disconnected
+        // _tx will be dropped when the request is dropped, this will trigger
+        // rx, which means the client disconnected
         let (_tx, mut rx) = oneshot::channel::<()>();
         let lease = tokio::task::spawn(async move {
             // Check if the connection has been dropped before attempting to get a lease
@@ -136,8 +147,9 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
         };
     }
 
-    /// When a container is shut down this method should be called. It will clear the lease information
-    /// from the caching system.
+    /// When a container is shut down this method should be called. It will
+    /// release the DHCP lease and clear the lease information from the
+    /// caching system.
     async fn teardown(
         &self,
         request: Request<NetworkConfig>,
@@ -149,12 +161,25 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
         let cache = self.cache.clone();
         let tasks = self.task_map.clone();
 
-        let task = tasks
-            .lock()
-            .expect("lock tasks")
-            .remove(&nc.container_mac_addr);
-        if let Some(handle) = task {
-            handle.abort();
+        let maybe_service_arc = {
+            // Scope for the std::sync::MutexGuard
+            let mut tasks_guard = tasks.lock().expect("lock tasks");
+
+            if let Some((service_arc, handle)) = tasks_guard.remove(&nc.container_mac_addr) {
+                handle.abort();
+                Some(service_arc)
+            } else {
+                None
+            }
+        };
+        if let Some(service_arc) = maybe_service_arc {
+            let mut service = service_arc.lock().await;
+            if let Err(e) = service.release_lease().await {
+                warn!(
+                    "Failed to send DHCPRELEASE for {}: {}",
+                    &nc.container_mac_addr, e
+                );
+            }
         }
 
         // Remove the client from the cache dir
@@ -198,10 +223,12 @@ pub struct Opts {
 
 /// Handle SIGINT signal.
 ///
-/// Will wait until process receives a SIGINT/ ctrl+c signal and then clean up and shut down
+/// Will wait until process receives a SIGINT/ ctrl+c signal and then clean up
+/// and shut down
 async fn handle_signal(uds_path: PathBuf) {
     tokio::spawn(async move {
-        // Handle signal hooks with expect, it is important these are setup so data is not corrupted
+        // Handle signal hooks with expect, it is important these are setup so
+        // data is not corrupted
         let mut sigterm = signal(SignalKind::terminate()).expect("Could not set up SIGTERM hook");
         let mut sigint = signal(SignalKind::interrupt()).expect("Could not set up SIGINT hook");
         // Wait for either a SIGINT or a SIGTERM to clean up
@@ -254,7 +281,8 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
                 }
                 Some(f) => tokio::fs::create_dir_all(f).await?,
             }
-            // Watch for signals after the uds path has been created, so that the socket can be closed.
+            // Watch for signals after the uds path has been created, so that
+            // the socket can be closed.
             handle_signal(uds_path.clone()).await;
             UnixListener::bind(&uds_path)?
         }
@@ -314,15 +342,17 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
         _ = &mut server => {},
     };
 
-    // Make sure to only remove the socket path when we do not run socket activated,
-    // otherwise we delete the socket systemd is using which causes all new connections to fail.
+    // Make sure to only remove the socket path when we do not run socket
+    // activated, otherwise we delete the socket systemd is using which
+    // causes all new connections to fail.
     if !is_systemd_activated {
         fs::remove_file(uds_path)?;
     }
     Ok(())
 }
 
-/// manages the timeout lifecycle for the proxy server based on a defined timeout.
+/// manages the timeout lifecycle for the proxy server based on a defined
+/// timeout.
 ///
 /// # Arguments
 ///
@@ -334,7 +364,6 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
 /// # Examples
 ///
 /// ```
-///
 /// ```
 async fn handle_wakeup<W: Write + Clear>(
     rx: Option<mpsc::Receiver<i32>>,
@@ -378,7 +407,6 @@ async fn handle_wakeup<W: Write + Clear>(
 /// # Examples
 ///
 /// ```
-///
 /// ```
 fn is_catch_empty<W: Write + Clear>(current_cache: Arc<Mutex<LeaseCache<W>>>) -> bool {
     match current_cache.lock() {
@@ -406,7 +434,7 @@ async fn process_setup<W: Write + Clear>(
     network_config: NetworkConfig,
     timeout: u32,
     cache: Arc<Mutex<LeaseCache<W>>>,
-    tasks: Arc<Mutex<HashMap<String, AbortHandle>>>,
+    tasks: Arc<Mutex<HashMap<String, TaskData>>>,
 ) -> Result<NetavarkLease, Status> {
     let container_network_interface = network_config.container_iface.clone();
     let ns_path = network_config.ns_path.clone();
@@ -419,14 +447,16 @@ async fn process_setup<W: Write + Clear>(
     let nv_lease = match network_config.version {
         //V4
         0 => {
-            let mut service = DhcpV4Service::new(network_config, timeout)?;
+            let mut service = DhcpV4Service::new(network_config, timeout).await?;
 
             let lease = service.get_lease().await?;
-            let task = tokio::spawn(process_client_stream(service));
+            let service_arc = Arc::new(tokio::sync::Mutex::new(service));
+            let service_arc_clone = service_arc.clone();
+            let task_handle = tokio::spawn(process_client_stream(service_arc_clone));
             tasks
                 .lock()
                 .expect("lock tasks")
-                .insert(mac.to_string(), task.abort_handle());
+                .insert(mac.to_string(), (service_arc, task_handle.abort_handle()));
             lease
         }
         //V6 TODO implement DHCPv6

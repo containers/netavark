@@ -74,7 +74,7 @@ pub enum NetavarkError {
 
     Serde(serde_json::Error),
 
-    Netlink(netlink_packet_core::error::ErrorMessage),
+    Netlink(netlink_packet_core::ErrorMessage),
 
     List(NetavarkErrorList),
 
@@ -159,7 +159,18 @@ impl fmt::Display for NetavarkError {
                     Ok(())
                 }
             }
-            NetavarkError::Nftables(e) => write!(f, "nftables error: {e}"),
+            NetavarkError::Nftables(e) => match e {
+                nftables::helper::NftablesError::NftFailed {
+                    program,
+                    hint,
+                    stdout: _,
+                    stderr,
+                } => write!(
+                    f,
+                    "nftables error: {program:?} did not return successfully while {hint}: {stderr}",
+                ),
+                _ => write!(f, "nftables error: {e}"),
+            },
             NetavarkError::SubnetParse(e) => write!(f, "parsing IP subnet error: {e}"),
             NetavarkError::AddrParse(e) => write!(f, "parsing IP address error: {e}"),
         }
@@ -206,8 +217,8 @@ impl From<ipnet::PrefixLenError> for NetavarkError {
     }
 }
 
-impl From<netlink_packet_core::error::ErrorMessage> for NetavarkError {
-    fn from(err: netlink_packet_core::error::ErrorMessage) -> Self {
+impl From<netlink_packet_core::ErrorMessage> for NetavarkError {
+    fn from(err: netlink_packet_core::ErrorMessage) -> Self {
         NetavarkError::Netlink(err)
     }
 }

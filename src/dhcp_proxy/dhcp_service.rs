@@ -1,19 +1,23 @@
-use std::net::Ipv4Addr;
+use std::{net::Ipv4Addr, sync::Arc};
 
-use crate::dhcp_proxy::dhcp_service::DhcpServiceErrorKind::{
-    Bug, InvalidArgument, NoLease, Timeout,
+use crate::network::{
+    netlink,
+    netlink_route::{LinkID, NetlinkRoute, Route},
 };
-
-use crate::dhcp_proxy::lib::g_rpc::{Lease as NetavarkLease, NetworkConfig};
-use crate::error::{ErrorWrap, NetavarkError, NetavarkResult};
-use crate::network::core_utils;
-use crate::network::netlink::Route;
-use crate::wrap;
 use log::debug;
-use mozim::{DhcpV4ClientAsync, DhcpV4Config, DhcpV4Lease as MozimV4Lease};
-use tokio_stream::StreamExt;
-
+use mozim::{DhcpV4Client, DhcpV4Config, DhcpV4Lease as MozimV4Lease, DhcpV4State};
+use tokio::sync::Mutex;
 use tonic::{Code, Status};
+
+use crate::{
+    dhcp_proxy::{
+        dhcp_service::DhcpServiceErrorKind::{Bug, InvalidArgument, NoLease, Timeout},
+        lib::g_rpc::{Lease as NetavarkLease, NetworkConfig},
+    },
+    error::{ErrorWrap, NetavarkError, NetavarkResult},
+    network::core_utils,
+    wrap,
+};
 
 /// The kind of DhcpServiceError that can be caused when finding a dhcp lease
 pub enum DhcpServiceErrorKind {
@@ -38,31 +42,44 @@ impl DhcpServiceError {
     }
 }
 
-/// DHCP service is responsible for creating, handling, and managing the dhcp lease process.
+/// DHCP service is responsible for creating, handling, and managing the dhcp
+/// lease process.
+#[derive(Debug)]
 pub struct DhcpV4Service {
-    client: DhcpV4ClientAsync,
+    client: DhcpV4Client,
     network_config: NetworkConfig,
     previous_lease: Option<MozimV4Lease>,
 }
 
 impl DhcpV4Service {
-    pub fn new(nc: NetworkConfig, timeout: u32) -> Result<Self, DhcpServiceError> {
-        let mut config = DhcpV4Config::new_proxy(&nc.host_iface, &nc.container_mac_addr);
-        config.set_timeout(timeout);
+    pub async fn new(nc: NetworkConfig, timeout: u32) -> Result<Self, DhcpServiceError> {
+        let mut config = DhcpV4Config::new_proxy(&nc.host_iface, &nc.container_mac_addr)
+            .map_err(|e| DhcpServiceError::new(InvalidArgument, e.to_string()))?;
+        config.set_timeout_sec(timeout);
 
-        // Sending the hostname to the DHCP server is optional but it can be useful
-        // in environments where DDNS is used to create or update DNS records.
+        let mut socket = netlink::Socket::<NetlinkRoute>::new()
+            .map_err(|e| DhcpServiceError::new(InvalidArgument, e.to_string()))?;
+        let link = socket
+            .get_link(LinkID::Name(nc.host_iface.clone()))
+            .map_err(|e| DhcpServiceError::new(InvalidArgument, e.to_string()))?;
+
+        config.set_iface_index(link.header.index);
+
+        // Sending the hostname to the DHCP server is optional but it can be
+        // useful in environments where DDNS is used to create or update
+        // DNS records.
         if !nc.host_name.is_empty() {
             config.set_host_name(&nc.host_name);
         };
 
         // DHCP servers use the "client id", which is usually the MAC address,
         // to keep track of leases but each time the container starts, it gets
-        // a new, random, MAC address so there's a good chance that the container
-        // won't get the same IP address if it restarts. This can be an issue if
-        // a container provides a service and needs to be restarted because, even
-        // if DDNS is in use and the container has a DNS A record, a client may
-        // still have the old IP address cached until the DNS TTL expires.
+        // a new, random, MAC address so there's a good chance that the
+        // container won't get the same IP address if it restarts. This
+        // can be an issue if a container provides a service and needs
+        // to be restarted because, even if DDNS is in use and the
+        // container has a DNS A record, a client may still have the old
+        // IP address cached until the DNS TTL expires.
         //
         // Since the container id remains constant for life of the container
         // and it should be globally unique, we can use it as the client id to
@@ -73,7 +90,7 @@ impl DhcpV4Service {
         // is not a hardware address.
         config.set_client_id(0, nc.container_id.as_bytes());
 
-        let client = match DhcpV4ClientAsync::init(config, None) {
+        let client = match DhcpV4Client::init(config, None).await {
             Ok(client) => Ok(client),
             Err(err) => Err(DhcpServiceError::new(InvalidArgument, err.to_string())),
         }?;
@@ -87,24 +104,33 @@ impl DhcpV4Service {
     /// Performs a DHCP DORA on a ipv4 network configuration.
     /// # Arguments
     ///
-    /// * `client`: a IPv4 mozim dhcp client. When this method is called, it takes ownership of client.
+    /// * `client`: a IPv4 mozim dhcp client. When this method is called, it
+    ///   takes ownership of client.
     ///
-    /// returns: Result<Lease, DhcpSearchError>. Either finds a lease successfully, finds no lease, or fails
-    ///
+    /// returns: Result<Lease, DhcpSearchError>. Either finds a lease
+    /// successfully, finds no lease, or fails
     pub async fn get_lease(&mut self) -> Result<NetavarkLease, DhcpServiceError> {
-        if let Some(lease_result) = self.client.next().await {
-            match lease_result {
-                Ok(lease) => {
+        loop {
+            let state = self.client.run().await;
+            match state {
+                Ok(DhcpV4State::Done(lease)) => {
                     let mut netavark_lease =
-                        <NetavarkLease as From<MozimV4Lease>>::from(lease.clone());
+                        <NetavarkLease as From<MozimV4Lease>>::from((*lease).clone());
                     netavark_lease.add_domain_name(&self.network_config.domain_name);
                     netavark_lease.add_mac_address(&self.network_config.container_mac_addr);
                     debug!(
                         "found a lease for {:?}, {:?}",
                         &self.network_config.container_mac_addr, &netavark_lease
                     );
-                    self.previous_lease = Some(lease);
+                    self.previous_lease = Some(*lease);
                     return Ok(netavark_lease);
+                }
+                Ok(state) => {
+                    log::debug!(
+                        "DHCPv4 proxy on {} for {} enter {state} state",
+                        self.network_config.host_iface,
+                        self.network_config.container_mac_addr
+                    );
                 }
                 Err(err) => {
                     return Err(match err.kind() {
@@ -119,15 +145,35 @@ impl DhcpV4Service {
                         }
                         mozim::ErrorKind::Bug => DhcpServiceError::new(Bug, err.to_string()),
                         _ => DhcpServiceError::new(Bug, err.to_string()),
-                    })
+                    });
                 }
             }
         }
+    }
 
-        Err(DhcpServiceError::new(
-            Timeout,
-            "Could not find a lease within the timeout limit".to_string(),
-        ))
+    /// Sends a DHCPRELEASE message for the given lease.
+    /// This is a "best effort" operation and should not block teardown.
+    pub async fn release_lease(&mut self) -> Result<(), DhcpServiceError> {
+        if let Some(lease) = &self.previous_lease {
+            debug!(
+                "Attempting to release lease for MAC: {}",
+                &self.network_config.container_mac_addr
+            );
+            // Directly call the release function on the underlying mozim
+            // client.
+            self.client
+                .release(lease)
+                .await
+                .map_err(|e| DhcpServiceError::new(Bug, e.to_string()))
+        } else {
+            // No previous lease recorded; nothing to release. Best-effort ->
+            // succeed silently.
+            debug!(
+                "No previous lease to release for MAC: {}",
+                &self.network_config.container_mac_addr
+            );
+            Ok(())
+        }
     }
 }
 
@@ -149,50 +195,60 @@ impl From<DhcpServiceError> for Status {
     }
 }
 
-pub async fn process_client_stream(mut client: DhcpV4Service) {
-    while let Some(lease) = client.client.next().await {
-        match lease {
-            Ok(lease) => {
+pub async fn process_client_stream(service_arc: Arc<Mutex<DhcpV4Service>>) {
+    let mut client = service_arc.lock().await;
+    loop {
+        let lease_result = client.client.run().await;
+        match lease_result {
+            Ok(DhcpV4State::Done(lease)) => {
                 log::info!(
                     "got new lease for mac {}: {:?}",
                     &client.network_config.container_mac_addr,
                     &lease
                 );
-                // get previous lease and check if ip addr changed, if not we do not have to do anything
+
                 if let Some(old_lease) = &client.previous_lease {
                     if old_lease.yiaddr != lease.yiaddr
                         || old_lease.subnet_mask != lease.subnet_mask
                         || old_lease.gateways != lease.gateways
                     {
-                        // ips do not match, remove old ones and assign new ones.
                         log::info!(
                             "ip or gateway for mac {} changed, update address",
                             &client.network_config.container_mac_addr
                         );
-                        match update_lease_ip(
+                        if let Err(err) = update_lease_ip(
                             &client.network_config.ns_path,
                             &client.network_config.container_iface,
                             old_lease,
                             &lease,
                         ) {
-                            Ok(_) => {}
-                            Err(err) => {
-                                log::error!("{err}");
-                                continue;
-                            }
+                            log::error!("{err}");
                         }
                     }
                 }
-                client.previous_lease = Some(lease)
+                client.previous_lease = Some(*lease);
             }
-            Err(err) => log::error!(
-                "Failed to renew lease for {}: {err}",
-                &client.network_config.container_mac_addr
-            ),
+            Ok(state) => {
+                log::debug!(
+                    "DHCPv4 proxy on {} for {} enter {state} state",
+                    client.network_config.host_iface,
+                    client.network_config.container_mac_addr
+                );
+            }
+            Err(err) => {
+                log::error!(
+                    "Failed to acquire DHCPv4 lease for {}: {err}",
+                    &client.network_config.container_mac_addr
+                );
+                log::info!(
+                    "Retrying DHCPv4 proxy for {}",
+                    &client.network_config.container_mac_addr
+                );
+                client.client.clean_up();
+            }
         }
     }
 }
-
 fn update_lease_ip(
     netns: &str,
     interface: &str,
@@ -213,7 +269,7 @@ fn update_lease_ip(
 
     if new_net != old_net {
         let link = sock
-            .get_link(crate::network::netlink::LinkID::Name(interface.to_string()))
+            .get_link(LinkID::Name(interface.to_string()))
             .wrap("get interface in netns")?;
         sock.add_addr(link.header.index, &ipnet::IpNet::V4(new_net))
             .wrap("add new addr")?;

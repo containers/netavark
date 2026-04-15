@@ -1,6 +1,6 @@
-use super::netlink;
+use crate::network::netlink_route::Route;
 use crate::network::types;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 /// Teardown contains options for tearing down behind a container
 #[derive(Debug)]
@@ -26,6 +26,14 @@ pub struct SetupNetwork {
     pub isolation: IsolateOption,
     /// port used for the dns server
     pub dns_port: u16,
+    /// outbound IPv4 address for SNAT
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub outbound_addr4: Option<Ipv4Addr>,
+    /// outbound IPv6 address for SNAT
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub outbound_addr6: Option<Ipv6Addr>,
 }
 
 #[derive(Debug)]
@@ -103,7 +111,7 @@ pub struct IPAMAddresses {
     // if using macvlan and dhcp, then true
     pub dhcp_enabled: bool,
     pub gateway_addresses: Vec<ipnet::IpNet>,
-    pub routes: Vec<netlink::Route>,
+    pub routes: Vec<Route>,
     pub ipv6_enabled: bool,
     // result for podman
     pub net_addresses: Vec<types::NetAddress>,

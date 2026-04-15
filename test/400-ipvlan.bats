@@ -323,3 +323,47 @@ EOF
    run_in_container_netns ip -o link show
    assert "${#lines[@]}" == 2 "only two interfaces (lo, eth0) in the netns, the tmp ipvlan interface should be gone"
 }
+
+@test "ipvlan multiple static ips single subnet" {
+   test_macvlan_ipvlan_subnets driver=ipvlan \
+      static_ips='"10.88.0.5", "10.88.0.10", "10.88.0.15"' \
+      subnets='{"subnet":"10.88.0.0/16","gateway":"10.88.0.1"}'
+}
+
+@test "ipvlan multiple static ips multiple subnets" {
+   test_macvlan_ipvlan_subnets driver=ipvlan \
+      static_ips='"10.88.0.5", "10.89.0.10", "10.88.0.15"' \
+      subnets='{"subnet":"10.88.0.0/16","gateway":"10.88.0.1"}, {"subnet":"10.89.0.0/16","gateway":"10.89.0.1"}'
+}
+
+@test "ipvlan overlapping subnets error" {
+   test_macvlan_ipvlan_subnets driver=ipvlan \
+      static_ips='"10.1.2.5", "10.1.3.249", "10.1.2.100"' \
+      subnets='{"subnet":"10.1.2.0/23","gateway":"10.1.2.1"}, {"subnet":"10.1.3.248/30","gateway":"10.1.3.249"}' \
+      expected_rc=1 \
+      error_match="overlapping subnets"
+}
+
+@test "ipvlan duplicate subnet definition error" {
+   test_macvlan_ipvlan_subnets driver=ipvlan \
+      static_ips='"10.88.0.5", "10.88.0.10", "10.88.0.15"' \
+      subnets='{"subnet":"10.88.0.0/16","gateway":"10.88.0.1"}, {"subnet":"10.88.0.0/16","gateway":"10.88.0.1"}' \
+      expected_rc=1 \
+      error_match="duplicate subnet"
+}
+
+@test "ipvlan not all static ips match a subnet error" {
+   test_macvlan_ipvlan_subnets driver=ipvlan \
+      static_ips='"10.88.0.5", "10.89.0.10", "10.90.0.15"' \
+      subnets='{"subnet":"10.88.0.0/16","gateway":"10.88.0.1"}, {"subnet":"10.89.0.0/16","gateway":"10.89.0.1"}' \
+      expected_rc=1 \
+      error_match="not all static IPs matched a subnet"
+}
+
+@test "ipvlan static ip outside configured subnet error" {
+   test_macvlan_ipvlan_subnets driver=ipvlan \
+      static_ips='"10.88.0.5", "10.88.0.10", "10.89.0.15"' \
+      subnets='{"subnet":"10.88.0.0/16","gateway":"10.88.0.1"}' \
+      expected_rc=1 \
+      error_match="not all static IPs matched a subnet"
+}

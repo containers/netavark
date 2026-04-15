@@ -4,7 +4,8 @@ use crate::dns::aardvark::Aardvark;
 use crate::error::{NetavarkError, NetavarkResult};
 use crate::firewall;
 use crate::network::driver::{get_network_driver, DriverInfo, NetworkDriver};
-use crate::network::netlink::{self, LinkID};
+use crate::network::netlink::Socket;
+use crate::network::netlink_route::{LinkID, NetlinkRoute};
 use crate::network::{self};
 use crate::network::{core_utils, types};
 
@@ -65,11 +66,17 @@ impl Setup {
         let config_dir = get_config_dir(config_dir, "setup")?;
         let mut drivers = Vec::with_capacity(network_options.network_info.len());
 
-        // Perform per-network setup
-        for (net_name, network) in network_options.network_info.iter() {
-            let per_network_opts = network_options.networks.get(net_name).ok_or_else(|| {
-                NetavarkError::Message(format!("network options for network {net_name} not found"))
-            })?;
+        for named_network_opts in &network_options.networks {
+            let per_network_opts = &named_network_opts.opts;
+            let network = network_options
+                .network_info
+                .get(&named_network_opts.name)
+                .ok_or_else(|| {
+                    NetavarkError::Message(format!(
+                        "network info for network {} not found",
+                        &named_network_opts.name
+                    ))
+                })?;
 
             let mut driver = get_network_driver(
                 DriverInfo {
@@ -160,8 +167,11 @@ impl Setup {
     }
 }
 
-fn teardown_drivers<'a, I>(drivers: I, host: &mut netlink::Socket, netns: &mut netlink::Socket)
-where
+fn teardown_drivers<'a, I>(
+    drivers: I,
+    host: &mut Socket<NetlinkRoute>,
+    netns: &mut Socket<NetlinkRoute>,
+) where
     I: Iterator<Item = &'a Box<dyn NetworkDriver + 'a>>,
 {
     for driver in drivers {

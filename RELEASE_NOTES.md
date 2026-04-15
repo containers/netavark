@@ -1,5 +1,34 @@
 # Release Notes
 
+## v1.17.0
+
+* The dhcp proxy now sends DHCPRELEASE on container teardown. ([#1271](https://github.com/containers/netavark/issues/1271))
+* The bridge driver now correctly supports aardvark-dns in unmanaged mode and binds to the host interface ip addresses instead of the gateway. ([#1177](https://github.com/containers/netavark/issues/1177)
+* A new `firewall-reload` command has been added. This command reloads the netavark firewall configuration when executed then exits right away. This is useful to run after the host firewall got flushed to then restore connectivity for the containers without having to restart them. ([#1258](https://github.com/containers/netavark/issues/1258))
+* The MSRV has been bumped to v1.86.
+* Dependency updates.
+
+
+## v1.16.1
+
+* Fixed an incompatibility with nftables 1.1.4 json output which broke the firewall rule generation. ([#1303](https://github.com/containers/netavark/issues/1303))
+
+## v1.16.0
+
+* The netavark bridge driver now defaults to using the MTU of the default route interface when no explicit MTU was configured for the network. This helps in environments where a non standard MTU is used. ([containers/podman#20009](https://github.com/containers/podman/issues/20009))
+* Netavark now creates sysctl config files under /run/sysctl.d (only when running as root and with systemd as init system) for the sysctl values we configure for our bridge/veth interface. This ensures that running `sysctl --system` or systemd-sysctl won't revert them back to its original value.
+* The MSRV has been bumped to v1.83.
+* Dependency updates.
+
+## v1.15.2
+
+* Fixed a bug that caused a thread leak in the dhcp-proxy for each started container. ([#811](https://github.com/containers/netavark/issues/811))
+* Fixed a bug which printed bogus errors when the dhcp-proxy was run with an activity timeout of 0. ([#1262](https://github.com/containers/netavark/issues/1262))
+
+## v1.15.1
+
+* Fixed a regression that caused container name lookups to get the wrong ip address when the host's search domain responded for the same name. ([containers/podman#26198](https://github.com/containers/podman/issues/26198))
+
 ## v1.15.0
 
 * Fixed an issue where invalid dns names that included a space would cause aardvark-dns to crash. Instead such names are now ignored and generate a warning. ([#1019](https://github.com/containers/netavark/issues/1019))

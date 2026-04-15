@@ -2,7 +2,9 @@ use std::ffi::OsString;
 
 use clap::{Parser, Subcommand};
 
+use netavark::commands::create;
 use netavark::commands::dhcp_proxy;
+use netavark::commands::firewall_reload;
 use netavark::commands::firewalld_reload;
 use netavark::commands::setup;
 use netavark::commands::teardown;
@@ -38,6 +40,8 @@ struct Opts {
 
 #[derive(Subcommand, Debug)]
 enum SubCommand {
+    /// Create a network config
+    Create(create::Create),
     /// Configures the given network namespace with the given configuration.
     Setup(setup::Setup),
     /// Updates network dns servers for an already configured network.
@@ -51,6 +55,9 @@ enum SubCommand {
     /// Listen for the firewalld reload event and reload fw rules
     #[command(name = "firewalld-reload")]
     FirewallDReload,
+    // Re-applies firewall rules for all networks.
+    #[command(name = "firewall-reload")]
+    FirewallReload,
 }
 
 fn main() {
@@ -64,6 +71,7 @@ fn main() {
         .aardvark_binary
         .unwrap_or_else(|| OsString::from("/usr/libexec/podman/aardvark-dns"));
     let result = match opts.subcmd {
+        SubCommand::Create(create) => create.exec(opts.file, opts.plugin_directories),
         SubCommand::Setup(setup) => setup.exec(
             opts.file,
             config,
@@ -84,6 +92,7 @@ fn main() {
         SubCommand::Version(version) => version.exec(),
         SubCommand::DHCPProxy(proxy) => dhcp_proxy::serve(proxy),
         SubCommand::FirewallDReload => firewalld_reload::listen(config),
+        SubCommand::FirewallReload => firewall_reload::firewall_reload(config),
     };
 
     match result {

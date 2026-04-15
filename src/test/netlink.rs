@@ -2,7 +2,8 @@
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
 
-    use netavark::network::netlink::*;
+    use netavark::network::netlink::Socket;
+    use netavark::network::netlink_route::{CreateLinkOptions, LinkID, NetlinkRoute, Route};
     use netlink_packet_route::{address, link::InfoKind};
 
     macro_rules! test_setup {
@@ -28,13 +29,16 @@ mod tests {
     #[test]
     fn test_socket_new() {
         test_setup!();
-        assert!(Socket::new().is_ok(), "Netlink Socket::new() should work");
+        assert!(
+            Socket::<NetlinkRoute>::new().is_ok(),
+            "Netlink Socket::new() should work"
+        );
     }
 
     #[test]
     fn test_add_link() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = Socket::<NetlinkRoute>::new().expect("Socket::new()");
 
         let name = String::from("test1");
         sock.create_link(CreateLinkOptions::new(name.clone(), InfoKind::Dummy))
@@ -49,7 +53,7 @@ mod tests {
     #[test]
     fn test_add_addr() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = Socket::<NetlinkRoute>::new().expect("Socket::new()");
 
         let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
         eprintln!("{}", String::from_utf8(out.stderr).unwrap());
@@ -72,7 +76,7 @@ mod tests {
     #[test]
     fn test_del_addr() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = Socket::<NetlinkRoute>::new().expect("Socket::new()");
 
         let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
         eprintln!("{}", String::from_utf8(out.stderr).unwrap());
@@ -110,7 +114,7 @@ mod tests {
     #[ignore]
     fn test_del_route() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = Socket::<NetlinkRoute>::new().expect("Socket::new()");
 
         let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
         eprintln!("{}", String::from_utf8(out.stderr).unwrap());
@@ -159,7 +163,7 @@ mod tests {
     #[test]
     fn test_dump_addr() {
         test_setup!();
-        let mut sock = Socket::new().expect("Socket::new()");
+        let mut sock = Socket::<NetlinkRoute>::new().expect("Socket::new()");
 
         let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
         eprintln!("{}", String::from_utf8(out.stderr).unwrap());
@@ -175,13 +179,47 @@ mod tests {
         eprintln!("{}", String::from_utf8(out.stderr).unwrap());
         assert!(out.status.success(), "failed to set up lo via ip");
 
-        let addresses = sock.dump_addresses().expect("dump_addresses failed");
+        let addresses = sock.dump_addresses(None).expect("dump_addresses failed");
         for nla in addresses[0].attributes.iter() {
             if let address::AddressAttribute::Address(ip) = nla {
                 assert_eq!(ip, &IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)))
             }
         }
         for nla in addresses[1].attributes.iter() {
+            if let address::AddressAttribute::Address(ip) = nla {
+                assert_eq!(ip, &IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)))
+            }
+        }
+    }
+    #[test]
+    fn test_dump_addr_filter() {
+        test_setup!();
+        let mut sock = Socket::<NetlinkRoute>::new().expect("Socket::new()");
+
+        let out = run_command!("ip", "link", "add", "test1", "type", "dummy");
+        eprintln!("{}", String::from_utf8(out.stderr).unwrap());
+        assert!(out.status.success(), "failed to add link via ip");
+
+        let net = "10.0.0.2/24";
+
+        let out = run_command!("ip", "addr", "add", net, "dev", "test1");
+        eprintln!("{}", String::from_utf8(out.stderr).unwrap());
+        assert!(out.status.success(), "failed to add addr via ip");
+
+        let out = run_command!("ip", "link", "set", "up", "lo");
+        eprintln!("{}", String::from_utf8(out.stderr).unwrap());
+        assert!(out.status.success(), "failed to set up lo via ip");
+
+        let bridge_id: u32 = sock
+            .get_link(LinkID::Name("test1".to_string()))
+            .expect("get_link failed")
+            .header
+            .index;
+
+        let addresses = sock
+            .dump_addresses(Some(bridge_id))
+            .expect("dump_address_filter failed");
+        for nla in addresses[0].attributes.iter() {
             if let address::AddressAttribute::Address(ip) = nla {
                 assert_eq!(ip, &IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2)))
             }

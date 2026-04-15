@@ -259,7 +259,7 @@ mod tests {
     fn test_fw_config() {
         let network_id = "abc";
         let container_id = "123";
-        let driver = "iptables";
+        let driver = "nftables";
 
         let tmpdir = Builder::new().prefix("netavark-tests").tempdir().unwrap();
         let config_dir = tmpdir.path();
@@ -272,6 +272,8 @@ mod tests {
             network_hash_name: "hash".to_string(),
             isolation: IsolateOption::Never,
             dns_port: 53,
+            outbound_addr4: None,
+            outbound_addr6: None,
         };
         let net_conf_json = r#"{"subnets":["10.0.0.0/24"],"bridge_name":"bridge","network_id":"c2c8a073252874648259997d53b0a1bffa491e21f04bc1bf8609266359931395","network_hash_name":"hash","isolation":"Never","dns_port":53}"#;
 
@@ -306,7 +308,7 @@ mod tests {
         drop(paths.lock_file); // unlock to prevent deadlock with other calls
 
         let res = fs::read_to_string(paths.fw_driver_file).unwrap();
-        assert_eq!(res, "iptables", "read fw driver");
+        assert_eq!(res, "nftables", "read fw driver");
 
         let res = fs::read_to_string(&paths.net_conf_file).unwrap();
         assert_eq!(res, net_conf_json, "read net conf");
