@@ -62,7 +62,7 @@ where
     Ok(Some(val))
 }
 
-fn validate_subnets(subnets: &Option<Vec<types::Subnet>>) -> NetavarkResult<()> {
+pub fn validate_subnets(subnets: &Option<Vec<types::Subnet>>) -> NetavarkResult<()> {
     for (i, subnet1) in subnets.iter().flatten().enumerate() {
         for subnet2 in subnets.iter().flatten().skip(i + 1) {
             // Check for exact duplicate

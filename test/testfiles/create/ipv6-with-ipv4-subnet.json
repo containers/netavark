@@ -1,0 +1,28 @@
+{
+  "network": {
+    "name": "ipv6addv4",
+    "id": "a234567890123456789012345678901234567890123456789012345678901234",
+    "driver": "bridge",
+    "dns_enabled": false,
+    "internal": false,
+    "ipv6_enabled": true,
+    "subnets": [
+      {
+        "subnet": "10.100.0.0/24"
+      }
+    ]
+  },
+  "used": {
+    "interfaces": [],
+    "names": {},
+    "subnets": []
+  },
+  "options": {
+    "subnet_pools": [
+      {"base": "10.89.0.0/16", "size": 24},
+      {"base": "fd10::/8", "size": 64}
+    ],
+    "default_interface_name": "podman",
+    "check_used_subnets": false
+  }
+}

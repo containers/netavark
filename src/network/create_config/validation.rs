@@ -1,5 +1,6 @@
 use crate::error::{NetavarkError, NetavarkResult};
 use crate::network::constants;
+use crate::network::core_utils;
 use crate::network::create_config::subnet::network_intersects_with_networks;
 use crate::network::types::{Network, Route, Subnet};
 use ipnet::IpNet;
@@ -113,12 +114,20 @@ pub fn validate_subnets(
     check_used: bool,
     used_networks: &[IpNet],
 ) -> NetavarkResult<()> {
+    // Check for duplicate and overlapping subnets within the same network
+    core_utils::validate_subnets(&network.subnets)?;
+
     let Some(subnets) = &mut network.subnets else {
         return Ok(());
     };
 
     for subnet in subnets {
         validate_subnet(subnet, add_gateway, check_used, used_networks)?;
+
+        // Auto-detect IPv6 and set ipv6_enabled flag
+        if subnet.subnet.addr().is_ipv6() {
+            network.ipv6_enabled = true;
+        }
     }
 
     Ok(())
