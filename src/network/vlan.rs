@@ -100,7 +100,9 @@ impl driver::NetworkDriver for Vlan<'_> {
 
         let mode: Option<String> = opts.mode.clone();
         let mtu = opts.mtu.unwrap_or(0);
-        let metric = opts.metric.unwrap_or(100);
+        // use lower than default (100) metric for macvlan
+        // https://github.com/containers/podman/issues/23984
+        let metric = opts.metric.unwrap_or(99);
         let no_default_route: bool = opts.no_default_route.unwrap_or(false);
         let bclim = opts.bclim;
 

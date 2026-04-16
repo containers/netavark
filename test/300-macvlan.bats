@@ -34,6 +34,11 @@ function setup() {
     assert "$output" "=~" "default via 10.88.0.1" "gateway must be there in default route"
     assert_json "$result" ".podman.interfaces.eth0.subnets[0].gateway" == "10.88.0.1" "Result contains gateway address"
 
+    run_in_container_netns ip -j route list match 0.0.0.0
+    default_route="$output"
+    assert_json "$default_route" '.[0].dst' == "default" "Default route was selected"
+    assert_json "$default_route" '.[0].metric' == "99" "Default macvlan metric was chosen"
+
     run_in_container_netns cat /proc/sys/net/ipv6/conf/eth0/autoconf
     assert "0" "autoconf is disabled"
 
