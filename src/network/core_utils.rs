@@ -3,6 +3,7 @@ use crate::network::{constants, internal_types, types};
 use crate::wrap;
 use ipnet::IpNet;
 use netlink_packet_route::link::{IpVlanMode, LinkMessage, MacVlanMode};
+use netlink_packet_route::route::RouteType;
 use nix::sched;
 use sha2::{Digest, Sha512};
 use std::collections::HashMap;
@@ -498,8 +499,9 @@ pub fn add_default_routes(
 
                 Route::Ipv4 {
                     dest: ipnet::Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 0)?,
-                    gw: v4.addr(),
+                    gw: Some(v4.addr()),
                     metric,
+                    route_type: RouteType::Unicast,
                 }
             }
             ipnet::IpNet::V6(v6) => {
@@ -510,8 +512,9 @@ pub fn add_default_routes(
 
                 Route::Ipv6 {
                     dest: ipnet::Ipv6Net::new(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 0), 0)?,
-                    gw: v6.addr(),
+                    gw: Some(v6.addr()),
                     metric,
+                    route_type: RouteType::Unicast,
                 }
             }
         };
@@ -519,6 +522,20 @@ pub fn add_default_routes(
             .wrap(format!("add default route {}", &route))?;
     }
     Ok(())
+}
+
+fn parse_route_type(route_type: &Option<String>) -> NetavarkResult<RouteType> {
+    match route_type.as_deref() {
+        None | Some("") | Some("unicast") => Ok(RouteType::Unicast),
+        Some("blackhole") => Ok(RouteType::BlackHole),
+        Some("unreachable") => Ok(RouteType::Unreachable),
+        Some("prohibit") => Ok(RouteType::Prohibit),
+        Some(name) => Err(NetavarkError::msg(format!("invalid route type \"{name}\""))),
+    }
+}
+
+fn route_type_requires_gateway(rt: RouteType) -> bool {
+    matches!(rt, RouteType::Unicast)
 }
 
 pub fn create_route_list(routes: &Option<Vec<types::Route>>) -> NetavarkResult<Vec<Route>> {
@@ -529,24 +546,50 @@ pub fn create_route_list(routes: &Option<Vec<types::Route>>) -> NetavarkResult<V
                 let gw = r.gateway;
                 let dst = r.destination;
                 let mtr = r.metric;
-                match (gw, dst) {
-                    (IpAddr::V4(gw4), IpNet::V4(dst4)) => Ok(Route::Ipv4 {
-                        dest: dst4,
-                        gw: gw4,
-                        metric: mtr,
-                    }),
-                    (IpAddr::V6(gw6), IpNet::V6(dst6)) => Ok(Route::Ipv6 {
-                        dest: dst6,
-                        gw: gw6,
-                        metric: mtr,
-                    }),
-                    (IpAddr::V4(gw4), IpNet::V6(dst6)) => Err(NetavarkError::Message(format!(
-                        "Route with ipv6 destination and ipv4 gateway ({dst6} via {gw4})"
-                    ))),
+                let rt = parse_route_type(&r.route_type)?;
 
-                    (IpAddr::V6(gw6), IpNet::V4(dst4)) => Err(NetavarkError::Message(format!(
-                        "Route with ipv4 destination and ipv6 gateway ({dst4} via {gw6})"
-                    ))),
+                if route_type_requires_gateway(rt) && gw.is_none() {
+                    return Err(NetavarkError::msg(format!(
+                        "route {dst} requires a gateway for type unicast"
+                    )));
+                }
+                if !route_type_requires_gateway(rt) && gw.is_some() {
+                    return Err(NetavarkError::msg(format!(
+                        "route {dst} must not have a gateway for type {rt:?}"
+                    )));
+                }
+
+                match (gw, dst) {
+                    (Some(IpAddr::V4(gw4)), IpNet::V4(dst4)) => Ok(Route::Ipv4 {
+                        dest: dst4,
+                        gw: Some(gw4),
+                        metric: mtr,
+                        route_type: rt,
+                    }),
+                    (Some(IpAddr::V6(gw6)), IpNet::V6(dst6)) => Ok(Route::Ipv6 {
+                        dest: dst6,
+                        gw: Some(gw6),
+                        metric: mtr,
+                        route_type: rt,
+                    }),
+                    (Some(IpAddr::V4(gw4)), IpNet::V6(dst6)) => Err(NetavarkError::Message(
+                        format!("route with ipv6 destination and ipv4 gateway ({dst6} via {gw4})"),
+                    )),
+                    (Some(IpAddr::V6(gw6)), IpNet::V4(dst4)) => Err(NetavarkError::Message(
+                        format!("route with ipv4 destination and ipv6 gateway ({dst4} via {gw6})"),
+                    )),
+                    (None, IpNet::V4(dst4)) => Ok(Route::Ipv4 {
+                        dest: dst4,
+                        gw: None,
+                        metric: mtr,
+                        route_type: rt,
+                    }),
+                    (None, IpNet::V6(dst6)) => Ok(Route::Ipv6 {
+                        dest: dst6,
+                        gw: None,
+                        metric: mtr,
+                        route_type: rt,
+                    }),
                 }
             })
             .collect(),
