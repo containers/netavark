@@ -1,0 +1,32 @@
+{
+  "network": {
+    "name": "routetest",
+    "id": "abc123def4567890123456789012345678901234567890123456789012345678",
+    "driver": "bridge",
+    "dns_enabled": false,
+    "internal": false,
+    "ipv6_enabled": false,
+    "subnets": [
+      {
+        "subnet": "10.88.0.0/16",
+        "gateway": "10.88.0.1"
+      }
+    ],
+    "routes": [
+      {
+        "destination": "10.89.0.0/24",
+        "gateway": "10.88.0.2"
+      }
+    ]
+  },
+  "used": {
+    "interfaces": [],
+    "names": {},
+    "subnets": []
+  },
+  "options": {
+    "subnet_pools": [],
+    "default_interface_name": "podman",
+    "check_used_subnets": false
+  }
+}

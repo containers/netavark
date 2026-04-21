@@ -116,6 +116,25 @@ export NETAVARK_FW=nftables
     assert "$output" "!~" "10.92.0.0/24 via 10.91.0.1" "static route not removed"
 }
 
+@test "$fw_driver - bridge with blackhole routes" {
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-blackholeroutes.json setup $(get_container_netns_path)
+
+    # check blackhole routes
+    run_in_container_netns ip r
+    assert "$output" "=~" "blackhole 10.89.0.0/24" "blackhole route not set"
+    assert "$output" "=~" "blackhole 10.90.0.0/24" "blackhole route not set"
+    # check regular static route is also set
+    assert "$output" "=~" "10.91.0.0/24 via 10.88.0.3" "static route not set"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-blackholeroutes.json teardown $(get_container_netns_path)
+
+    # check routes get removed
+    run_in_container_netns ip r
+    assert "$output" "!~" "blackhole 10.89.0.0/24" "blackhole route not removed"
+    assert "$output" "!~" "blackhole 10.90.0.0/24" "blackhole route not removed"
+    assert "$output" "!~" "10.91.0.0/24 via 10.88.0.3" "static route not removed"
+}
+
 @test "$fw_driver - bridge with no default route" {
     run_netavark --file ${TESTSDIR}/testfiles/bridge-nodefaultroute.json setup $(get_container_netns_path)
 
@@ -244,6 +263,25 @@ export NETAVARK_FW=nftables
     assert "$output" "!~" "fd10:51:b::/64 via fd10:49:b::30" "static route not removed"
 
     run_in_container_netns ip link delete dummy0
+}
+
+@test "$fw_driver - ipv6 bridge with blackhole routes" {
+    run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge-blackholeroutes.json setup $(get_container_netns_path)
+
+    # check blackhole routes
+    run_in_container_netns ip -6 -br r
+    assert "$output" "=~" "blackhole fd10:89:b::/64" "blackhole route not set"
+    assert "$output" "=~" "blackhole fd10:89:c::/64" "blackhole route not set"
+    # check regular static route is also set
+    assert "$output" "=~" "fd10:51:b::/64 via fd10:88:a::ac02" "static route not set"
+
+    run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge-blackholeroutes.json teardown $(get_container_netns_path)
+
+    # check routes get removed
+    run_in_container_netns ip -6 -br r
+    assert "$output" "!~" "blackhole fd10:89:b::/64" "blackhole route not removed"
+    assert "$output" "!~" "blackhole fd10:89:c::/64" "blackhole route not removed"
+    assert "$output" "!~" "fd10:51:b::/64 via fd10:88:a::ac02" "static route not removed"
 }
 
 @test "$fw_driver - bridge driver must generate config for aardvark with custom dns server" {
