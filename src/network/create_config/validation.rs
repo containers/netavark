@@ -19,9 +19,10 @@ pub fn validate_name_id(
     }
     let name_regex = Regex::new(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]*$").unwrap();
     if !name_regex.is_match(name) {
-        return Err(NetavarkError::msg(
-            "Invalid characters in network name: must match [a-zA-Z0-9][a-zA-Z0-9_.-]",
-        ));
+        return Err(NetavarkError::msg(format!(
+            "Invalid characters in network name {:?}: must match [a-zA-Z0-9][a-zA-Z0-9_.-]*",
+            name
+        )));
     }
     if existing_networks.contains_key(name) {
         return Err(NetavarkError::msg(format!(
@@ -33,17 +34,19 @@ pub fn validate_name_id(
     if id.is_empty() {
         return Err(NetavarkError::msg("Network id must be supplied"));
     }
-    if id.len() != 64 {
-        return Err(NetavarkError::msg(format!(
-            "Network id must be exactly 64 characters long, got {}",
-            id.len()
-        )));
-    }
     let hex_regex = Regex::new(r"^[0-9a-fA-F]{64}$").unwrap();
     if !hex_regex.is_match(id) {
-        return Err(NetavarkError::msg(
-            "Network id must be a hexadecimal string",
-        ));
+        return Err(NetavarkError::msg(format!(
+            "Network id must be a hexadecimal string {:?}",
+            id
+        )));
+    }
+    if id.len() != 64 {
+        return Err(NetavarkError::msg(format!(
+            "Network id must be exactly 64 characters long, got {}: {}",
+            id.len(),
+            id
+        )));
     }
     Ok(())
 }
