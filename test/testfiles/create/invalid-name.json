@@ -1,6 +1,6 @@
 {
   "network": {
-    "name": "invalid name",
+    "name": "badname!",
     "id": "abc123def4567890123456789012345678901234567890123456789012345678",
     "driver": "bridge",
     "dns_enabled": false,

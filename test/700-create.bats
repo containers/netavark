@@ -93,7 +93,7 @@ function setup() {
 
 @test "create - fail with invalid network name" {
     expected_rc=1 run_netavark create < ${TESTSDIR}/testfiles/create/invalid-name.json
-    assert_json ".error" "Invalid characters in network name: must match [a-zA-Z0-9][a-zA-Z0-9_.-]" "Error message contains 'Invalid characters in network name'"
+    assert_json ".error" "Invalid characters in network name \"badname!\": must match [a-zA-Z0-9][a-zA-Z0-9_.-]*" "Error message contains 'Invalid characters in network name'"
 }
 
 @test "create - fail with empty network ID" {
