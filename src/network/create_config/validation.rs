@@ -1,5 +1,6 @@
 use crate::error::{NetavarkError, NetavarkResult};
 use crate::network::constants;
+use crate::network::core_utils;
 use crate::network::create_config::subnet::network_intersects_with_networks;
 use crate::network::types::{Network, Route, Subnet};
 use ipnet::IpNet;
@@ -113,12 +114,20 @@ pub fn validate_subnets(
     check_used: bool,
     used_networks: &[IpNet],
 ) -> NetavarkResult<()> {
+    // Check for duplicate and overlapping subnets within the same network
+    core_utils::validate_subnets(&network.subnets)?;
+
     let Some(subnets) = &mut network.subnets else {
         return Ok(());
     };
 
     for subnet in subnets {
         validate_subnet(subnet, add_gateway, check_used, used_networks)?;
+
+        // Auto-detect IPv6 and set ipv6_enabled flag
+        if subnet.subnet.addr().is_ipv6() {
+            network.ipv6_enabled = true;
+        }
     }
 
     Ok(())
@@ -260,7 +269,8 @@ pub fn validate_routes(network: &mut Network) -> NetavarkResult<()> {
 }
 
 /// Validate a single route.
-/// Ensures that the destination is a valid network address (not a host address).
+/// Ensures that the destination is a valid network address (not a host address)
+/// and that the route type and gateway are valid.
 fn validate_route(route: &Route) -> NetavarkResult<()> {
     // Check that destination is a network and not an address
     // The address part of the destination must equal the network address
@@ -274,6 +284,33 @@ fn validate_route(route: &Route) -> NetavarkResult<()> {
             if net_v6.addr() != net_v6.network() {
                 return Err(NetavarkError::msg("route destination invalid"));
             }
+        }
+    }
+
+    // Validate route type and gateway
+    let route_type = route.route_type.as_deref().unwrap_or("unicast");
+    match route_type {
+        "unicast" | "" => {
+            if route.gateway.is_none() {
+                return Err(NetavarkError::msg(format!(
+                    "route {} requires a gateway for type unicast",
+                    route.destination
+                )));
+            }
+        }
+        "blackhole" | "unreachable" | "prohibit" => {
+            if route.gateway.is_some() {
+                return Err(NetavarkError::msg(format!(
+                    "route {} must not have a gateway for type {}",
+                    route.destination, route_type
+                )));
+            }
+        }
+        _ => {
+            return Err(NetavarkError::msg(format!(
+                "invalid route type \"{}\"",
+                route_type
+            )));
         }
     }
 

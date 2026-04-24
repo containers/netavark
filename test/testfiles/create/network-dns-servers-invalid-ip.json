@@ -1,0 +1,21 @@
+{
+  "network": {
+    "name": "baddns",
+    "id": "c234567890123456789012345678901234567890123456789012345678901234",
+    "driver": "bridge",
+    "dns_enabled": true,
+    "internal": false,
+    "ipv6_enabled": false,
+    "network_dns_servers": ["not.an.ip.address"]
+  },
+  "used": {
+    "interfaces": [],
+    "names": {},
+    "subnets": []
+  },
+  "options": {
+    "subnet_pools": [{"base": "10.89.0.0/16", "size": 24}],
+    "default_interface_name": "podman",
+    "check_used_subnets": false
+  }
+}

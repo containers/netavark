@@ -240,7 +240,7 @@ fn get_free_device_name(
 pub fn exec_plugin_driver(
     network: &mut Network,
     plugin_directories: &Option<Vec<OsString>>,
-) -> NetavarkResult<Vec<u8>> {
+) -> NetavarkResult<()> {
     // Find the plugin binary
     let driver_name = &network.driver;
     let plugin_path = if let Some(dirs) = plugin_directories {
@@ -265,10 +265,43 @@ pub fn exec_plugin_driver(
         ));
     };
 
+    let original_name = network.name.clone();
+    let original_id = network.id.clone();
+    let original_driver = network.driver.clone();
+
     // Clone the network since we need to send it via JSON
     let input = network.clone();
 
-    exec_plugin_common(&plugin_path, &["create"], &input, plugin_path.file_name())
+    let buffer = exec_plugin_common(&plugin_path, &["create"], &input, plugin_path.file_name())?;
+
+    let plugin_network: Network = serde_json::from_slice(&buffer)?;
+
+    // Validate that the plugin didn't change name, id, or driver
+    if plugin_network.name != original_name {
+        return Err(NetavarkError::msg(format!(
+            "{} plugin invalid result: changed network name",
+            driver_name,
+        )));
+    }
+
+    if plugin_network.id != original_id {
+        return Err(NetavarkError::msg(format!(
+            "{} plugin invalid result: changed network ID",
+            driver_name
+        )));
+    }
+
+    if plugin_network.driver != original_driver {
+        return Err(NetavarkError::msg(format!(
+            "{} plugin invalid result: changed network driver",
+            driver_name
+        )));
+    }
+
+    // Validation passed, use the plugin's network
+    *network = plugin_network;
+
+    Ok(())
 }
 
 fn get_link_names() -> Option<Vec<String>> {
