@@ -66,12 +66,16 @@ jobs:
     enable_net: true
 
   # Sync to Fedora
+  # NOTE: Breaking changes related to Podman6 will only be shipped to Fedora
+  # Rawhide (to be Fedora 45) and newer.
+  # TODO: Update dist_git_branches as and when new Fedora releases are
+  # available.
   - job: propose_downstream
     trigger: release
     packages: [netavark-fedora]
     update_release: false
     dist_git_branches:
-      - fedora-all
+      - fedora-rawhide
 
   # Sync to CentOS Stream
   - job: propose_downstream
