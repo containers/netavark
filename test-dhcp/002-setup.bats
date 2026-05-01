@@ -26,8 +26,8 @@ EOF
         assert `echo "$output" | jq -r .siaddr` == $(gateway_from_subnet "$SUBNET_CIDR")
         container_ip=$(echo "$output" | jq -r .yiaddr)
         has_ip "$container_ip" veth0
-        # Check that there was a hostname in DHCPDISCOVER and DHCPREQUEST.
-        assert `grep -c "client provides name: foobar" "$TMP_TESTDIR/dnsmasq.log"` == 2
+        # Check that there was a hostname in the DHCP requests
+        assert `grep -c "client provides name: foobar" "$TMP_TESTDIR/dnsmasq.log"` == 3
 }
 
 @test "no hostname" {
