@@ -30,7 +30,7 @@ gcp_credentials: ENCRYPTED[d6efdb7d6d4c61e3831df2193ca6348bb02f26cd931695f69d419
 aws_credentials:
   role_arn: arn:aws:iam::449134212816:role/netavark-ci-role
   role_session_name: cirrus
-  region: us-east-1  
+  region: us-east-1
 
 build_task:
   alias: "build"
@@ -238,7 +238,7 @@ msrv_build_task:
         cpu: 2 # Do not increase, will result in scheduling delays
         memory: "8Gb"
         # When bumping the image always remember to update the README MSRV as well.
-        image: quay.io/libpod/nv-rust:1.86
+        image: quay.io/libpod/nv-rust:1.88
     script:
         - make build
 
