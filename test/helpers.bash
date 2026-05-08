@@ -52,6 +52,13 @@ function basic_teardown() {
     for i in "${!CONTAINER_NS_PIDS[@]}"; do
         kill -9 "${CONTAINER_NS_PIDS[$i]}"
     done
+
+    # always kill av first in case a test did no clean up.
+    av_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    if [[ -n "$av_pid" ]]; then
+        kill -9 "$av_pid"
+    fi
+
     rm -rf "$NETAVARK_TMPDIR"
 }
 
@@ -202,9 +209,7 @@ function run_helper() {
     # stdout is only emitted upon error; this echo is to help a debugger
     echo "$_LOG_PROMPT $*"
 
-    # BATS hangs if a subprocess remains and keeps FD 3 open; this happens
-    # if a process crashes unexpectedly without cleaning up subprocesses.
-    run timeout --foreground -v --kill=10 10 "$@" 3>/dev/null
+    run timeout --foreground -v --kill=10 10 "$@"
     # without "quotes", multiple lines are glommed together into one
     if [ -n "$output" ]; then
         echo "$output"
