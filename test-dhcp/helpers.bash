@@ -50,9 +50,7 @@ function run_helper() {
     # stdout is only emitted upon error; this echo is to help a debugger
     echo "$_LOG_PROMPT $*"
 
-    # BATS hangs if a subprocess remains and keeps FD 3 open; this happens
-    # if a process crashes unexpectedly without cleaning up subprocesses.
-    run timeout --foreground -v --kill=10 10 "$@" 3>/dev/null
+    run timeout --foreground -v --kill=10 10 "$@"
     # without "quotes", multiple lines are glommed together into one
     if [ -n "$output" ]; then
         echo "$output"
