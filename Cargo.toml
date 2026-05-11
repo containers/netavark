@@ -11,7 +11,7 @@ repository = "https://github.com/containers/netavark"
 categories = ["virtualization"]
 exclude = ["/.cirrus.yml", "/.github/*", "/hack/*"]
 build = "build.rs"
-rust-version = "1.86"
+rust-version = "1.88"
 
 [package.metadata.vendor-filter]
 platforms = ["*-unknown-linux-*"]
