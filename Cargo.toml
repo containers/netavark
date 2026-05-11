@@ -55,7 +55,7 @@ tokio-stream = { version = "0.1.18", features = ["net"] }
 tonic = "0.14.5"
 tonic-prost = "0.14.5"
 prost = "0.14.3"
-mozim = { version = "0.3.1", default-features = false }
+mozim = { version = "0.3.2", default-features = false }
 futures-channel = "0.3.32"
 futures-core = "0.3.32"
 futures-util = "0.3.32"
