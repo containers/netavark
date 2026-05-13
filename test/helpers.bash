@@ -74,7 +74,7 @@ function setup_firewalld() {
     # do not use run_in_host_netns because we want to run this in background
     # use --nopid (we cannot change the pid file location), --nofork do not run as daemon so we can kill it by pid
     # change --system-config to make sure that we do not write any config files to the host location
-    nsenter -n -t $HOST_NS_PID firewalld --nopid --nofork --system-config "$NETAVARK_TMPDIR" &>"$NETAVARK_TMPDIR/firewalld.log" &
+    nsenter -n -t $HOST_NS_PID firewalld --debug=10 --nopid --nofork --system-config "$NETAVARK_TMPDIR" &>"$NETAVARK_TMPDIR/firewalld.log" &
     FIREWALLD_PID=$!
     echo "firewalld pid: $FIREWALLD_PID"
 
