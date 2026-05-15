@@ -1,0 +1,50 @@
+/validate:
+    summary: Validate test
+    test: make -C ../.. validate
+    require:
+        - cargo
+        - clippy
+        - go-md2man
+        - make
+        - protobuf-c
+        - protobuf-compiler
+        - rustfmt
+    adjust:
+        enabled: false
+        when: initiator is not defined or initiator != packit
+
+/unit:
+    summary: Unit tests
+    test: make -C ../.. unit
+    require:
+        - cargo
+        - make
+        - protobuf-c
+        - protobuf-compiler
+    adjust:
+        enabled: false
+        when: initiator is not defined or initiator != packit
+
+/integration:
+    summary: Integration tests
+    test: bash integration.sh
+    environment:
+        NETAVARK: /usr/libexec/podman/netavark
+        NETAVARK_CONNECTION_TESTER: /usr/bin/netavark-connection-tester
+        NETAVARK_DHCP_PROXY_CLIENT: /usr/libexec/podman/netavark-dhcp-proxy-client
+        TEST_PLUGINS: /usr/share/netavark/examples
+    require:
+        - aardvark-dns
+        - netavark
+        - netavark-tests
+    duration: 10m
+
+/podman:
+    summary: Podman tests dependent on netavark
+    test: |
+        /usr/bin/bats -t /usr/share/podman/test/system/030-run.bats
+        /usr/bin/bats -t /usr/share/podman/test/system/075-exec.bats
+        /usr/bin/bats -t /usr/share/podman/test/system/500-networking.bats
+    require:
+        - podman-tests
+    duration: 15m

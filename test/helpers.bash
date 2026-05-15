@@ -3,6 +3,7 @@
 # Netavark binary to run
 NETAVARK=${NETAVARK:-./bin/netavark}
 NETAVARK_CONNECTION_TESTER=${NETAVARK_CONNECTION_TESTER:-./bin/netavark-connection-tester}
+TEST_PLUGINS=${TEST_PLUGINS:-./targets/release/examples}
 
 TESTSDIR=${TESTSDIR:-$(dirname ${BASH_SOURCE})}
 
