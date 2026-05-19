@@ -92,8 +92,24 @@ impl Teardown {
 
         let firewall_driver = firewall::get_supported_firewall_driver(firewall_driver)?;
 
-        let (mut hostns, mut netns) =
-            core_utils::open_netlink_sockets(&self.network_namespace_path)?;
+        let mut hostns = core_utils::open_host_netlink_socket()?;
+        let (netns_file, mut netns_netlink) =
+            match core_utils::open_netns_netlink_socket(&self.network_namespace_path, &hostns) {
+                Ok(netns) => (Some(netns.file), Some(netns.netlink)),
+                Err(e) => {
+                    match e.unwrap() {
+                        NetavarkError::Io(io_err)
+                            if io_err.kind() == std::io::ErrorKind::NotFound =>
+                        {
+                            log::warn!("container netns not found: {e}");
+                        }
+                        _ => {
+                            error_list.push(e);
+                        }
+                    }
+                    (None, None)
+                }
+            };
 
         for named_network_opts in &network_options.networks {
             let per_network_opts = &named_network_opts.opts;
@@ -116,7 +132,7 @@ impl Teardown {
                     container_hostname: &network_options.container_hostname,
                     container_dns_servers: &network_options.dns_servers,
                     netns_host: hostns.file.as_fd(),
-                    netns_container: netns.file.as_fd(),
+                    netns_container: netns_file.as_ref().map(|f| f.as_fd()), // None when no netns
                     netns_path: &self.network_namespace_path,
                     network,
                     per_network_opts,
@@ -134,7 +150,7 @@ impl Teardown {
                 }
             };
 
-            match driver.teardown((&mut hostns.netlink, &mut netns.netlink)) {
+            match driver.teardown((&mut hostns.netlink, netns_netlink.as_mut())) {
                 Ok(_) => {}
                 Err(err) => {
                     error_list.push(err);
