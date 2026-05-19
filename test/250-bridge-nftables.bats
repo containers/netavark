@@ -1206,6 +1206,60 @@ net/ipv4/conf/podman1/rp_filter = 2"
     run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
 }
 
+# Regression test for https://github.com/containers/netavark/issues/1451
+@test "$fw_driver - bridge teardown with missing netns cleans up firewall" {
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+
+    # Verify firewall rules were created
+    check_simple_bridge_nftables
+
+    # Destroy the container netns to simulate the real scenario:
+    # when the netns is gone, the kernel destroys the veth pair, leaving
+    # only host-side state (firewall rules, bridge with no interfaces).
+    kill -9 "${CONTAINER_NS_PIDS[0]}"
+    wait "${CONTAINER_NS_PIDS[0]}" 2>/dev/null || true
+    unset 'CONTAINER_NS_PIDS[0]'
+    sleep 1
+
+    # Kernel destroyed the veth pair when the netns died - bridge has no
+    # connected interfaces now (this is why teardown can't rely on the veth).
+    run_in_host_netns ip link show master podman0
+    assert "${#lines[@]}" = 0 "bridge should have no connected interfaces"
+
+    # Verify firewall rules still exist after netns destruction (they would
+    # leak without this fix)
+    run_in_host_netns nft list chain inet netavark nv_53ce4390_10_88_0_0_nm16
+    run_in_host_netns nft list chain inet netavark FORWARD
+    assert "${#lines[@]}" = 9 "FORWARD rules should still exist before teardown"
+    run_in_host_netns nft list chain inet netavark POSTROUTING
+    assert "${#lines[@]}" = 7 "POSTROUTING rules should still exist before teardown"
+    run_in_host_netns ip link show podman0
+
+    # The netns path is now invalid. Teardown should still succeed and
+    # clean up host-side rules.
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json \
+        teardown "/proc/does-not-exist/ns/net"
+
+    # Verify nftables rules are gone
+    # The per-network chain should no longer exist
+    expected_rc=1 run_in_host_netns nft list chain inet netavark nv_53ce4390_10_88_0_0_nm16
+
+    # Bridge should be removed (it was the only container)
+    expected_rc=1 run_in_host_netns ip addr show podman0
+
+    # FORWARD rules should be back to baseline
+    run_in_host_netns nft list chain inet netavark FORWARD
+    assert "${#lines[@]}" = 7 "too many FORWARD rules after teardown with missing netns"
+
+    # POSTROUTING rules should be back to baseline
+    run_in_host_netns nft list chain inet netavark POSTROUTING
+    assert "${#lines[@]}" = 6 "too many POSTROUTING rules after teardown with missing netns"
+
+    # Isolation chain should no longer reference podman0
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-1
+    assert "$output" "!~" "podman0" "isolation chain should not reference podman0"
+}
+
 function check_simple_bridge_nftables() {
     # check nftables POSTROUTING chain
     run_in_host_netns nft list chain inet netavark POSTROUTING
