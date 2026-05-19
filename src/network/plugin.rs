@@ -118,8 +118,11 @@ impl NetworkDriver for PluginDriver<'_> {
 
     fn teardown(
         &self,
-        _netlink_sockets: (&mut Socket<NetlinkRoute>, &mut Socket<NetlinkRoute>),
+        netlink_sockets: (&mut Socket<NetlinkRoute>, Option<&mut Socket<NetlinkRoute>>),
     ) -> NetavarkResult<()> {
+        if netlink_sockets.1.is_none() {
+            return Ok(());
+        }
         self.exec_plugin(false, self.info.netns_path).wrap(format!(
             "plugin {:?} failed",
             &self.path.file_name().unwrap_or_default()

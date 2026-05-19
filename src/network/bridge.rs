@@ -214,7 +214,9 @@ impl driver::NetworkDriver for Bridge<'_> {
             self.info.network.internal,
             self.info.rootless,
             self.info.netns_host,
-            self.info.netns_container,
+            self.info
+                .netns_container
+                .expect("netns_container required for setup"),
         )?;
 
         //  StatusBlock response
@@ -374,60 +376,16 @@ impl driver::NetworkDriver for Bridge<'_> {
 
     fn teardown(
         &self,
-        netlink_sockets: (&mut Socket<NetlinkRoute>, &mut Socket<NetlinkRoute>),
+        netlink_sockets: (&mut Socket<NetlinkRoute>, Option<&mut Socket<NetlinkRoute>>),
     ) -> NetavarkResult<()> {
-        let mode: Option<String> = parse_option(&self.info.network.options, OPTION_MODE)?;
-        let mode = get_bridge_mode_from_string(mode.as_deref())?;
         let (host_sock, netns_sock) = netlink_sockets;
 
         let mut error_list = NetavarkErrorList::new();
 
-        dhcp_teardown(&self.info, netns_sock)?;
-
-        let routes = core_utils::create_route_list(&self.info.network.routes)?;
-        for route in routes.iter() {
-            netns_sock
-                .del_route(route)
-                .unwrap_or_else(|err| error_list.push(err))
+        if let Some(netns_sock) = netns_sock {
+            self.netns_teardown(netns_sock, &mut error_list);
         }
-
-        let bridge_name = get_interface_name(self.info.network.network_interface.clone())?;
-
-        let complete_teardown = match remove_link(
-            host_sock,
-            netns_sock,
-            mode,
-            &bridge_name,
-            &self.info.per_network_opts.interface_name,
-        ) {
-            Ok(teardown) => teardown,
-            Err(err) => {
-                error_list.push(err);
-                false
-            }
-        };
-
-        if !self.info.network.internal && mode == BridgeMode::Managed {
-            if complete_teardown {
-                // delete sysctl file as well
-                let path = sysctl::get_bridge_sysctl_d_path(&bridge_name);
-                if let Err(e) = fs::remove_file(&path) {
-                    if e.kind() != std::io::ErrorKind::NotFound {
-                        error_list.push(NetavarkError::wrap(
-                            format!("failed to remove {path}"),
-                            e.into(),
-                        ));
-                    }
-                };
-            }
-
-            match self.teardown_firewall(complete_teardown, bridge_name) {
-                Ok(_) => {}
-                Err(err) => {
-                    error_list.push(err);
-                }
-            }
-        }
+        self.host_teardown(host_sock, &mut error_list);
 
         if !error_list.is_empty() {
             return Err(NetavarkError::List(error_list));
@@ -451,6 +409,91 @@ fn get_interface_name(name: Option<String>) -> NetavarkResult<String> {
 }
 
 impl<'a> Bridge<'a> {
+    /// Remove container-side resources: DHCP lease, routes, and veth.
+    fn netns_teardown(&self, netns: &mut Socket<NetlinkRoute>, error_list: &mut NetavarkErrorList) {
+        if let Err(err) = dhcp_teardown(&self.info, netns) {
+            error_list.push(err);
+            return;
+        }
+
+        match core_utils::create_route_list(&self.info.network.routes) {
+            Ok(routes) => {
+                for route in routes.iter() {
+                    netns
+                        .del_route(route)
+                        .unwrap_or_else(|err| error_list.push(err))
+                }
+            }
+            Err(err) => error_list.push(err),
+        }
+
+        netns
+            .del_link(LinkID::Name(
+                self.info.per_network_opts.interface_name.to_string(),
+            ))
+            .unwrap_or_else(|err| error_list.push(err));
+    }
+
+    /// Remove host resources: bridge, sysctl config, and firewall rules.
+    fn host_teardown(&self, host: &mut Socket<NetlinkRoute>, error_list: &mut NetavarkErrorList) {
+        let mode = match parse_option(&self.info.network.options, OPTION_MODE)
+            .and_then(|m: Option<String>| get_bridge_mode_from_string(m.as_deref()))
+        {
+            Ok(mode) => mode,
+            Err(err) => {
+                error_list.push(err);
+                return;
+            }
+        };
+        let bridge_name = match get_interface_name(self.info.network.network_interface.clone()) {
+            Ok(name) => name,
+            Err(err) => {
+                error_list.push(err);
+                return;
+            }
+        };
+
+        let complete_teardown = match host.get_link(LinkID::Name(bridge_name.to_string())) {
+            Ok(br) => {
+                match host
+                    .dump_links(&mut vec![LinkAttribute::Controller(br.header.index)])
+                    .wrap("failed to get connected bridge interfaces")
+                {
+                    Ok(links) if links.is_empty() && matches!(mode, BridgeMode::Managed) => {
+                        log::info!("removing bridge {bridge_name}");
+                        host.del_link(LinkID::ID(br.header.index))
+                            .unwrap_or_else(|err| error_list.push(err));
+                        true
+                    }
+                    Ok(_) => false,
+                    Err(err) => {
+                        error_list.push(err);
+                        false
+                    }
+                }
+            }
+            Err(_) => false, // bridge already gone
+        };
+
+        if !self.info.network.internal && mode == BridgeMode::Managed {
+            if complete_teardown {
+                // delete sysctl file as well
+                let path = sysctl::get_bridge_sysctl_d_path(&bridge_name);
+                if let Err(e) = fs::remove_file(&path) {
+                    if e.kind() != std::io::ErrorKind::NotFound {
+                        error_list.push(NetavarkError::wrap(
+                            format!("failed to remove {path}"),
+                            e.into(),
+                        ));
+                    }
+                }
+            }
+
+            self.teardown_firewall(complete_teardown, bridge_name)
+                .unwrap_or_else(|err| error_list.push(err));
+        }
+    }
+
     fn get_firewall_conf(
         &'a self,
         container_addresses: &Vec<IpNet>,
@@ -1112,38 +1155,6 @@ fn validate_vrf_link(msg: LinkMessage, vrf_name: &str) -> NetavarkResult<(u32, O
     Err(NetavarkError::Message(format!(
         "could not determine namespace link kind for vrf {vrf_name}"
     )))
-}
-
-fn remove_link(
-    host: &mut Socket<NetlinkRoute>,
-    netns: &mut Socket<NetlinkRoute>,
-    mode: BridgeMode,
-    br_name: &str,
-    container_veth_name: &str,
-) -> NetavarkResult<bool> {
-    netns
-        .del_link(LinkID::Name(container_veth_name.to_string()))
-        .wrap(format!(
-            "failed to delete container veth {container_veth_name}"
-        ))?;
-
-    let br = host
-        .get_link(LinkID::Name(br_name.to_string()))
-        .wrap("failed to get bridge interface")?;
-
-    let links = host
-        .dump_links(&mut vec![LinkAttribute::Controller(br.header.index)])
-        .wrap("failed to get connected bridge interfaces")?;
-    // no connected interfaces on that bridge we can remove it
-    if links.is_empty() {
-        if let BridgeMode::Managed = mode {
-            log::info!("removing bridge {br_name}");
-            host.del_link(LinkID::ID(br.header.index))
-                .wrap(format!("failed to delete bridge {container_veth_name}"))?;
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 fn get_isolate_option(opts: &Option<HashMap<String, String>>) -> NetavarkResult<IsolateOption> {
