@@ -33,7 +33,7 @@ EOF
 }
 
 function run_netavark_plugins() {
-    run_netavark --plugin-directory ./targets/release/examples/ "$@"
+    run_netavark --plugin-directory $TEST_PLUGINS "$@"
 }
 
 @test "plugin - test error message" {
