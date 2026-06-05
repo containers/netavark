@@ -151,6 +151,16 @@ impl Socket<NetlinkRoute> {
         Ok(())
     }
 
+    pub fn set_link_ns_pid(&mut self, link_id: u32, pid: u32) -> NetavarkResult<()> {
+        let mut msg = LinkMessage::default();
+        msg.header.index = link_id;
+        msg.attributes.push(LinkAttribute::NetNsPid(pid));
+
+        let result = self.make_netlink_request(RouteNetlinkMessage::SetLink(msg), NLM_F_ACK)?;
+        expect_netlink_result!(result, 0);
+        Ok(())
+    }
+
     pub fn set_link_ns<Fd: AsFd>(&mut self, link_id: u32, netns: Fd) -> NetavarkResult<()> {
         let mut msg = LinkMessage::default();
         msg.header.index = link_id;
