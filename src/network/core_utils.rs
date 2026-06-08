@@ -1,6 +1,7 @@
 use crate::error::{ErrorWrap, NetavarkError, NetavarkResult};
 use crate::network::{constants, internal_types, types};
 use crate::wrap;
+use base16ct::HexDisplay;
 use ipnet::IpNet;
 use netlink_packet_route::link::{IpVlanMode, LinkMessage, MacVlanMode};
 use netlink_packet_route::route::RouteType;
@@ -85,137 +86,6 @@ pub fn validate_subnets(subnets: &Option<Vec<types::Subnet>>) -> NetavarkResult<
         }
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct TestCase {
-        name: &'static str,
-        subnets: Option<Vec<(&'static str, &'static str)>>,
-        should_pass: bool,
-        expected_error: Option<&'static str>,
-    }
-
-    #[test]
-    fn test_validate_subnets() {
-        let test_cases = vec![
-            TestCase {
-                name: "empty subnets",
-                subnets: None,
-                should_pass: true,
-                expected_error: None,
-            },
-            TestCase {
-                name: "single subnet",
-                subnets: Some(vec![("10.0.0.0/24", "10.0.0.1")]),
-                should_pass: true,
-                expected_error: None,
-            },
-            TestCase {
-                name: "two non-overlapping subnets",
-                subnets: Some(vec![
-                    ("10.0.0.0/24", "10.0.0.1"),
-                    ("10.0.1.0/24", "10.0.1.1"),
-                ]),
-                should_pass: true,
-                expected_error: None,
-            },
-            TestCase {
-                name: "ipv4 and ipv6 subnets",
-                subnets: Some(vec![("10.0.0.0/24", "10.0.0.1"), ("fd00::/64", "fd00::1")]),
-                should_pass: true,
-                expected_error: None,
-            },
-            TestCase {
-                name: "duplicate subnets",
-                subnets: Some(vec![
-                    ("10.0.0.0/24", "10.0.0.1"),
-                    ("10.0.0.0/24", "10.0.0.1"),
-                ]),
-                should_pass: false,
-                expected_error: Some("duplicate subnet"),
-            },
-            TestCase {
-                name: "overlapping subnets",
-                subnets: Some(vec![
-                    ("10.0.0.0/16", "10.0.0.1"),
-                    ("10.0.1.0/24", "10.0.1.1"),
-                ]),
-                should_pass: false,
-                expected_error: Some("overlapping subnets"),
-            },
-            TestCase {
-                name: "ipv6 overlapping subnets",
-                subnets: Some(vec![
-                    ("fd00::/48", "fd00::1"),
-                    ("fd00:0:0:1::/64", "fd00:0:0:1::1"),
-                ]),
-                should_pass: false,
-                expected_error: Some("overlapping subnets"),
-            },
-            TestCase {
-                name: "ipv6 duplicate subnets",
-                subnets: Some(vec![("fd00::/48", "fd00::1"), ("fd00::/48", "fd00::1")]),
-                should_pass: false,
-                expected_error: Some("duplicate subnet"),
-            },
-            TestCase {
-                name: "single ipv6 subnet",
-                subnets: Some(vec![("fd00::/48", "fd00::1")]),
-                should_pass: true,
-                expected_error: None,
-            },
-            TestCase {
-                name: "two non-overlapping ipv6 subnets",
-                subnets: Some(vec![
-                    ("fd00:0:0:1::/64", "fd00:0:0:1::1"),
-                    ("fd00:0:0:2::/64", "fd00:0:0:2::1"),
-                ]),
-                should_pass: true,
-                expected_error: None,
-            },
-        ];
-
-        for tc in test_cases {
-            let subnets: Option<Vec<_>> = tc.subnets.as_ref().map(|subnet_strs| {
-                subnet_strs
-                    .iter()
-                    .map(|(subnet_str, gw_str)| types::Subnet {
-                        subnet: subnet_str.parse().unwrap(),
-                        gateway: Some(gw_str.parse().unwrap()),
-                        lease_range: None,
-                    })
-                    .collect()
-            });
-
-            let result = validate_subnets(&subnets);
-
-            if tc.should_pass {
-                assert!(
-                    result.is_ok(),
-                    "Test case '{}' should pass but failed with: {:?}",
-                    tc.name,
-                    result.err()
-                );
-            } else {
-                assert!(
-                    result.is_err(),
-                    "Test case '{}' should fail but passed",
-                    tc.name
-                );
-                if let Some(expected_msg) = tc.expected_error {
-                    assert!(
-                        result.unwrap_err().to_string().contains(expected_msg),
-                        "Test case '{}' error message doesn't contain '{}'",
-                        tc.name,
-                        expected_msg
-                    );
-                }
-            }
-        }
-    }
 }
 
 pub fn get_ipam_addresses<'a>(
@@ -414,12 +284,11 @@ impl CoreUtils {
     }
 
     pub fn create_network_hash(network_name: &str, length: usize) -> String {
-        let mut hasher = Sha512::new();
-        hasher.update(network_name.as_bytes());
-        let result = hasher.finalize();
-        let hash_string = format!("{result:X}");
-        let response = &hash_string[0..length];
-        response.to_string()
+        let sha = Sha512::digest(network_name.as_bytes());
+        let display = HexDisplay(&sha);
+        let mut hash_string = format!("{display:X}");
+        hash_string.truncate(length);
+        hash_string
     }
 }
 
@@ -652,4 +521,143 @@ pub fn get_mtu_from_iface_attributes(attributes: &[LinkAttribute]) -> NetavarkRe
     Err(NetavarkError::msg(
         "no MTU attribute in netlink message, possible kernel issue",
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestCase {
+        name: &'static str,
+        subnets: Option<Vec<(&'static str, &'static str)>>,
+        should_pass: bool,
+        expected_error: Option<&'static str>,
+    }
+
+    #[test]
+    fn test_validate_subnets() {
+        let test_cases = vec![
+            TestCase {
+                name: "empty subnets",
+                subnets: None,
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "single subnet",
+                subnets: Some(vec![("10.0.0.0/24", "10.0.0.1")]),
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "two non-overlapping subnets",
+                subnets: Some(vec![
+                    ("10.0.0.0/24", "10.0.0.1"),
+                    ("10.0.1.0/24", "10.0.1.1"),
+                ]),
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "ipv4 and ipv6 subnets",
+                subnets: Some(vec![("10.0.0.0/24", "10.0.0.1"), ("fd00::/64", "fd00::1")]),
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "duplicate subnets",
+                subnets: Some(vec![
+                    ("10.0.0.0/24", "10.0.0.1"),
+                    ("10.0.0.0/24", "10.0.0.1"),
+                ]),
+                should_pass: false,
+                expected_error: Some("duplicate subnet"),
+            },
+            TestCase {
+                name: "overlapping subnets",
+                subnets: Some(vec![
+                    ("10.0.0.0/16", "10.0.0.1"),
+                    ("10.0.1.0/24", "10.0.1.1"),
+                ]),
+                should_pass: false,
+                expected_error: Some("overlapping subnets"),
+            },
+            TestCase {
+                name: "ipv6 overlapping subnets",
+                subnets: Some(vec![
+                    ("fd00::/48", "fd00::1"),
+                    ("fd00:0:0:1::/64", "fd00:0:0:1::1"),
+                ]),
+                should_pass: false,
+                expected_error: Some("overlapping subnets"),
+            },
+            TestCase {
+                name: "ipv6 duplicate subnets",
+                subnets: Some(vec![("fd00::/48", "fd00::1"), ("fd00::/48", "fd00::1")]),
+                should_pass: false,
+                expected_error: Some("duplicate subnet"),
+            },
+            TestCase {
+                name: "single ipv6 subnet",
+                subnets: Some(vec![("fd00::/48", "fd00::1")]),
+                should_pass: true,
+                expected_error: None,
+            },
+            TestCase {
+                name: "two non-overlapping ipv6 subnets",
+                subnets: Some(vec![
+                    ("fd00:0:0:1::/64", "fd00:0:0:1::1"),
+                    ("fd00:0:0:2::/64", "fd00:0:0:2::1"),
+                ]),
+                should_pass: true,
+                expected_error: None,
+            },
+        ];
+
+        for tc in test_cases {
+            let subnets: Option<Vec<_>> = tc.subnets.as_ref().map(|subnet_strs| {
+                subnet_strs
+                    .iter()
+                    .map(|(subnet_str, gw_str)| types::Subnet {
+                        subnet: subnet_str.parse().unwrap(),
+                        gateway: Some(gw_str.parse().unwrap()),
+                        lease_range: None,
+                    })
+                    .collect()
+            });
+
+            let result = validate_subnets(&subnets);
+
+            if tc.should_pass {
+                assert!(
+                    result.is_ok(),
+                    "Test case '{}' should pass but failed with: {:?}",
+                    tc.name,
+                    result.err()
+                );
+            } else {
+                assert!(
+                    result.is_err(),
+                    "Test case '{}' should fail but passed",
+                    tc.name
+                );
+                if let Some(expected_msg) = tc.expected_error {
+                    assert!(
+                        result.unwrap_err().to_string().contains(expected_msg),
+                        "Test case '{}' error message doesn't contain '{}'",
+                        tc.name,
+                        expected_msg
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_create_network_hash() {
+        let hex = CoreUtils::create_network_hash("testnet", 13);
+        assert_eq!(hex, "C5964C6794A11");
+        let hex = CoreUtils::create_network_hash("net1", 20);
+        assert_eq!(hex, "8E48F37D5DE60467E164");
+    }
 }
