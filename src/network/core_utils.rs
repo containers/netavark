@@ -652,4 +652,12 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_create_network_hash() {
+        let hex = CoreUtils::create_network_hash("testnet", 13);
+        assert_eq!(hex, "C5964C6794A11");
+        let hex = CoreUtils::create_network_hash("net1", 20);
+        assert_eq!(hex, "8E48F37D5DE60467E164");
+    }
 }
