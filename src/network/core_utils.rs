@@ -1,6 +1,7 @@
 use crate::error::{ErrorWrap, NetavarkError, NetavarkResult};
 use crate::network::{constants, internal_types, types};
 use crate::wrap;
+use base16ct::HexDisplay;
 use ipnet::IpNet;
 use netlink_packet_route::link::{IpVlanMode, LinkMessage, MacVlanMode};
 use netlink_packet_route::route::RouteType;
@@ -283,12 +284,11 @@ impl CoreUtils {
     }
 
     pub fn create_network_hash(network_name: &str, length: usize) -> String {
-        let mut hasher = Sha512::new();
-        hasher.update(network_name.as_bytes());
-        let result = hasher.finalize();
-        let hash_string = format!("{result:X}");
-        let response = &hash_string[0..length];
-        response.to_string()
+        let sha = Sha512::digest(network_name.as_bytes());
+        let display = HexDisplay(&sha);
+        let mut hash_string = format!("{display:X}");
+        hash_string.truncate(length);
+        hash_string
     }
 }
 
