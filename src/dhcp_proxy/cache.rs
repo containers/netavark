@@ -173,7 +173,7 @@ mod cache_tests {
     use super::super::cache::LeaseCache;
     use super::super::lib::g_rpc::{Lease as NetavarkLease, Lease};
     use crate::network::core_utils;
-    use rand::{rng, Rng};
+    use rand::{rng, RngExt};
     use std::collections::HashMap;
     use std::io::Cursor;
 
