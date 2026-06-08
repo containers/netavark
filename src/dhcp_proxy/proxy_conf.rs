@@ -111,7 +111,7 @@ mod conf_tests {
 
     use once_cell::sync::Lazy;
     use rand::distr::Alphanumeric;
-    use rand::{rng, Rng};
+    use rand::{rng, RngExt};
 
     /// Make sure that the environment isn't modified concurrently.
     static SERIAL_TEST: Lazy<Mutex<()>> = Lazy::new(Default::default);
