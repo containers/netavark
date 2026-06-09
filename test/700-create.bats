@@ -16,7 +16,7 @@ function setup() {
     # Create a basic network configuration
     run_netavark create < ${TESTSDIR}/testfiles/create/basic.json
     result="$output"
-    
+
     # Check that output is valid JSON
     assert_json "$result" ".name" == "testnet1" "Network name matches"
     assert_json "$result" ".driver" == "bridge" "Driver is bridge"
@@ -24,24 +24,24 @@ function setup() {
     assert_json "$result" ".dns_enabled" == "false" "DNS is disabled"
     assert_json "$result" ".internal" == "false" "Network is not internal"
     assert_json "$result" ".ipv6_enabled" == "false" "IPv6 is disabled"
-    
+
     # Check that network_interface is set
     assert_json "$result" 'has("network_interface")' == "true" "Network interface is set"
     assert_json "$result" ".network_interface" =~ "^podman[0-9]+$" "Network interface matches pattern"
-    
+
     # Check that subnets are created
     assert_json "$result" 'has("subnets")' == "true" "Subnets are present"
     assert_json "$result" ".subnets | length" -ge "1" "At least one subnet exists"
     assert_json "$result" ".subnets[0].subnet" =~ "^10\\.89\\.[0-9]+\\.0/24$" "Subnet matches expected pattern"
-    
+
     # Check that gateway is set
     assert_json "$result" ".subnets[0] | has(\"gateway\")" == "true" "Gateway is present"
     assert_json "$result" ".subnets[0].gateway" =~ "^10\\.89\\.[0-9]+\\.1$" "Gateway matches expected pattern"
-    
+
     # Check that IPAM options are set
     assert_json "$result" 'has("ipam_options")' == "true" "IPAM options are present"
     assert_json "$result" ".ipam_options.driver" == "host-local" "IPAM driver is host-local"
-    
+
     # Check that created timestamp is set
     assert_json "$result" 'has("created")' == "true" "Created timestamp is present"
     assert_json "$result" ".created" != "null" "Created timestamp is not null"
@@ -63,7 +63,7 @@ function setup() {
 @test "create - network with explicit subnet" {
     run_netavark create < ${TESTSDIR}/testfiles/create/explicit-subnet.json
     result="$output"
-    
+
     assert_json "$result" ".subnets[0].subnet" == "10.100.0.0/24" "Subnet matches"
     assert_json "$result" ".subnets[0].gateway" == "10.100.0.1" "Gateway is first IP in subnet"
 }
@@ -71,7 +71,7 @@ function setup() {
 @test "create - internal network" {
     run_netavark create < ${TESTSDIR}/testfiles/create/internal.json
     result="$output"
-    
+
     assert_json "$result" ".internal" == "true" "Network is internal"
     # Internal networks may not have gateway if DNS is disabled
     # But let's check that subnet is still created
@@ -81,7 +81,7 @@ function setup() {
 @test "create - network with DNS enabled" {
     run_netavark create < ${TESTSDIR}/testfiles/create/dns-enabled.json
     result="$output"
-    
+
     assert_json "$result" ".dns_enabled" == "true" "DNS is enabled"
     assert_json "$result" ".subnets[0] | has(\"gateway\")" == "true" "Gateway is present for DNS-enabled network"
 }
@@ -104,7 +104,7 @@ function setup() {
 @test "create - network with labels" {
     run_netavark create < ${TESTSDIR}/testfiles/create/labels.json
     result="$output"
-    
+
     assert_json "$result" 'has("labels")' == "true" "Labels are present"
     assert_json "$result" ".labels.key1" == "value1" "First label matches"
     assert_json "$result" ".labels.key2" == "value2" "Second label matches"
@@ -113,7 +113,7 @@ function setup() {
 @test "create - network with IPv6 enabled" {
     run_netavark create < ${TESTSDIR}/testfiles/create/ipv6-enabled.json
     result="$output"
-    
+
     assert_json "$result" ".ipv6_enabled" == "true" "IPv6 is enabled"
     # Should have at least one subnet (IPv4 or IPv6)
     assert_json "$result" ".subnets | length" -ge "1" "At least one subnet exists"
@@ -123,15 +123,15 @@ function setup() {
     # Create a network with check_used_subnets: true and a subnet in used.subnets
     run_netavark create < ${TESTSDIR}/testfiles/create/check-used-subnets-with-subnet.json
     result="$output"
-    
+
     # Verify that the output subnet is not the same as the used subnet
     assert_json "$result" ".subnets[0].subnet" != "10.89.0.0/24" "Output subnet is not the used subnet"
-    
+
     # Verify that the output subnet doesn't overlap with the used subnet
     # The used subnet is 10.89.0.0/24, so the output should be 10.89.1.0/24 or later
     # Check that it matches the pattern 10.89.X.0/24 where X >= 1
     assert_json "$result" ".subnets[0].subnet" =~ "^10\\.89\\.[1-9][0-9]*\\.0/24$" "Output subnet is 10.89.1.0/24 or later (does not overlap with 10.89.0.0/24)"
-    
+
     # Verify it's within the pool range (10.89.0.0/16)
     assert_json "$result" ".subnets[0].subnet" =~ "^10\\.89\\." "Output subnet is within the pool range"
 }
@@ -141,7 +141,7 @@ function setup() {
 @test "create - bridge with subnet and custom gateway" {
     run_netavark create < ${TESTSDIR}/testfiles/create/subnet-with-gateway.json
     result="$output"
-    
+
     assert_json "$result" ".subnets[0].subnet" == "10.100.0.0/24" "Subnet matches"
     assert_json "$result" ".subnets[0].gateway" == "10.100.0.50" "Custom gateway matches"
 }
@@ -154,7 +154,7 @@ function setup() {
 @test "create - bridge with lease range start_ip" {
     run_netavark create < ${TESTSDIR}/testfiles/create/lease-range-start.json
     result="$output"
-    
+
     assert_json "$result" ".subnets[0].subnet" == "10.100.0.0/24" "Subnet matches"
     assert_json "$result" ".subnets[0].lease_range.start_ip" == "10.100.0.20" "Lease range start_ip matches"
 }
@@ -162,7 +162,7 @@ function setup() {
 @test "create - bridge with lease range start_ip and end_ip" {
     run_netavark create < ${TESTSDIR}/testfiles/create/lease-range-both.json
     result="$output"
-    
+
     assert_json "$result" ".subnets[0].lease_range.start_ip" == "10.100.0.20" "Lease range start_ip matches"
     assert_json "$result" ".subnets[0].lease_range.end_ip" == "10.100.0.50" "Lease range end_ip matches"
 }
@@ -176,10 +176,10 @@ function setup() {
 @test "create - ipv6_enabled auto-generates dual-stack" {
     run_netavark create < ${TESTSDIR}/testfiles/create/ipv6-auto-dualstack.json
     result="$output"
-    
+
     assert_json "$result" ".ipv6_enabled" == "true" "IPv6 is enabled"
     assert_json "$result" ".subnets | length" == "2" "Two subnets created"
-    
+
     # Check one is IPv4 and one is IPv6
     ipv4_count=$(echo "$result" | jq '[.subnets[].subnet | select(contains("."))] | length')
     ipv6_count=$(echo "$result" | jq '[.subnets[].subnet | select(contains(":"))] | length')
@@ -212,7 +212,7 @@ function setup() {
 @test "create - network_dns_servers with valid IPs" {
     run_netavark create < ${TESTSDIR}/testfiles/create/network-dns-servers-valid.json
     result="$output"
-    
+
     assert_json "$result" ".network_dns_servers[0]" == "8.8.8.8" "First DNS server matches"
     assert_json "$result" ".network_dns_servers[1]" == "1.1.1.1" "Second DNS server matches"
     assert_json "$result" ".dns_enabled" == "true" "DNS is enabled"
@@ -232,7 +232,7 @@ function setup() {
 @test "create - network with mtu option" {
     run_netavark create < ${TESTSDIR}/testfiles/create/mtu-option.json
     result="$output"
-    
+
     assert_json "$result" ".options.mtu" == "1500" "MTU option is set"
 }
 
@@ -245,7 +245,7 @@ function setup() {
 @test "create - network with vlan option" {
     run_netavark create < ${TESTSDIR}/testfiles/create/vlan-option.json
     result="$output"
-    
+
     assert_json "$result" ".options.vlan" == "100" "VLAN option is set"
 }
 
@@ -258,14 +258,14 @@ function setup() {
 @test "create - network with isolate=true" {
     run_netavark create < ${TESTSDIR}/testfiles/create/isolate-true.json
     result="$output"
-    
+
     assert_json "$result" ".options.isolate" == "true" "Isolate option is set to true"
 }
 
 @test "create - network with isolate=strict" {
     run_netavark create < ${TESTSDIR}/testfiles/create/isolate-strict.json
     result="$output"
-    
+
     assert_json "$result" ".options.isolate" == "strict" "Isolate option is set to strict"
 }
 
@@ -273,7 +273,7 @@ function setup() {
 @test "create - ipam driver none disables DNS" {
     run_netavark create < ${TESTSDIR}/testfiles/create/ipam-none.json
     result="$output"
-    
+
     assert_json "$result" ".ipam_options.driver" == "none" "IPAM driver is none"
     assert_json "$result" ".dns_enabled" == "false" "DNS is disabled when ipam is none"
 }
@@ -287,7 +287,7 @@ function setup() {
 @test "create - macvlan without subnet defaults to dhcp" {
     run_netavark create < ${TESTSDIR}/testfiles/create/macvlan-dhcp.json
     result="$output"
-    
+
     assert_json "$result" ".driver" == "macvlan" "Driver is macvlan"
     assert_json "$result" ".ipam_options.driver" == "dhcp" "IPAM driver is dhcp"
     assert_json "$result" ".dns_enabled" == "false" "DNS is disabled for macvlan"
@@ -296,7 +296,7 @@ function setup() {
 @test "create - macvlan with subnet" {
     run_netavark create < ${TESTSDIR}/testfiles/create/macvlan-subnet.json
     result="$output"
-    
+
     assert_json "$result" ".driver" == "macvlan" "Driver is macvlan"
     assert_json "$result" ".ipam_options.driver" == "host-local" "IPAM driver is host-local"
     assert_json "$result" ".subnets[0].subnet" == "10.200.0.0/24" "Subnet matches"
@@ -306,7 +306,7 @@ function setup() {
 @test "create - macvlan with mode option" {
     run_netavark create < ${TESTSDIR}/testfiles/create/macvlan-mode.json
     result="$output"
-    
+
     assert_json "$result" ".driver" == "macvlan" "Driver is macvlan"
     assert_json "$result" ".options.mode" == "bridge" "Mode option is set"
 }
@@ -320,7 +320,7 @@ function setup() {
 @test "create - ipvlan with subnet" {
     run_netavark create < ${TESTSDIR}/testfiles/create/ipvlan-subnet.json
     result="$output"
-    
+
     assert_json "$result" ".driver" == "ipvlan" "Driver is ipvlan"
     assert_json "$result" ".ipam_options.driver" == "host-local" "IPAM driver is host-local"
     assert_json "$result" ".subnets[0].subnet" == "10.200.0.0/24" "Subnet matches"
@@ -331,7 +331,7 @@ function setup() {
 @test "create - bridge with static route" {
     run_netavark create < ${TESTSDIR}/testfiles/create/static-route.json
     result="$output"
-    
+
     assert_json "$result" ".routes | length" == "1" "One route is present"
     assert_json "$result" ".routes[0].destination" == "192.168.0.0/24" "Route destination matches"
     assert_json "$result" ".routes[0].gateway" == "10.100.0.254" "Route gateway matches"
@@ -367,6 +367,11 @@ function setup() {
 @test "create - fail when subnets are duplicated within same network" {
     expected_rc=1 run_netavark create < ${TESTSDIR}/testfiles/create/subnet-duplicate-within.json
     assert_json "$output" ".error" "=~" "duplicate subnet defined: 10.100.0.0/24" "Error message about duplicate subnets"
+}
+
+@test "create - fail when subnets is /32" {
+    expected_rc=1 run_netavark create < ${TESTSDIR}/testfiles/create/subnet-with-no-possible-gateway.json
+    assert_json "$output" ".error" "==" "could not create gateway for subnet 192.168.0.0/32 because it has a 31 or greater subnet prefix" "Error message about incorrect subnet prefix"
 }
 
 @test "create - network with unicast routes" {
