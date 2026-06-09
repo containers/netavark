@@ -6,7 +6,7 @@ use crate::network::types::{Network, Route, Subnet};
 use ipnet::IpNet;
 use regex::Regex;
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv6Addr};
 use std::str::FromStr;
 
 pub fn validate_name_id(
@@ -140,6 +140,15 @@ pub fn validate_subnets(
 fn first_ip_in_subnet(network: &IpNet) -> NetavarkResult<IpAddr> {
     match network {
         IpNet::V4(net_v4) => {
+            // Note the -1 here because in a /31 subnet we still have no space to fit a gateway.
+            // First address is is the network address and last one is the broadcast which must also not be used.
+            if net_v4.prefix_len() >= net_v4.max_prefix_len() - 1 {
+                return Err(NetavarkError::msg(format!(
+                    "could not create gateway for subnet {} because it has a {} or greater subnet prefix",
+                    net_v4,
+                    net_v4.max_prefix_len() - 1
+                )));
+            }
             let network_addr: u32 = net_v4.network().into();
             let first_ip = network_addr
                 .checked_add(1)
@@ -147,7 +156,13 @@ fn first_ip_in_subnet(network: &IpNet) -> NetavarkResult<IpAddr> {
             Ok(IpAddr::V4(first_ip.into()))
         }
         IpNet::V6(net_v6) => {
-            use std::net::Ipv6Addr;
+            if net_v6.prefix_len() >= net_v6.max_prefix_len() {
+                return Err(NetavarkError::msg(format!(
+                    "could not create gateway for subnet {} because it has a {} or greater subnet prefix",
+                    net_v6,
+                    net_v6.max_prefix_len()
+                )));
+            }
             let network_addr = net_v6.network();
             // Convert to u128, add 1, convert back to octets
             let addr_u128: u128 = u128::from_be_bytes(network_addr.octets());
@@ -318,4 +333,39 @@ fn validate_route(route: &Route) -> NetavarkResult<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::Ipv4Addr;
+
+    use super::*;
+
+    #[test]
+    fn test_first_ip_in_subnet_ipv4() {
+        let ip = first_ip_in_subnet(&"10.100.0.0/24".parse().unwrap())
+            .expect("first_ip_in_subnet no error");
+
+        assert_eq!(ip, IpAddr::V4(Ipv4Addr::new(10, 100, 0, 1)));
+    }
+    #[test]
+    fn test_first_ip_in_subnet_ipv4_error() {
+        let err = first_ip_in_subnet(&"10.0.0.0/31".parse().unwrap()).unwrap_err();
+
+        assert_eq!(format!("{err}"), "could not create gateway for subnet 10.0.0.0/31 because it has a 31 or greater subnet prefix");
+    }
+
+    #[test]
+    fn test_first_ip_in_subnet_ipv6() {
+        let ip = first_ip_in_subnet(&"fdb2:9746::/64".parse().unwrap())
+            .expect("first_ip_in_subnet no error");
+
+        assert_eq!(ip, IpAddr::V6("fdb2:9746::1".parse().unwrap()));
+    }
+    #[test]
+    fn test_first_ip_in_subnet_ipv6_error() {
+        let err = first_ip_in_subnet(&"fdb2:9746::/128".parse().unwrap()).unwrap_err();
+
+        assert_eq!(format!("{err}"), "could not create gateway for subnet fdb2:9746::/128 because it has a 128 or greater subnet prefix");
+    }
 }
