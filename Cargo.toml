@@ -46,7 +46,7 @@ nix = { version = "0.31.3", features = ["net", "sched", "signal", "socket", "use
 rand = "0.10.1"
 sha2 = "0.11.0"
 base16ct = "1.0.0"
-netlink-packet-route = "0.30.0"
+netlink-packet-route = "0.31.0"
 netlink-packet-core = "0.8.1"
 netlink-sys = "0.8.8"
 nftables = "0.6.3"
