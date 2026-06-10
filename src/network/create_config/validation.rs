@@ -138,7 +138,7 @@ pub fn validate_subnets(
 
 /// Get the first IP address in a subnet (network address + 1).
 fn first_ip_in_subnet(network: &IpNet) -> NetavarkResult<IpAddr> {
-    match network {
+    let first_ip = match network {
         IpNet::V4(net_v4) => {
             // Note the -1 here because in a /31 subnet we still have no space to fit a gateway.
             // First address is is the network address and last one is the broadcast which must also not be used.
@@ -153,7 +153,7 @@ fn first_ip_in_subnet(network: &IpNet) -> NetavarkResult<IpAddr> {
             let first_ip = network_addr
                 .checked_add(1)
                 .ok_or_else(|| NetavarkError::msg("Subnet address overflow"))?;
-            Ok(IpAddr::V4(first_ip.into()))
+            IpAddr::V4(first_ip.into())
         }
         IpNet::V6(net_v6) => {
             if net_v6.prefix_len() >= net_v6.max_prefix_len() {
@@ -169,9 +169,18 @@ fn first_ip_in_subnet(network: &IpNet) -> NetavarkResult<IpAddr> {
             let first_ip_u128 = addr_u128
                 .checked_add(1)
                 .ok_or_else(|| NetavarkError::msg("Subnet address overflow"))?;
-            Ok(IpAddr::V6(Ipv6Addr::from(first_ip_u128.to_be_bytes())))
+            IpAddr::V6(Ipv6Addr::from(first_ip_u128.to_be_bytes()))
         }
+    };
+
+    if !network.contains(&first_ip) {
+        return Err(NetavarkError::msg(format!(
+            "could not create gateway for subnet {}",
+            network
+        )));
     }
+
+    Ok(first_ip)
 }
 
 /// Validate lease range IP addresses against a subnet.
@@ -232,6 +241,56 @@ fn validate_lease_range(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_subnet_adds_first_ip_as_gateway() {
+        let mut subnet = Subnet {
+            subnet: "10.100.0.0/24".parse().unwrap(),
+            gateway: None,
+            lease_range: None,
+        };
+
+        validate_subnet(&mut subnet, true, false, &[]).unwrap();
+
+        assert_eq!(subnet.gateway, Some("10.100.0.1".parse().unwrap()));
+    }
+
+    #[test]
+    fn validate_subnet_rejects_ipv4_subnet_without_gateway_address() {
+        let mut subnet = Subnet {
+            subnet: "10.100.0.1/32".parse().unwrap(),
+            gateway: None,
+            lease_range: None,
+        };
+
+        let err = validate_subnet(&mut subnet, true, false, &[]).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "could not create gateway for subnet 10.100.0.1/32"
+        );
+    }
+
+    #[test]
+    fn validate_subnet_rejects_ipv6_subnet_without_gateway_address() {
+        let mut subnet = Subnet {
+            subnet: "fd00::1/128".parse().unwrap(),
+            gateway: None,
+            lease_range: None,
+        };
+
+        let err = validate_subnet(&mut subnet, true, false, &[]).unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "could not create gateway for subnet fd00::1/128"
+        );
+    }
 }
 
 /// Validate a single subnet.
