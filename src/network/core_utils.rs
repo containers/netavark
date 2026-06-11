@@ -347,6 +347,34 @@ pub fn open_netlink_sockets(
     ))
 }
 
+/// Open the host netlink socket. Used during teardown when the
+/// container network namespace is no longer available.
+pub fn open_host_netlink_socket() -> NetavarkResult<NamespaceOptions> {
+    let hostns = open_netlink_socket("/proc/self/ns/net").wrap("open host netns")?;
+    let host_socket = netlink::Socket::<NetlinkRoute>::new().wrap("host netlink socket")?;
+    Ok(NamespaceOptions {
+        file: hostns,
+        netlink: host_socket,
+    })
+}
+
+/// Open the container netns netlink socket, given an already-opened host ns.
+pub fn open_netns_netlink_socket(
+    netns_path: &str,
+    hostns: &NamespaceOptions,
+) -> NetavarkResult<NamespaceOptions> {
+    let netns = open_netlink_socket(netns_path).wrap("open container netns")?;
+    let netns_sock = exec_netns!(
+        hostns.file.as_fd(),
+        netns.as_fd(),
+        netlink::Socket::<NetlinkRoute>::new().wrap("netns netlink socket")
+    )?;
+    Ok(NamespaceOptions {
+        file: netns,
+        netlink: netns_sock,
+    })
+}
+
 fn open_netlink_socket(netns_path: &str) -> NetavarkResult<File> {
     wrap!(File::open(netns_path), format!("open {netns_path}"))
 }
