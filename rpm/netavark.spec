@@ -48,7 +48,6 @@ Requires: aardvark-dns >=  %{epoch}:%{major_minor}
 Provides: container-network-stack = 2
 Requires: nftables
 BuildRequires: make
-BuildRequires: protobuf-c
 BuildRequires: protobuf-compiler
 %if %{defined rhel}
 # rust-toolset requires the `local` repo enabled on non-koji ELN build environments
