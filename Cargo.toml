@@ -62,7 +62,7 @@ futures-core = "0.3.32"
 futures-util = "0.3.32"
 tower = { version = "0.5.3", features = ["util"] }
 hyper-util = "0.1.20"
-regex = "1.12.3"
+regex = "1.12.4"
 serde_with = "3.21.0"
 chrono = { version = "0.4.45", features = ["serde"] }
 
