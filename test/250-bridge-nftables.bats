@@ -1331,6 +1331,17 @@ function check_simple_bridge_nftables() {
     assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p 53 run" "aardvark not running or bad options"
 }
 
+@test "$fw_driver - dns_names preferred over aliases" {
+    run_netavark --file ${TESTSDIR}/testfiles/dns-names.json \
+        setup $(get_container_netns_path)
+
+    # check aardvark config uses dns_names (somename,myalias,f031bf33eecb,myhostname)
+    # instead of falling back to container_name + aliases (somename,myalias)
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2  somename,myalias,f031bf33eecb,myhostname$" "aardvark config uses dns_names"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
+}
+
 @test "$fw_driver - nft error" {
     local nft="$NETAVARK_TMPDIR/nft"
     cat > "$nft" <<EOF

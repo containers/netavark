@@ -165,6 +165,13 @@ pub struct PerNetworkOptions {
     #[serde(rename = "aliases")]
     pub aliases: Option<Vec<String>>,
 
+    /// DNSNames contains the complete list of DNS names that should resolve
+    /// to this container, including container name, user aliases, short ID,
+    /// and hostname. When set, this takes priority over aliases for DNS
+    /// resolution. When empty or not set, falls back to aliases.
+    #[serde(rename = "dns_names")]
+    pub dns_names: Option<Vec<String>>,
+
     /// InterfaceName for this container. Required.
     #[serde(rename = "interface_name")]
     pub interface_name: String,

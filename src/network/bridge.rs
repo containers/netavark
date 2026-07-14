@@ -280,18 +280,30 @@ impl driver::NetworkDriver for Bridge<'_> {
                 }
             }
 
-            // get size so we can preallocate the vector which is more efficient
-            let len = match &self.info.per_network_opts.aliases {
-                Some(n) => n.len() + 1,
-                None => 1,
-            };
-            let mut names = Vec::with_capacity(len);
-            maybe_add_alias(&mut names, self.info.container_name);
-            if let Some(aliases) = &self.info.per_network_opts.aliases {
-                for name in aliases {
-                    maybe_add_alias(&mut names, name);
+            // Prefer dns_names when present; fall back to container_name + aliases.
+            let names = match &self.info.per_network_opts.dns_names {
+                Some(dns_names) if !dns_names.is_empty() => {
+                    let mut names = Vec::with_capacity(dns_names.len());
+                    for name in dns_names {
+                        maybe_add_alias(&mut names, name);
+                    }
+                    names
                 }
-            }
+                _ => {
+                    let len = match &self.info.per_network_opts.aliases {
+                        Some(n) => n.len() + 1,
+                        None => 1,
+                    };
+                    let mut names = Vec::with_capacity(len);
+                    maybe_add_alias(&mut names, self.info.container_name);
+                    if let Some(aliases) = &self.info.per_network_opts.aliases {
+                        for name in aliases {
+                            maybe_add_alias(&mut names, name);
+                        }
+                    }
+                    names
+                }
+            };
 
             // Fixes #1177: In unmanaged mode, the gateway IP may not be on the host.
             // We need to find an IP on the bridge itself for aardvark-dns to bind to.
