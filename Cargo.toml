@@ -57,9 +57,9 @@ tonic = "0.14.6"
 tonic-prost = "0.14.6"
 prost = "0.14.4"
 mozim = { version = "0.3.2", default-features = false }
-futures-channel = "0.3.32"
-futures-core = "0.3.32"
-futures-util = "0.3.32"
+futures-channel = "0.3.33"
+futures-core = "0.3.33"
+futures-util = "0.3.33"
 tower = { version = "0.5.3", features = ["util"] }
 hyper-util = "0.1.20"
 regex = "1.12.3"
