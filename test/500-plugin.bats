@@ -73,3 +73,12 @@ function run_netavark_plugins() {
     run_netavark_plugins teardown $(get_container_netns_path) <<<"$config"
     assert 'stderr teardown' "stderr log"
 }
+
+@test "plugin - teardown with missing netns still calls plugin" {
+    config=$(get_conf stderr-plugin)
+
+    run_netavark_plugins setup $(get_container_netns_path) <<<"$config"
+
+    run_netavark_plugins teardown "/proc/does-not-exist/ns/net" <<<"$config"
+    assert "$output" =~ 'stderr teardown' "plugin teardown was called"
+}
