@@ -5,6 +5,19 @@
 
 load helpers
 
+VLAN_DHCP_DNSMASQ_PID=
+VLAN_DHCP_PROXY_PID=
+
+function teardown() {
+    if [[ -n "$VLAN_DHCP_PROXY_PID" ]]; then
+        kill "$VLAN_DHCP_PROXY_PID" 2>/dev/null || true
+    fi
+    if [[ -n "$VLAN_DHCP_DNSMASQ_PID" ]]; then
+        kill "$VLAN_DHCP_DNSMASQ_PID" 2>/dev/null || true
+    fi
+    basic_teardown
+}
+
 @test bridge - managed mode {
     run_netavark --file ${TESTSDIR}/testfiles/bridge-managed.json setup $(get_container_netns_path)
 
@@ -43,6 +56,73 @@ load helpers
 @test "bridge - managed mode with dhcp" {
     expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/bridge-managed-dhcp.json setup $(get_container_netns_path)
     assert_json ".error" "cannot use dhcp ipam driver without using the option mode=unmanaged" "dhcp error"
+}
+
+@test "bridge - unmanaged mode with vlan and dhcp" {
+    create_container_ns
+
+    run_in_host_netns ip link add brtest0 type bridge vlan_filtering 1
+    run_in_host_netns ip link set brtest0 up
+    run_in_host_netns ip link add trunk0 type veth peer name srv0
+    run_in_host_netns ip link set srv0 netns "${CONTAINER_NS_PIDS[1]}"
+    run_in_host_netns ip link set trunk0 master brtest0
+    run_in_host_netns ip link set trunk0 up
+
+    expected_rc=? run_in_host_netns bridge vlan del dev trunk0 vid 1
+    run_in_host_netns bridge vlan add dev trunk0 vid 20 pvid untagged
+    run_in_host_netns bridge vlan add dev trunk0 vid 40
+
+    expected_rc=? run_in_host_netns bridge vlan del dev brtest0 vid 1 self
+    run_in_host_netns bridge vlan add dev brtest0 vid 20 self pvid untagged
+    run_in_host_netns bridge vlan add dev brtest0 vid 40 self
+
+    run_in_container_netns 1 ip link set lo up
+    run_in_container_netns 1 ip link set srv0 up
+    run_in_container_netns 1 ip addr add 10.10.20.1/24 dev srv0
+    run_in_container_netns 1 ip link add link srv0 name srv0.40 type vlan id 40
+    run_in_container_netns 1 ip link set srv0.40 up
+    run_in_container_netns 1 ip addr add 10.10.40.1/24 dev srv0.40
+
+    nsenter -n -m -w -t "${CONTAINER_NS_PIDS[1]}" dnsmasq \
+        --no-daemon \
+        --log-debug \
+        --log-dhcp \
+        --bind-interfaces \
+        --except-interface=lo \
+        --interface=srv0 \
+        --interface=srv0.40 \
+        --dhcp-authoritative \
+        --dhcp-range=10.10.20.50,10.10.20.59,255.255.255.0,2m \
+        --dhcp-range=10.10.40.50,10.10.40.59,255.255.255.0,2m \
+        >"$NETAVARK_TMPDIR/vlan-dhcp-dnsmasq.log" 2>&1 &
+    VLAN_DHCP_DNSMASQ_PID=$!
+
+    nsenter -n -m -w -t "$HOST_NS_PID" mkdir -p /run/podman
+    nsenter -n -m -w -t "$HOST_NS_PID" "$NETAVARK" dhcp-proxy \
+        --dir /run/podman \
+        --timeout 10 \
+        >"$NETAVARK_TMPDIR/vlan-dhcp-proxy.log" 2>&1 &
+    VLAN_DHCP_PROXY_PID=$!
+
+    for _ in $(seq 1 50); do
+        if nsenter -n -m -w -t "$HOST_NS_PID" test -S /run/podman/nv-proxy.sock; then
+            break
+        fi
+        sleep 0.1
+    done
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-unmanaged-vlan-dhcp.json setup $(get_container_netns_path)
+    setup_result="$output"
+    assert_json "$setup_result" ".podman.interfaces.eth0.subnets[0].ipnet" "=~" "^10\\.10\\.40\\." "DHCP lease should come from vlan 40"
+    assert_json "$setup_result" ".podman.interfaces.eth0.subnets[0].gateway" "==" "10.10.40.1" "DHCP gateway should come from vlan 40"
+
+    run_in_host_netns ip link show brtest0.40
+    assert "$output" =~ "brtest0.40" "DHCP vlan interface should exist"
+
+    run_in_container_netns ping -c 1 -W 1 10.10.40.1
+    run_helper grep -q "DHCPACK(srv0.40)" "$NETAVARK_TMPDIR/vlan-dhcp-dnsmasq.log"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-unmanaged-vlan-dhcp.json teardown $(get_container_netns_path)
 }
 
 @test bridge - unmanaged mode with aardvark-dns no bridge ip {
