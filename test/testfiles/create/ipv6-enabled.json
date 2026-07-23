@@ -14,7 +14,9 @@
   },
   "options": {
     "subnet_pools": [
-      {"base": "10.89.0.0/16", "size": 24},
+      {"base": "10.89.0.0/16", "size": 24}
+    ],
+    "subnet_pools_v6": [
       {"base": "fd00::/64", "size": 64}
     ],
     "default_interface_name": "podman",
