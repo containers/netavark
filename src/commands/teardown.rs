@@ -102,7 +102,7 @@ impl Teardown {
                 None => {
                     error_list.push(NetavarkError::Message(format!(
                         "network info for network {} not found",
-                        &named_network_opts.name
+                        named_network_opts.name
                     )));
                     continue;
                 }

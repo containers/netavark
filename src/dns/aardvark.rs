@@ -249,7 +249,7 @@ impl Aardvark {
             Err(e) => {
                 return Err(NetavarkError::msg(format!(
                     "Failed to open/create lockfile {:?}: {}",
-                    &lockfile_path, e
+                    lockfile_path, e
                 )));
             }
         };

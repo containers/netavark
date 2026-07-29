@@ -152,7 +152,7 @@ pub fn write_fw_config(
         Err(ref e) if e.kind() == ErrorKind::AlreadyExists => (),
         Err(e) => {
             return Err(NetavarkError::wrap(
-                format!("create network config {:?}", &paths.net_conf_file.display()),
+                format!("create network config {:?}", paths.net_conf_file.display()),
                 e.into(),
             ));
         }

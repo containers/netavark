@@ -256,7 +256,7 @@ pub fn validate_subnet(
         if !s.subnet.contains(gateway) {
             return Err(NetavarkError::msg(format!(
                 "gateway {} not in subnet {}",
-                gateway, &s.subnet
+                gateway, s.subnet
             )));
         }
     } else if add_gateway {

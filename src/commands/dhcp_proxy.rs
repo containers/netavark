@@ -177,7 +177,7 @@ impl<W: Write + Clear + Send + 'static> NetavarkProxy for NetavarkProxyService<W
             if let Err(e) = service.release_lease().await {
                 warn!(
                     "Failed to send DHCPRELEASE for {}: {}",
-                    &nc.container_mac_addr, e
+                    nc.container_mac_addr, e
                 );
             }
         }
@@ -256,7 +256,7 @@ pub async fn serve(opts: Opts) -> NetavarkResult<()> {
         Duration::from_secs(opts.activity_timeout.unwrap_or(DEFAULT_INACTIVITY_TIMEOUT));
 
     let uds_path = get_proxy_sock_fqname(optional_run_dir);
-    debug!("socket path: {}", &uds_path.display());
+    debug!("socket path: {}", uds_path.display());
 
     let mut is_systemd_activated = false;
 
