@@ -121,7 +121,7 @@ impl DhcpV4Service {
                     netavark_lease.add_mac_address(&self.network_config.container_mac_addr);
                     debug!(
                         "found a lease for {:?}, {:?}",
-                        &self.network_config.container_mac_addr, &netavark_lease
+                        self.network_config.container_mac_addr, netavark_lease
                     );
                     self.previous_lease = Some(*lease);
                     return Ok(netavark_lease);
@@ -158,7 +158,7 @@ impl DhcpV4Service {
         if let Some(lease) = &self.previous_lease {
             debug!(
                 "Attempting to release lease for MAC: {}",
-                &self.network_config.container_mac_addr
+                self.network_config.container_mac_addr
             );
             // Directly call the release function on the underlying mozim
             // client.
@@ -171,7 +171,7 @@ impl DhcpV4Service {
             // succeed silently.
             debug!(
                 "No previous lease to release for MAC: {}",
-                &self.network_config.container_mac_addr
+                self.network_config.container_mac_addr
             );
             Ok(())
         }
@@ -204,8 +204,8 @@ pub async fn process_client_stream(service_arc: Arc<Mutex<DhcpV4Service>>) {
             Ok(DhcpV4State::Done(lease)) => {
                 log::info!(
                     "got new lease for mac {}: {:?}",
-                    &client.network_config.container_mac_addr,
-                    &lease
+                    client.network_config.container_mac_addr,
+                    lease
                 );
 
                 if let Some(old_lease) = &client.previous_lease {
@@ -215,7 +215,7 @@ pub async fn process_client_stream(service_arc: Arc<Mutex<DhcpV4Service>>) {
                     {
                         log::info!(
                             "ip or gateway for mac {} changed, update address",
-                            &client.network_config.container_mac_addr
+                            client.network_config.container_mac_addr
                         );
                         if let Err(err) = update_lease_ip(
                             &client.network_config.ns_path,
@@ -239,11 +239,11 @@ pub async fn process_client_stream(service_arc: Arc<Mutex<DhcpV4Service>>) {
             Err(err) => {
                 log::error!(
                     "Failed to acquire DHCPv4 lease for {}: {err}",
-                    &client.network_config.container_mac_addr
+                    client.network_config.container_mac_addr
                 );
                 log::info!(
                     "Retrying DHCPv4 proxy for {}",
-                    &client.network_config.container_mac_addr
+                    client.network_config.container_mac_addr
                 );
                 client.client.clean_up();
             }

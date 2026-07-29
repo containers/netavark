@@ -171,7 +171,7 @@ pub fn dhcp_teardown(info: &DriverInfo, sock: &mut Socket<NetlinkRoute>) -> Neta
     if ipam.dhcp_enabled {
         let dev = sock.get_link(LinkID::Name(if_name)).wrap(format!(
             "get container interface {}",
-            &info.per_network_opts.interface_name
+            info.per_network_opts.interface_name
         ))?;
 
         let container_mac_address = core_utils::get_mac_address(dev.attributes)?;

@@ -344,7 +344,7 @@ impl driver::NetworkDriver for Bridge<'_> {
                     is_internal: self.info.network.internal,
                 }),
                 Err(err) => {
-                    log::warn!("invalid container id {}: {err}", &self.info.container_id);
+                    log::warn!("invalid container id {}: {err}", self.info.container_id);
                     None
                 }
             }
@@ -739,9 +739,9 @@ fn create_interfaces(
                     // Disable duplicate address detection if ipv6 enabled
                     // Do not accept Router Advertisements if ipv6 is enabled
                     let br_accept_dad =
-                        format!("net/ipv6/conf/{}/accept_dad", &data.bridge_interface_name);
+                        format!("net/ipv6/conf/{}/accept_dad", data.bridge_interface_name);
                     let br_accept_ra =
-                        format!("net/ipv6/conf/{}/accept_ra", &data.bridge_interface_name);
+                        format!("net/ipv6/conf/{}/accept_ra", data.bridge_interface_name);
                     sysctls.push((br_accept_dad, "0"));
                     sysctls.push((br_accept_ra, "0"));
                 }
@@ -752,7 +752,7 @@ fn create_interfaces(
                 // As documented for the sysctl for complicated or asymmetric routing loose mode (2)
                 // is recommended.
                 let br_rp_filter =
-                    format!("net/ipv4/conf/{}/rp_filter", &data.bridge_interface_name);
+                    format!("net/ipv4/conf/{}/rp_filter", data.bridge_interface_name);
                 sysctls.push((br_rp_filter, "2"));
 
                 // writer must be create before the bridge is created
@@ -931,20 +931,16 @@ fn create_veth_pair<'fd>(
             disable_ipv6_autoconf(&data.container_interface_name)?;
             if data.ipam.ipv6_enabled {
                 //  Disable dad inside the container too
-                let disable_dad_in_container = format!(
-                    "net/ipv6/conf/{}/accept_dad",
-                    &data.container_interface_name
-                );
+                let disable_dad_in_container =
+                    format!("net/ipv6/conf/{}/accept_dad", data.container_interface_name);
                 sysctl::apply_sysctl_value(disable_dad_in_container, "0")?;
             }
-            let enable_arp_notify = format!(
-                "net/ipv4/conf/{}/arp_notify",
-                &data.container_interface_name
-            );
+            let enable_arp_notify =
+                format!("net/ipv4/conf/{}/arp_notify", data.container_interface_name);
             sysctl::apply_sysctl_value(enable_arp_notify, "1")?;
 
             // disable strict reverse path search validation
-            let rp_filter = format!("net/ipv4/conf/{}/rp_filter", &data.container_interface_name);
+            let rp_filter = format!("net/ipv4/conf/{}/rp_filter", data.container_interface_name);
             sysctl::apply_sysctl_value(rp_filter, "2")?;
             Ok::<(), NetavarkError>(())
         })?;

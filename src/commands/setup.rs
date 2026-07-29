@@ -74,7 +74,7 @@ impl Setup {
                 .ok_or_else(|| {
                     NetavarkError::Message(format!(
                         "network info for network {} not found",
-                        &named_network_opts.name
+                        named_network_opts.name
                     ))
                 })?;
 
@@ -155,7 +155,7 @@ impl Setup {
             } else {
                 info!(
                     "dns disabled because aardvark-dns path {:?} does not exists",
-                    &aardvark_bin
+                    aardvark_bin
                 );
             }
         }

@@ -388,7 +388,7 @@ pub fn add_default_routes(
             }
         };
         sock.add_route(&route)
-            .wrap(format!("add default route {}", &route))?;
+            .wrap(format!("add default route {}", route))?;
     }
     Ok(())
 }

@@ -184,7 +184,7 @@ impl NetworkConfig {
         // We know this is safe and if it ever fails test will catch it
         let endpoint = Endpoint::try_from("http://[::1]").unwrap();
 
-        debug!("using uds path: {}", &p);
+        debug!("using uds path: {}", p);
         let path = p.clone();
         let channel = endpoint
             .connect_with_connector(service_fn(move |_| {
@@ -202,7 +202,7 @@ impl NetworkConfig {
                             .and_then(|e| e.downcast_ref::<std::io::Error>())
                             .and_then(|e| {
                                 if e.kind() == std::io::ErrorKind::NotFound || e.kind() == std::io::ErrorKind::ConnectionRefused {
-                                    Some(format!("socket \"{}\": {e}, is the netavark-dhcp-proxy.socket unit enabled?", &path))
+                                    Some(format!("socket \"{}\": {e}, is the netavark-dhcp-proxy.socket unit enabled?", path))
                                 } else {
                                     None
                                 }
@@ -288,9 +288,9 @@ impl VectorConv for Vec<String> {
         }
         let mut out_addrs = Vec::new();
         for ip in self {
-            match Ipv4Addr::from_str(ip) {
-                Ok(i) => out_addrs.push(i),
-                Err(e) => return Err(e),
+            {
+                let i = Ipv4Addr::from_str(ip)?;
+                out_addrs.push(i)
             };
         }
         Ok(Some(out_addrs))
