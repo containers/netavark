@@ -29,9 +29,12 @@ const ISOLATION1CHAIN: &str = "NETAVARK-ISOLATION-1";
 const ISOLATION2CHAIN: &str = "NETAVARK-ISOLATION-2";
 const ISOLATION3CHAIN: &str = "NETAVARK-ISOLATION-3";
 
+const CT_MARK_NAME: Cow<'_, str> = Cow::Borrowed("mark");
+
 pub(crate) const MAX_HASH_SIZE: usize = 13;
 
-const MASK: u32 = 0x2000;
+const MASQUERADE_MASK: u32 = 0x2000;
+const DNAT_MASK: u32 = 0x1000;
 
 const MULTICAST_NET_V4: &str = "224.0.0.0/4";
 const MULTICAST_NET_V6: &str = "ff00::/8";
@@ -118,13 +121,13 @@ impl firewall::FirewallDriver for Nftables {
 
         // Postrouting chain needs a single rule to masquerade if mask is set.
         // But only one copy of that rule. So check if such a rule exists.
-        let match_meta_masq = |r: &schema::Rule| -> bool {
+        let match_masquerade_masq = |r: &schema::Rule| -> bool {
             // Match on any rule that matches against 0x2000
             for statement in r.expr.deref() {
                 match statement {
                     stmt::Statement::Match(m) => match &m.right {
                         expr::Expression::Number(n) => {
-                            if *n == MASK {
+                            if *n == MASQUERADE_MASK {
                                 return true;
                             }
                         }
@@ -135,7 +138,7 @@ impl firewall::FirewallDriver for Nftables {
             }
             false
         };
-        if get_matching_rules_in_chain(&existing_rules, POSTROUTINGCHAIN, match_meta_masq)
+        if get_matching_rules_in_chain(&existing_rules, POSTROUTINGCHAIN, match_masquerade_masq)
             .is_empty()
         {
             // Postrouting: meta mark & 0x2000 == 0x2000 masquerade
@@ -148,10 +151,10 @@ impl firewall::FirewallDriver for Nftables {
                                 expr::Expression::Named(expr::NamedExpression::Meta(expr::Meta {
                                     key: expr::MetaKey::Mark,
                                 })),
-                                expr::Expression::Number(MASK),
+                                expr::Expression::Number(MASQUERADE_MASK),
                             ),
                         )),
-                        right: expr::Expression::Number(MASK),
+                        right: expr::Expression::Number(MASQUERADE_MASK),
                         op: stmt::Operator::EQ,
                     }),
                     stmt::Statement::Masquerade(None),
@@ -184,7 +187,7 @@ impl firewall::FirewallDriver for Nftables {
                             expr::Expression::Named(expr::NamedExpression::Meta(expr::Meta {
                                 key: expr::MetaKey::Mark,
                             })),
-                            expr::Expression::Number(MASK),
+                            expr::Expression::Number(MASQUERADE_MASK),
                         ],
                     ))),
                 })]),
@@ -248,6 +251,49 @@ impl firewall::FirewallDriver for Nftables {
                         op: stmt::Operator::IN,
                     }),
                     stmt::Statement::Drop(None),
+                ]),
+            ));
+        }
+
+        let match_dnat_mask = |r: &schema::Rule| -> bool {
+            // Match on any rule that matches against DNAT_MASK
+            for statement in r.expr.deref() {
+                match statement {
+                    stmt::Statement::Match(m) => match &m.right {
+                        expr::Expression::Number(n) => {
+                            if *n == DNAT_MASK {
+                                return true;
+                            }
+                        }
+                        _ => continue,
+                    },
+                    _ => continue,
+                }
+            }
+            false
+        };
+
+        if get_matching_rules_in_chain(&existing_rules, FORWARDCHAIN, match_dnat_mask).is_empty() {
+            // Ensure we allow the DNAT packets before we consult the isolation chains
+            // Forward: ct mark & 0x1000 == 0x1000 accept
+            batch.add(make_rule(
+                Cow::Borrowed(FORWARDCHAIN),
+                Cow::Owned(vec![
+                    stmt::Statement::Match(stmt::Match {
+                        left: expr::Expression::BinaryOperation(Box::new(
+                            expr::BinaryOperation::AND(
+                                expr::Expression::Named(expr::NamedExpression::CT(expr::CT {
+                                    key: CT_MARK_NAME,
+                                    family: None,
+                                    dir: None,
+                                })),
+                                expr::Expression::Number(DNAT_MASK),
+                            ),
+                        )),
+                        right: expr::Expression::Number(DNAT_MASK),
+                        op: stmt::Operator::EQ,
+                    }),
+                    stmt::Statement::Accept(None),
                 ]),
             ));
         }
@@ -1038,6 +1084,19 @@ fn get_dnat_port_rules<'a>(
             )),
             right: expr::Expression::Number(host_port),
             op: stmt::Operator::EQ,
+        }));
+        statements.push(stmt::Statement::Mangle(stmt::Mangle {
+            key: expr::Expression::Named(expr::NamedExpression::CT(expr::CT {
+                key: CT_MARK_NAME,
+                family: None,
+                dir: None,
+            })),
+            value: expr::Expression::BinaryOperation(Box::new(expr::BinaryOperation::OR(vec![
+                expr::Expression::Named(expr::NamedExpression::Meta(expr::Meta {
+                    key: expr::MetaKey::Mark,
+                })),
+                expr::Expression::Number(DNAT_MASK),
+            ]))),
         }));
         statements.push(stmt::Statement::DNAT(Some(stmt::NAT {
             addr: Some(expr::Expression::String(Cow::Owned(ip.to_string()))),

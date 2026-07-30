@@ -80,7 +80,8 @@ export NETAVARK_FW=nftables
     # check FORWARD rules
     run_in_host_netns nft list chain inet netavark FORWARD
     assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
-    assert "${#lines[@]}" = 7 "too many FORWARD rules after teardown"
+    assert "${lines[4]}" =~ "ct mark & 0x00001000 == 0x00001000 accept" "accept dnat traffic"
+    assert "${#lines[@]}" = 8 "too many FORWARD rules after teardown"
 
     # check POSTROUTING rules
     run_in_host_netns nft list chain inet netavark POSTROUTING
@@ -744,7 +745,7 @@ EOF
 
     # check nftables FORWARD chain
     run_in_host_netns nft list chain inet netavark FORWARD
-    assert "${lines[4]}" =~ "jump NETAVARK-ISOLATION-1" "forward chain jumps to ISOLATION1"
+    assert "${lines[5]}" =~ "jump NETAVARK-ISOLATION-1" "forward chain jumps to ISOLATION1"
 
     # check nftables NETAVARK-ISOLATION-2 chain
     run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-2
@@ -827,6 +828,21 @@ EOF
     expected_rc=1 run_in_container_netns 3 ping -w 1 -c 1 fd99::2
     # from network isolate4 to isolate3
     expected_rc=1 run_in_container_netns 3 ping -w 1 -c 1 fd92::2
+
+    # verify we can do port forwarding across isoalted networks
+    for proto in tcp udp sctp; do
+        if [[ "$proto" == "sctp" ]]; then
+            # if sctp is not aviable skip that protocol
+            modprobe sctp || continue
+        fi
+
+        data=$(random_string)
+        run_in_container_netns 1 $NETAVARK_CONNECTION_TESTER --$proto "$(get_container_netns_path 3)" "10.89.0.1:8080" 80 <<<"$data"
+        assert "${lines[1]}" == "Message: $data" "ipv4 ($proto) host port from isolate=true to isloate=strict"
+
+        run_in_container_netns 2 $NETAVARK_CONNECTION_TESTER --$proto "$(get_container_netns_path 3)" "[fd90::1]:8080" 80 <<<"$data"
+        assert "${lines[1]}" == "Message: $data" "ipv6 ($proto) host port from isolate=strict to isloate=strict"
+    done
 
     # create container/network without isolation
 
@@ -1026,10 +1042,10 @@ net/ipv4/conf/podman1/rp_filter = 2"
     # check FORWARD rules
     run_in_host_netns nft list chain inet netavark FORWARD
     assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
-    assert "${lines[4]}" =~ "jump NETAVARK-ISOLATION-1"
-    assert "${lines[5]}" =~ "ip daddr 10.88.0.0/16 ct state established,related accept" "Related,established rule"
-    assert "${lines[6]}" =~ "ip saddr 10.88.0.0/16 accept" "Subnet saddr accept rule"
-    assert "${#lines[@]}" = 9 "too many FORWARD rules"
+    assert "${lines[5]}" =~ "jump NETAVARK-ISOLATION-1"
+    assert "${lines[6]}" =~ "ip daddr 10.88.0.0/16 ct state established,related accept" "Related,established rule"
+    assert "${lines[7]}" =~ "ip saddr 10.88.0.0/16 accept" "Subnet saddr accept rule"
+    assert "${#lines[@]}" = 10 "too many FORWARD rules"
 
     run_netavark teardown $(get_container_netns_path 1) <<<"${configs[1]}"
     # bridge should be removed
@@ -1040,7 +1056,7 @@ net/ipv4/conf/podman1/rp_filter = 2"
 
     run_in_host_netns nft list chain inet netavark FORWARD
     assert "${lines[3]}" =~ "ct state invalid drop" "forward rule 1"
-    assert "${#lines[@]}" = 7 "too many NETAVARK_FORWARD rules"
+    assert "${#lines[@]}" = 8 "too many NETAVARK_FORWARD rules"
 
     run_in_host_netns ip -o link
     assert "${#lines[@]}" == 1 "only loopback adapter"
@@ -1230,7 +1246,7 @@ net/ipv4/conf/podman1/rp_filter = 2"
     # leak without this fix)
     run_in_host_netns nft list chain inet netavark nv_53ce4390_10_88_0_0_nm16
     run_in_host_netns nft list chain inet netavark FORWARD
-    assert "${#lines[@]}" = 9 "FORWARD rules should still exist before teardown"
+    assert "${#lines[@]}" = 10 "FORWARD rules should still exist before teardown"
     run_in_host_netns nft list chain inet netavark POSTROUTING
     assert "${#lines[@]}" = 7 "POSTROUTING rules should still exist before teardown"
     run_in_host_netns ip link show podman0
@@ -1250,7 +1266,7 @@ net/ipv4/conf/podman1/rp_filter = 2"
 
     # FORWARD rules should be back to baseline
     run_in_host_netns nft list chain inet netavark FORWARD
-    assert "${#lines[@]}" = 7 "too many FORWARD rules after teardown with missing netns"
+    assert "${#lines[@]}" = 8 "too many FORWARD rules after teardown with missing netns"
 
     # POSTROUTING rules should be back to baseline
     run_in_host_netns nft list chain inet netavark POSTROUTING
@@ -1277,10 +1293,11 @@ function check_simple_bridge_nftables() {
     # check FORWARD rules
     run_in_host_netns nft list chain inet netavark FORWARD
     assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
-    assert "${lines[4]}" =~ "jump NETAVARK-ISOLATION-1"
-    assert "${lines[5]}" =~ "ip daddr 10.88.0.0/16 ct state established,related accept" "Related,established rule"
-    assert "${lines[6]}" =~ "ip saddr 10.88.0.0/16 accept" "Subnet saddr accept rule"
-    assert "${#lines[@]}" = 9 "too many FORWARD rules"
+    assert "${lines[4]}" =~ "ct mark & 0x00001000 == 0x00001000 accept" "accept dnat traffic"
+    assert "${lines[5]}" =~ "jump NETAVARK-ISOLATION-1"
+    assert "${lines[6]}" =~ "ip daddr 10.88.0.0/16 ct state established,related accept" "Related,established rule"
+    assert "${lines[7]}" =~ "ip saddr 10.88.0.0/16 accept" "Subnet saddr accept rule"
+    assert "${#lines[@]}" = 10 "too many FORWARD rules"
 
     run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-1
     assert "${lines[2]}" =~ "iifname \"podman0\" oifname != \"podman0\" jump NETAVARK-ISOLATION-3" "strict isolation as default chain"
@@ -1296,10 +1313,10 @@ function check_simple_bridge_nftables() {
     # extra check so we can be sure that these rules exists before checking later of they are removed
     assert "$output" =~ "ip saddr 10.88.0.0/16 ip daddr 192.168.188.25 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
     assert "$output" =~ "ip saddr 127.0.0.1 ip daddr 192.168.188.25 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
-    assert "$output" =~ "ip daddr 192.168.188.25 tcp dport 8080 dnat ip to 10.88.0.14:8080"
+    assert "$output" =~ "ip daddr 192.168.188.25 tcp dport 8080 ct mark set meta mark | 0x00001000 dnat ip to 10.88.0.14:8080"
     assert "$output" =~ "ip saddr 10.88.0.0/16 ip daddr 192.168.188.25 udp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
     assert "$output" =~ "ip saddr 127.0.0.1 ip daddr 192.168.188.25 udp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
-    assert "$output" =~ "ip daddr 192.168.188.25 udp dport 8080 dnat ip to 10.88.0.14:8080"
+    assert "$output" =~ "ip daddr 192.168.188.25 udp dport 8080 ct mark set meta mark | 0x00001000 dnat ip to 10.88.0.14:8080"
 
     run_netavark --file ${TESTSDIR}/testfiles/bridge-port-tcp-udp.json teardown $(get_container_netns_path)
 
@@ -1318,10 +1335,10 @@ function check_simple_bridge_nftables() {
     # extra check so we can be sure that these rules exists before checking later of they are removed
     assert "$output" =~ "ip saddr 10.88.0.0/16 ip daddr 192.168.188.25 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
     assert "$output" =~ "ip saddr 127.0.0.1 ip daddr 192.168.188.25 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
-    assert "$output" =~ "ip daddr 192.168.188.25 tcp dport 8080 dnat ip to 10.88.0.14:8080"
+    assert "$output" =~ "ip daddr 192.168.188.25 tcp dport 8080 ct mark set meta mark | 0x00001000 dnat ip to 10.88.0.14:8080"
     assert "$output" =~ "ip saddr 10.88.0.0/16 ip daddr 192.168.188.24 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
     assert "$output" =~ "ip saddr 127.0.0.1 ip daddr 192.168.188.24 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
-    assert "$output" =~ "ip daddr 192.168.188.24 tcp dport 8080 dnat ip to 10.88.0.14:8080"
+    assert "$output" =~ "ip daddr 192.168.188.24 tcp dport 8080 ct mark set meta mark | 0x00001000 dnat ip to 10.88.0.14:8080"
 
     run_netavark --file ${TESTSDIR}/testfiles/bridge-port-hostip.json teardown $(get_container_netns_path)
 
