@@ -86,7 +86,7 @@ impl Setup {
                     container_hostname: &network_options.container_hostname,
                     container_dns_servers: &network_options.dns_servers,
                     netns_host: hostns.file.as_fd(),
-                    netns_container: netns.file.as_fd(),
+                    netns_container: Some(netns.file.as_fd()),
                     netns_path: &self.network_namespace_path,
                     network,
                     per_network_opts,
@@ -175,7 +175,7 @@ fn teardown_drivers<'a, I>(
     I: Iterator<Item = &'a Box<dyn NetworkDriver + 'a>>,
 {
     for driver in drivers {
-        if let Err(e) = driver.teardown((host, netns)) {
+        if let Err(e) = driver.teardown((host, Some(netns))) {
             error!(
                 "failed to cleanup network {} after setup failed: {}",
                 driver.network_name(),

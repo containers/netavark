@@ -23,7 +23,7 @@ pub struct DriverInfo<'a> {
     pub container_name: &'a String,
     pub container_dns_servers: &'a Option<Vec<IpAddr>>,
     pub netns_host: BorrowedFd<'a>,
-    pub netns_container: BorrowedFd<'a>,
+    pub netns_container: Option<BorrowedFd<'a>>,
     pub netns_path: &'a str,
     pub network: &'a Network,
     pub per_network_opts: &'a PerNetworkOptions,
@@ -45,7 +45,7 @@ pub trait NetworkDriver {
     /// teardown the network interfaces/firewall rules for this driver
     fn teardown(
         &self,
-        netlink_sockets: (&mut Socket<NetlinkRoute>, &mut Socket<NetlinkRoute>),
+        netlink_sockets: (&mut Socket<NetlinkRoute>, Option<&mut Socket<NetlinkRoute>>),
     ) -> NetavarkResult<()>;
 
     /// return the network name

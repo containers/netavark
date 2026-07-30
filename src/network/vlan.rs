@@ -166,7 +166,9 @@ impl driver::NetworkDriver for Vlan<'_> {
             &self.info.per_network_opts.interface_name,
             data,
             self.info.netns_host,
-            self.info.netns_container,
+            self.info
+                .netns_container
+                .expect("netns_container required for setup"),
             &data.kind,
         )?;
 
@@ -218,16 +220,21 @@ impl driver::NetworkDriver for Vlan<'_> {
 
     fn teardown(
         &self,
-        netlink_sockets: (&mut Socket<NetlinkRoute>, &mut Socket<NetlinkRoute>),
+        netlink_sockets: (&mut Socket<NetlinkRoute>, Option<&mut Socket<NetlinkRoute>>),
     ) -> NetavarkResult<()> {
-        dhcp_teardown(&self.info, netlink_sockets.1)?;
+        let netns_sock = match netlink_sockets.1 {
+            Some(s) => s,
+            None => return Ok(()),
+        };
+
+        dhcp_teardown(&self.info, netns_sock)?;
 
         let routes = core_utils::create_route_list(&self.info.network.routes)?;
         for route in routes.iter() {
-            netlink_sockets.1.del_route(route)?;
+            netns_sock.del_route(route)?;
         }
 
-        netlink_sockets.1.del_link(LinkID::Name(
+        netns_sock.del_link(LinkID::Name(
             self.info.per_network_opts.interface_name.to_string(),
         ))?;
         Ok(())
