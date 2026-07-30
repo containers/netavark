@@ -25,8 +25,8 @@ use crate::{
 use ipnet::IpNet;
 use log::{debug, error};
 use netlink_packet_route::link::{
-    BridgeVlanInfoFlags, InfoBridge, InfoData, InfoKind, InfoVeth, LinkAttribute, LinkInfo,
-    LinkMessage,
+    BridgeVlanInfoFlags, InfoBridge, InfoData, InfoKind, InfoVeth, InfoVlan, LinkAttribute,
+    LinkInfo, LinkMessage, VlanProtocol,
 };
 use netlink_packet_route::AddressFamily;
 use netlink_packet_route::{
@@ -52,6 +52,7 @@ use super::{
 };
 
 const NO_BRIDGE_NAME_ERROR: &str = "no bridge interface name given";
+const IFACE_NAME_MAX: usize = libc::IFNAMSIZ - 1;
 
 #[derive(Clone, Copy, PartialEq)]
 enum BridgeMode {
@@ -105,6 +106,8 @@ struct CreateInterfacesResult {
     sysctl_writer: Option<sysctl::SysctlDWriter<'static, String, String>>,
     /// The interface index of the bridge.
     bridge_index: u32,
+    /// VLAN protocol configured on the bridge.
+    bridge_vlan_protocol: VlanProtocol,
 }
 
 impl<'a> Bridge<'a> {
@@ -207,6 +210,7 @@ impl driver::NetworkDriver for Bridge<'_> {
             mac_address: container_veth_mac,
             sysctl_writer,
             bridge_index,
+            bridge_vlan_protocol,
         } = create_interfaces(
             host_sock,
             netns_sock,
@@ -230,8 +234,10 @@ impl driver::NetworkDriver for Bridge<'_> {
         // a dhcp lease.  it will also perform the IP address assignment
         // to the container interface.
         let subnets = if data.ipam.dhcp_enabled {
+            let dhcp_host_interface_name =
+                get_dhcp_host_interface(host_sock, data, bridge_index, bridge_vlan_protocol)?;
             let (subnets, dns_servers, domain_name) = get_dhcp_lease(
-                &data.bridge_interface_name,
+                &dhcp_host_interface_name,
                 &data.container_interface_name,
                 self.info.netns_path,
                 &container_veth_mac,
@@ -663,11 +669,11 @@ fn create_interfaces(
     netns_fd: BorrowedFd<'_>,
 ) -> NetavarkResult<CreateInterfacesResult> {
     let mut sysctl_writer = None;
-    let (bridge_index, mtu, mac) = match host
+    let (bridge_index, mtu, mac, bridge_vlan_protocol) = match host
         .get_link(LinkID::Name(data.bridge_interface_name.to_string()))
     {
         Ok(bridge) => {
-            let (bridge_index, mtu) = validate_bridge_link(
+            let (bridge_index, mtu, bridge_vlan_protocol) = validate_bridge_link(
                 bridge,
                 data.vlan.is_some(),
                 host,
@@ -677,6 +683,7 @@ fn create_interfaces(
                 bridge_index,
                 if data.mtu == 0 { mtu } else { data.mtu },
                 None,
+                bridge_vlan_protocol,
             )
         }
         Err(err) => match err.unwrap() {
@@ -827,7 +834,7 @@ fn create_interfaces(
                 host.set_up(LinkID::ID(link.header.index))
                     .wrap("set bridge up")?;
 
-                (link.header.index, mtu, mac)
+                (link.header.index, mtu, mac, VlanProtocol::Ieee8021Q)
             }
             _ => return Err(err),
         },
@@ -848,6 +855,7 @@ fn create_interfaces(
         mac_address: mac,
         sysctl_writer,
         bridge_index,
+        bridge_vlan_protocol,
     })
 }
 
@@ -998,6 +1006,151 @@ fn create_veth_pair<'fd>(
     Ok(mac)
 }
 
+fn get_dhcp_host_interface(
+    host: &mut Socket<NetlinkRoute>,
+    data: &InternalData,
+    bridge_index: u32,
+    bridge_vlan_protocol: VlanProtocol,
+) -> NetavarkResult<String> {
+    if data.mode == BridgeMode::Unmanaged {
+        if let Some(vid) = data.vlan {
+            return ensure_unmanaged_vlan_dhcp_interface(
+                host,
+                &data.bridge_interface_name,
+                bridge_index,
+                vid,
+                bridge_vlan_protocol,
+            );
+        }
+    }
+
+    Ok(data.bridge_interface_name.clone())
+}
+
+fn ensure_unmanaged_vlan_dhcp_interface(
+    host: &mut Socket<NetlinkRoute>,
+    bridge_name: &str,
+    bridge_index: u32,
+    vid: u16,
+    vlan_protocol: VlanProtocol,
+) -> NetavarkResult<String> {
+    let dhcp_iface = bridge_vlan_dhcp_interface_name(bridge_name, bridge_index, vid);
+
+    match host.get_link(LinkID::Name(dhcp_iface.clone())) {
+        Ok(link) => validate_vlan_interface(
+            &link,
+            &dhcp_iface,
+            bridge_name,
+            bridge_index,
+            vid,
+            vlan_protocol,
+        )?,
+        Err(err) if netlink_errno_is(&err, libc::ENODEV) => {
+            let mut create_link_opts = CreateLinkOptions::new(dhcp_iface.clone(), InfoKind::Vlan);
+            create_link_opts.link = bridge_index;
+            create_link_opts.info_data = Some(InfoData::Vlan(vec![
+                InfoVlan::Id(vid),
+                InfoVlan::Protocol(vlan_protocol),
+            ]));
+
+            match host.create_link(create_link_opts) {
+                Ok(()) => {}
+                // Another container can create this shared interface after our lookup.
+                Err(err) if netlink_errno_is(&err, libc::EEXIST) => {
+                    let link = host
+                        .get_link(LinkID::Name(dhcp_iface.clone()))
+                        .wrap(format!("get VLAN interface {dhcp_iface} for DHCP"))?;
+                    validate_vlan_interface(
+                        &link,
+                        &dhcp_iface,
+                        bridge_name,
+                        bridge_index,
+                        vid,
+                        vlan_protocol,
+                    )?;
+                }
+                Err(err) => {
+                    return Err(err).wrap(format!("create VLAN interface {dhcp_iface} for DHCP"));
+                }
+            }
+        }
+        Err(err) => {
+            return Err(err).wrap(format!("get VLAN interface {dhcp_iface} for DHCP"));
+        }
+    }
+
+    host.set_up(LinkID::Name(dhcp_iface.clone()))
+        .wrap(format!("set VLAN interface {dhcp_iface} up"))?;
+
+    // The DHCP proxy keeps using this interface for lease renewal. It is shared
+    // by all containers on the same bridge/VLAN and is removed by the kernel
+    // when its unmanaged lower bridge is removed.
+    Ok(dhcp_iface)
+}
+
+fn bridge_vlan_dhcp_interface_name(bridge_name: &str, bridge_index: u32, vid: u16) -> String {
+    let name = format!("{bridge_name}.{vid}");
+    if name.len() <= IFACE_NAME_MAX {
+        return name;
+    }
+
+    format!("nv{bridge_index:x}.{vid}")
+}
+
+fn validate_vlan_interface(
+    link: &LinkMessage,
+    iface_name: &str,
+    bridge_name: &str,
+    bridge_index: u32,
+    vid: u16,
+    expected_protocol: VlanProtocol,
+) -> NetavarkResult<()> {
+    let mut is_vlan = false;
+    let mut vlan_id = None;
+    let mut vlan_protocol = VlanProtocol::default();
+    let mut parent_index = None;
+
+    for attr in link.attributes.iter() {
+        match attr {
+            LinkAttribute::Link(link) => parent_index = Some(*link),
+            LinkAttribute::LinkInfo(info) => {
+                for link_info in info.iter() {
+                    match link_info {
+                        LinkInfo::Kind(InfoKind::Vlan) => is_vlan = true,
+                        LinkInfo::Data(InfoData::Vlan(vlan_info)) => {
+                            for info in vlan_info {
+                                match info {
+                                    InfoVlan::Id(id) => vlan_id = Some(*id),
+                                    InfoVlan::Protocol(protocol) => vlan_protocol = *protocol,
+                                    _ => {}
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if is_vlan
+        && vlan_id == Some(vid)
+        && vlan_protocol == expected_protocol
+        && parent_index == Some(bridge_index)
+    {
+        return Ok(());
+    }
+
+    Err(NetavarkError::msg(format!(
+        "VLAN interface {iface_name} already exists but is not {expected_protocol} VLAN {vid} on bridge {bridge_name}"
+    )))
+}
+
+fn netlink_errno_is(err: &NetavarkError, errno: i32) -> bool {
+    matches!(err.unwrap(), NetavarkError::Netlink(e) if -e.raw_code() == errno)
+}
+
 /// Make sure the LinkMessage is of type bridge and if vlan is set also checks
 /// that the bridge has vlan_filtering enabled and if not enables it. Returns
 /// the link id or errors when the link is not a bridge.
@@ -1006,9 +1159,10 @@ fn validate_bridge_link(
     vlan: bool,
     netlink: &mut Socket<NetlinkRoute>,
     br_name: &str,
-) -> NetavarkResult<(u32, u32)> {
+) -> NetavarkResult<(u32, u32, VlanProtocol)> {
     let mut mtu: u32 = 0;
     let mut header_index: u32 = 0;
+    let mut vlan_protocol = VlanProtocol::default();
     for nla in msg.attributes.iter() {
         if let LinkAttribute::Mtu(m) = nla {
             mtu = *m;
@@ -1020,6 +1174,16 @@ fn validate_bridge_link(
                     if let LinkInfo::Data(data) = inf {
                         match data {
                             InfoData::Bridge(vec) => {
+                                vlan_protocol = vec
+                                    .iter()
+                                    .find_map(|a| {
+                                        if let InfoBridge::VlanProtocol(protocol) = a {
+                                            Some(*protocol)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .unwrap_or_default();
                                 // set the return value here based on the VlanFiltering state
                                 let vlan_enabled = vec
                                     .iter()
@@ -1063,7 +1227,7 @@ fn validate_bridge_link(
     }
 
     if header_index != 0 {
-        return Ok((header_index, mtu));
+        return Ok((header_index, mtu, vlan_protocol));
     }
 
     Err(NetavarkError::Message(format!(
