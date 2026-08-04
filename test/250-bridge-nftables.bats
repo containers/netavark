@@ -1416,3 +1416,13 @@ EOF
     PATH="$NETAVARK_TMPDIR:$PATH" expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
     assert_json ".error" 'nftables error: "nft" did not return successfully while getting the current ruleset: nft custom error message' "error message from nft is included"
 }
+
+@test "$fw_driver - dns server matching gateway is rejected" {
+    expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-dns-loop.json \
+        setup $(get_container_netns_path)
+    assert "$output" =~ "would cause aardvark-dns to forward queries to itself" "dns loop rejected"
+
+    # the check runs before any entries are written, so no aardvark config
+    run_helper ls "$NETAVARK_TMPDIR/config/aardvark-dns"
+    assert "$output" == "" "no aardvark entries written on rejection"
+}

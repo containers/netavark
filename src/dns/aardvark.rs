@@ -5,6 +5,7 @@ use fs2::FileExt;
 use libc::pid_t;
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
+use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::fs::File;
@@ -353,8 +354,43 @@ impl Aardvark {
         Ok(())
     }
 
+    fn check_for_dns_loop(entries: &[AardvarkEntry]) -> NetavarkResult<()> {
+        let mut gateway_owners: HashMap<IpAddr, &str> = HashMap::new();
+        for entry in entries {
+            for gw in &entry.network_gateways {
+                gateway_owners.entry(*gw).or_insert(entry.network_name);
+            }
+        }
+
+        for entry in entries {
+            if let Some(dns_servers) = entry.container_dns_servers {
+                for dns in dns_servers {
+                    if let Some(owner) = gateway_owners.get(dns) {
+                        return Err(NetavarkError::msg(format!(
+                            "DNS server {dns} is the gateway of network {owner:?}; \
+                            using it would cause aardvark-dns to forward queries to itself."
+                        )));
+                    }
+                }
+            }
+
+            if let Some(net_dns) = entry.network_dns_servers {
+                for dns in net_dns {
+                    if let Some(owner) = gateway_owners.get(dns) {
+                        return Err(NetavarkError::msg(format!(
+                            "network DNS server {dns} matches the gateway of network {owner:?}; \
+                            using it would cause aardvark-dns to forward queries to itself."
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn commit_netavark_entries(&self, entries: Vec<AardvarkEntry>) -> NetavarkResult<()> {
         if !entries.is_empty() {
+            Aardvark::check_for_dns_loop(&entries)?;
             self.commit_entries(&entries)?;
             match self.notify(true, false) {
                 Ok(_) => (),
@@ -493,5 +529,102 @@ where
     for el in iter {
         buf.push(',');
         buf.push_str(el.as_ref());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+    fn make_entry<'a>(
+        network_name: &'a str,
+        gateways: Vec<IpAddr>,
+        container_dns: &'a Option<Vec<IpAddr>>,
+        network_dns: &'a Option<Vec<IpAddr>>,
+    ) -> AardvarkEntry<'a> {
+        AardvarkEntry {
+            network_name,
+            network_gateways: gateways,
+            network_dns_servers: network_dns,
+            container_id: SafeString::try_from("test-container").unwrap(),
+            container_ips_v4: vec![Ipv4Addr::new(10, 89, 0, 2)],
+            container_ips_v6: vec![],
+            container_names: vec![SafeString::try_from("test").unwrap()],
+            container_dns_servers: container_dns,
+            is_internal: false,
+        }
+    }
+
+    #[test]
+    fn dns_loop_container_dns_matches_gateway() {
+        let gateway = IpAddr::V4(Ipv4Addr::new(10, 89, 0, 1));
+        let container_dns = Some(vec![gateway]);
+        let entries = vec![make_entry("testnet", vec![gateway], &container_dns, &None)];
+        assert!(Aardvark::check_for_dns_loop(&entries).is_err());
+    }
+
+    #[test]
+    fn dns_loop_no_overlap() {
+        let container_dns = Some(vec![IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))]);
+        let entries = vec![make_entry(
+            "testnet",
+            vec![IpAddr::V4(Ipv4Addr::new(10, 89, 0, 1))],
+            &container_dns,
+            &None,
+        )];
+        assert!(Aardvark::check_for_dns_loop(&entries).is_ok());
+    }
+
+    #[test]
+    fn dns_loop_container_dns_matches_gateway_v6() {
+        let gateway = IpAddr::V6(Ipv6Addr::new(0xfd10, 0x88, 0xa, 0, 0, 0, 0, 1));
+        let container_dns = Some(vec![gateway]);
+        let entries = vec![make_entry("testnet", vec![gateway], &container_dns, &None)];
+        assert!(Aardvark::check_for_dns_loop(&entries).is_err());
+    }
+
+    #[test]
+    fn dns_loop_no_overlap_v6() {
+        let container_dns = Some(vec![IpAddr::V6(Ipv6Addr::new(
+            0x2001, 0x4860, 0x4860, 0, 0, 0, 0, 0x8888,
+        ))]);
+        let entries = vec![make_entry(
+            "testnet",
+            vec![IpAddr::V6(Ipv6Addr::new(0xfd10, 0x88, 0xa, 0, 0, 0, 0, 1))],
+            &container_dns,
+            &None,
+        )];
+        assert!(Aardvark::check_for_dns_loop(&entries).is_ok());
+    }
+
+    #[test]
+    fn dns_loop_reports_owning_network_across_multiple_networks() {
+        let gw_a = IpAddr::V4(Ipv4Addr::new(10, 89, 0, 1));
+        let gw_b = IpAddr::V4(Ipv4Addr::new(10, 89, 1, 1));
+        // container's DNS points at net-b's gateway
+        let container_dns = Some(vec![gw_b]);
+        let entries = vec![
+            make_entry("net-a", vec![gw_a], &container_dns, &None),
+            make_entry("net-b", vec![gw_b], &None, &None),
+        ];
+        let err = Aardvark::check_for_dns_loop(&entries).unwrap_err();
+        assert!(
+            err.to_string().contains("net-b"),
+            "error should name the network that owns the gateway, got: {err}"
+        );
+    }
+
+    #[test]
+    fn dns_loop_network_dns_matches_gateway() {
+        let gateway = IpAddr::V4(Ipv4Addr::new(10, 89, 0, 1));
+        let network_dns = Some(vec![gateway]);
+        let entries = vec![make_entry("testnet", vec![gateway], &None, &network_dns)];
+        assert!(Aardvark::check_for_dns_loop(&entries).is_err());
+    }
+
+    #[test]
+    fn dns_loop_empty_entries_ok() {
+        assert!(Aardvark::check_for_dns_loop(&[]).is_ok());
     }
 }
