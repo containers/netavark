@@ -457,29 +457,20 @@ impl<'a> Bridge<'a> {
             }
         };
 
+        // 1. Check if the bridge is empty and should be removed.
+        // We capture the bridge index so we can delete it LATER.
+        let mut bridge_index = None;
         let complete_teardown = match host
-            .get_link(LinkID::Name(bridge_name.to_string()))
+            .get_link(LinkID::Name(bridge_name.clone()))
             .wrap("failed to get bridge interface")
         {
             Ok(br) => {
+                bridge_index = Some(br.header.index);
                 match host
                     .dump_links(&mut vec![LinkAttribute::Controller(br.header.index)])
                     .wrap("failed to get connected bridge interfaces")
                 {
-                    Ok(links) if links.is_empty() && matches!(mode, BridgeMode::Managed) => {
-                        log::info!("removing bridge {bridge_name}");
-                        match host
-                            .del_link(LinkID::ID(br.header.index))
-                            .wrap(format!("failed to delete bridge {bridge_name}"))
-                        {
-                            Ok(_) => true,
-                            Err(err) => {
-                                error_list.push(err);
-                                false
-                            }
-                        }
-                    }
-                    Ok(_) => false,
+                    Ok(links) => links.is_empty() && matches!(mode, BridgeMode::Managed),
                     Err(err) => {
                         error_list.push(err);
                         false
@@ -492,7 +483,15 @@ impl<'a> Bridge<'a> {
             }
         };
 
+        // 2. Tear down firewall & sysctl FIRST (while routes still exist)
         if !self.info.network.internal && mode == BridgeMode::Managed {
+            match self.teardown_firewall(complete_teardown, bridge_name.clone()) {
+                Ok(_) => {}
+                Err(err) => {
+                    error_list.push(err);
+                }
+            }
+
             if complete_teardown {
                 // delete sysctl file as well
                 let path = sysctl::get_bridge_sysctl_d_path(&bridge_name);
@@ -505,10 +504,16 @@ impl<'a> Bridge<'a> {
                     }
                 }
             }
+        }
 
-            match self.teardown_firewall(complete_teardown, bridge_name) {
-                Ok(_) => {}
-                Err(err) => {
+        // 3. Delete the bridge interface LAST
+        if complete_teardown {
+            if let Some(idx) = bridge_index {
+                log::info!("removing bridge {bridge_name}");
+                if let Err(err) = host
+                    .del_link(LinkID::ID(idx))
+                    .wrap(format!("failed to delete bridge {bridge_name}"))
+                {
                     error_list.push(err);
                 }
             }
