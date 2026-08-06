@@ -88,6 +88,7 @@ jobs:
     trigger: pull_request
     identifier: integration-fedora
     packages: [netavark-fedora]
+    skip_missing_branched_composes: true
     targets: *fedora_copr_targets
     tmt_plan: "/plans/integration"
     tf_extra_params: &tf_extra_params_fedora
@@ -132,6 +133,7 @@ jobs:
     trigger: pull_request
     identifier: podman-fedora
     packages: [netavark-fedora]
+    skip_missing_branched_composes: true
     targets: *fedora_copr_targets
     tmt_plan: "/plans/podman"
     tf_extra_params: *tf_extra_params_fedora
@@ -156,6 +158,7 @@ jobs:
     update_release: false
     dist_git_branches:
       - fedora-rawhide
+      - fedora-45
 
   # Sync to CentOS Stream
   - job: propose_downstream
