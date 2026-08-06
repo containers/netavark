@@ -38,6 +38,10 @@ impl firewall::FirewallDriver for FirewallD {
         network_setup: internal_types::SetupNetwork,
         _dbus_con: &Option<Connection>,
     ) -> NetavarkResult<()> {
+        if network_setup.internal {
+            return Ok(());
+        }
+
         let mut need_reload = false;
 
         need_reload |= match create_zone_if_not_exist(&self.conn, ZONENAME) {
@@ -141,6 +145,9 @@ impl firewall::FirewallDriver for FirewallD {
     }
 
     fn teardown_network(&self, tear: TearDownNetwork) -> NetavarkResult<()> {
+        if tear.config.internal {
+            return Ok(());
+        }
         if !tear.complete_teardown {
             return Ok(());
         }
@@ -172,6 +179,10 @@ impl firewall::FirewallDriver for FirewallD {
         // Because of Podman's locking, this should be safe in the typical
         // case.
         // I don't think there's a safer way, unfortunately.
+
+        if setup_portfw.internal {
+            return Ok(());
+        }
 
         let sig_ssss = match Signature::try_from("(ssss)") {
             Ok(s) => s,
@@ -377,6 +388,10 @@ impl firewall::FirewallDriver for FirewallD {
     }
 
     fn teardown_port_forward(&self, teardown_pf: TeardownPortForward) -> NetavarkResult<()> {
+        if teardown_pf.config.internal {
+            return Ok(());
+        }
+
         // Get the current configuration for the policy
         let policy_config = get_policy_config(&self.conn, PORTPOLICYNAME.to_string())?;
         let localhost_policy_config = get_policy_config(&self.conn, HOSTFWDPOLICYNAME.to_string())?;

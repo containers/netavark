@@ -1426,3 +1426,115 @@ EOF
     run_helper ls "$NETAVARK_TMPDIR/config/aardvark-dns"
     assert "$output" == "" "no aardvark entries written on rejection"
 }
+
+# https://github.com/containers/netavark/issues/1055
+@test "$fw_driver - internal network dns with default drop policy" {
+    run_netavark --file ${TESTSDIR}/testfiles/internal-dns.json setup $(get_container_netns_path)
+
+    # internal networks get ONLY the DNS input accept rules, no routing/NAT rules
+
+    # INPUT: base chain + one DNS accept per subnet (v4, v6), nothing else
+    run_in_host_netns nft list chain inet netavark INPUT
+    assert "${lines[3]}" =~ "ip saddr 10.89.3.0/24 meta l4proto \{ tcp, udp \} th dport 53 accept" "ipv4 DNS accept rule"
+    assert "${lines[4]}" =~ "ip6 saddr fd10:88:a::/64 meta l4proto \{ tcp, udp \} th dport 53 accept" "ipv6 DNS accept rule"
+    assert "${#lines[@]}" = 7 "only DNS accept rules in INPUT chain"
+
+    # per-subnet chains must be empty: no daddr accept, no masquerade/SNAT
+    run_in_host_netns nft list chain inet netavark nv_ec79dd0c_10_89_3_0_nm24
+    assert "${#lines[@]}" = 4 "ipv4 subnet chain is empty for internal network"
+    run_in_host_netns nft list chain inet netavark nv_ec79dd0c_fd10-88-a--_nm64
+    assert "${#lines[@]}" = 4 "ipv6 subnet chain is empty for internal network"
+
+    # FORWARD: only base rules, no per-network accept rules
+    run_in_host_netns nft list chain inet netavark FORWARD
+    assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
+    assert "${lines[4]}" =~ "ct mark & 0x00001000 == 0x00001000 accept" "accept dnat traffic"
+    assert "${lines[5]}" =~ "jump NETAVARK-ISOLATION-1" "jump to isolation chain"
+    assert "${#lines[@]}" = 8 "no per-network FORWARD rules for internal network"
+
+    # POSTROUTING: only the base mark-masquerade rule, no per-network jump
+    run_in_host_netns nft list chain inet netavark POSTROUTING
+    assert "${lines[3]}" =~ "meta mark & 0x00002000 == 0x00002000 masquerade" "Mark-masquerade rule"
+    assert "${#lines[@]}" = 6 "no per-network POSTROUTING rule for internal network"
+
+    # a port is published, but internal networks must skip container port-forwarding
+    # (and there is no DNS redirect on the default port), so the chain stays empty
+    run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
+    assert "${#lines[@]}" = 4 "no port-forwarding rules for internal network"
+
+    # internal isolation is still enforced: no default route
+    run_in_container_netns ip route show
+    assert "$output" "!~" "default" "No default route for internal networks"
+    run_in_container_netns ip -6 route show
+    assert "$output" "!~" "default" "No default route for internal networks (ipv6)"
+
+    # enforce a default drop policy and make sure DNS still resolves
+    run_in_host_netns nft add chain inet netavark INPUT \{ type filter hook input priority 0 \; policy drop \; \}
+    run_in_host_netns nft add rule inet netavark INPUT ct state related,established accept
+    run_in_host_netns nft add rule inet netavark INPUT meta l4proto ipv6-icmp accept
+
+    run_in_container_netns dig +short "somename.dns.podman" @10.89.3.1 A "somename.dns.podman" @10.89.3.1 AAAA
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv4 dns resolution works 1/2"
+    assert "${lines[1]}" =~ "fd10:88:a::2" "ipv6 dns resolution works 2/2"
+
+    run_in_container_netns dig +short "somename.dns.podman" @fd10:88:a::1
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv6 dns resolution works"
+
+    run_netavark --file ${TESTSDIR}/testfiles/internal-dns.json teardown $(get_container_netns_path)
+}
+
+# https://github.com/containers/netavark/issues/1051
+@test "$fw_driver - internal network dns with default drop policy and non-default dns port" {
+    dns_port=$((RANDOM+10000))
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/internal-dns.json setup $(get_container_netns_path)
+
+    # the DNS redirect (dport 53 -> dns_port) is created even for internal networks,
+    # but the published container port is still skipped: only the two DNS rules exist
+    run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
+    assert "${lines[2]}" =~ "ip6 daddr fd10:88:a::1 meta l4proto \{ tcp, udp \} th dport 53 dnat ip6 to \[fd10:88:a::1\]:$dns_port" "DNS redirect rule ip6"
+    assert "${lines[3]}" =~ "ip daddr 10.89.3.1 meta l4proto \{ tcp, udp \} th dport 53 dnat ip to 10.89.3.1:$dns_port" "DNS redirect rule ip4"
+    assert "${#lines[@]}" = 6 "only the DNS redirect rules, no container port-forwarding"
+
+    # everything else is identical to the default-port case: only DNS rules, no routing/NAT
+
+    # INPUT: base chain + one DNS accept per subnet (v4, v6), nothing else
+    run_in_host_netns nft list chain inet netavark INPUT
+    assert "${lines[3]}" =~ "ip saddr 10.89.3.0/24 meta l4proto \{ tcp, udp \} th dport 53 accept" "ipv4 DNS accept rule"
+    assert "${lines[4]}" =~ "ip6 saddr fd10:88:a::/64 meta l4proto \{ tcp, udp \} th dport 53 accept" "ipv6 DNS accept rule"
+    assert "${#lines[@]}" = 7 "only DNS accept rules in INPUT chain"
+
+    # per-subnet chains must be empty: no daddr accept, no masquerade/SNAT
+    run_in_host_netns nft list chain inet netavark nv_ec79dd0c_10_89_3_0_nm24
+    assert "${#lines[@]}" = 4 "ipv4 subnet chain is empty for internal network"
+    run_in_host_netns nft list chain inet netavark nv_ec79dd0c_fd10-88-a--_nm64
+    assert "${#lines[@]}" = 4 "ipv6 subnet chain is empty for internal network"
+
+    # FORWARD: only base rules, no per-network accept rules
+    run_in_host_netns nft list chain inet netavark FORWARD
+    assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
+    assert "${lines[4]}" =~ "ct mark & 0x00001000 == 0x00001000 accept" "accept dnat traffic"
+    assert "${lines[5]}" =~ "jump NETAVARK-ISOLATION-1" "jump to isolation chain"
+    assert "${#lines[@]}" = 8 "no per-network FORWARD rules for internal network"
+
+    # POSTROUTING: only the base mark-masquerade rule, no per-network jump
+    run_in_host_netns nft list chain inet netavark POSTROUTING
+    assert "${lines[3]}" =~ "meta mark & 0x00002000 == 0x00002000 masquerade" "Mark-masquerade rule"
+    assert "${#lines[@]}" = 6 "no per-network POSTROUTING rule for internal network"
+
+    # after the redirect DNS arrives on dns_port, so accept that under the drop policy
+    run_in_host_netns nft add chain inet netavark INPUT \{ type filter hook input priority 0 \; policy drop \; \}
+    run_in_host_netns nft add rule inet netavark INPUT ip saddr 10.89.3.0/24 meta l4proto \{ tcp, udp \} th dport $dns_port accept
+    run_in_host_netns nft add rule inet netavark INPUT ip6 saddr fd10:88:a::/64 meta l4proto \{ tcp, udp \} th dport $dns_port accept
+    run_in_host_netns nft add rule inet netavark INPUT ct state related,established accept
+    run_in_host_netns nft add rule inet netavark INPUT meta l4proto ipv6-icmp accept
+
+    run_in_container_netns dig +short "somename.dns.podman" @10.89.3.1 A "somename.dns.podman" @10.89.3.1 AAAA
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv4 dns resolution works 1/2"
+    assert "${lines[1]}" =~ "fd10:88:a::2" "ipv6 dns resolution works 2/2"
+
+    run_in_container_netns dig +short "somename.dns.podman" @fd10:88:a::1
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv6 dns resolution works"
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/internal-dns.json teardown $(get_container_netns_path)
+}

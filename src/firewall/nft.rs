@@ -417,100 +417,107 @@ impl firewall::FirewallDriver for Nftables {
                 }
 
                 log::info!("Creating container chain {chain}");
+
                 // We don't. Make one.
                 batch.add(make_basic_chain(chain.clone()));
 
-                // Subnet chain: ip daddr <subnet> accept
-                batch.add(make_rule(
-                    chain.clone(),
-                    Cow::Owned(vec![
-                        get_subnet_match(&subnet, "daddr", stmt::Operator::EQ),
-                        stmt::Statement::Accept(None),
-                    ]),
-                ));
+                if !network_setup.internal {
+                    // Subnet chain: ip daddr <subnet> accept
+                    batch.add(make_rule(
+                        chain.clone(),
+                        Cow::Owned(vec![
+                            get_subnet_match(&subnet, "daddr", stmt::Operator::EQ),
+                            stmt::Statement::Accept(None),
+                        ]),
+                    ));
 
-                // Subnet chain: ip daddr != 224.0.0.0/4 snat/masquerade
-                let multicast_address: IpNet = match subnet {
-                    IpNet::V4(_) => MULTICAST_NET_V4.parse()?,
-                    IpNet::V6(_) => MULTICAST_NET_V6.parse()?,
-                };
+                    // Subnet chain: ip daddr != 224.0.0.0/4 snat/masquerade
+                    let multicast_address: IpNet = match subnet {
+                        IpNet::V4(_) => MULTICAST_NET_V4.parse()?,
+                        IpNet::V6(_) => MULTICAST_NET_V6.parse()?,
+                    };
 
-                // Use appropriate outbound address based on subnet type
-                match subnet {
-                    IpNet::V4(_) => {
-                        if let Some(addr4) = network_setup.outbound_addr4 {
-                            log::trace!("Creating IPv4 SNAT rule with outbound address {addr4}");
-                            batch.add(make_rule(
-                                chain.clone(),
-                                Cow::Owned(vec![
-                                    get_subnet_match(
-                                        &multicast_address,
-                                        "daddr",
-                                        stmt::Operator::NEQ,
-                                    ),
-                                    stmt::Statement::SNAT(Some(stmt::NAT {
-                                        addr: Some(expr::Expression::String(
-                                            addr4.to_string().into(),
-                                        )),
-                                        family: Some(stmt::NATFamily::IP),
-                                        port: None,
-                                        flags: None,
-                                    })),
-                                ]),
-                            ));
-                        } else {
-                            log::trace!(
-                                "No IPv4 outbound address set, using default MASQUERADE rule"
-                            );
-                            batch.add(make_rule(
-                                chain.clone(),
-                                Cow::Owned(vec![
-                                    get_subnet_match(
-                                        &multicast_address,
-                                        "daddr",
-                                        stmt::Operator::NEQ,
-                                    ),
-                                    stmt::Statement::Masquerade(None),
-                                ]),
-                            ));
+                    // Use appropriate outbound address based on subnet type
+                    match subnet {
+                        IpNet::V4(_) => {
+                            if let Some(addr4) = network_setup.outbound_addr4 {
+                                log::trace!(
+                                    "Creating IPv4 SNAT rule with outbound address {addr4}"
+                                );
+                                batch.add(make_rule(
+                                    chain.clone(),
+                                    Cow::Owned(vec![
+                                        get_subnet_match(
+                                            &multicast_address,
+                                            "daddr",
+                                            stmt::Operator::NEQ,
+                                        ),
+                                        stmt::Statement::SNAT(Some(stmt::NAT {
+                                            addr: Some(expr::Expression::String(
+                                                addr4.to_string().into(),
+                                            )),
+                                            family: Some(stmt::NATFamily::IP),
+                                            port: None,
+                                            flags: None,
+                                        })),
+                                    ]),
+                                ));
+                            } else {
+                                log::trace!(
+                                    "No IPv4 outbound address set, using default MASQUERADE rule"
+                                );
+                                batch.add(make_rule(
+                                    chain.clone(),
+                                    Cow::Owned(vec![
+                                        get_subnet_match(
+                                            &multicast_address,
+                                            "daddr",
+                                            stmt::Operator::NEQ,
+                                        ),
+                                        stmt::Statement::Masquerade(None),
+                                    ]),
+                                ));
+                            }
                         }
-                    }
-                    IpNet::V6(_) => {
-                        if let Some(addr6) = network_setup.outbound_addr6 {
-                            log::trace!("Creating IPv6 SNAT rule with outbound address {addr6}");
-                            batch.add(make_rule(
-                                chain.clone(),
-                                Cow::Owned(vec![
-                                    get_subnet_match(
-                                        &multicast_address,
-                                        "daddr",
-                                        stmt::Operator::NEQ,
-                                    ),
-                                    stmt::Statement::SNAT(Some(stmt::NAT {
-                                        addr: Some(expr::Expression::String(
-                                            addr6.to_string().into(),
-                                        )),
-                                        family: Some(stmt::NATFamily::IP6),
-                                        port: None,
-                                        flags: None,
-                                    })),
-                                ]),
-                            ));
-                        } else {
-                            log::trace!(
-                                "No IPv6 outbound address set, using default MASQUERADE rule"
-                            );
-                            batch.add(make_rule(
-                                chain.clone(),
-                                Cow::Owned(vec![
-                                    get_subnet_match(
-                                        &multicast_address,
-                                        "daddr",
-                                        stmt::Operator::NEQ,
-                                    ),
-                                    stmt::Statement::Masquerade(None),
-                                ]),
-                            ));
+                        IpNet::V6(_) => {
+                            if let Some(addr6) = network_setup.outbound_addr6 {
+                                log::trace!(
+                                    "Creating IPv6 SNAT rule with outbound address {addr6}"
+                                );
+                                batch.add(make_rule(
+                                    chain.clone(),
+                                    Cow::Owned(vec![
+                                        get_subnet_match(
+                                            &multicast_address,
+                                            "daddr",
+                                            stmt::Operator::NEQ,
+                                        ),
+                                        stmt::Statement::SNAT(Some(stmt::NAT {
+                                            addr: Some(expr::Expression::String(
+                                                addr6.to_string().into(),
+                                            )),
+                                            family: Some(stmt::NATFamily::IP6),
+                                            port: None,
+                                            flags: None,
+                                        })),
+                                    ]),
+                                ));
+                            } else {
+                                log::trace!(
+                                    "No IPv6 outbound address set, using default MASQUERADE rule"
+                                );
+                                batch.add(make_rule(
+                                    chain.clone(),
+                                    Cow::Owned(vec![
+                                        get_subnet_match(
+                                            &multicast_address,
+                                            "daddr",
+                                            stmt::Operator::NEQ,
+                                        ),
+                                        stmt::Statement::Masquerade(None),
+                                    ]),
+                                ));
+                            }
                         }
                     }
                 }
@@ -550,42 +557,48 @@ impl firewall::FirewallDriver for Nftables {
                         stmt::Statement::Accept(None),
                     ]),
                 ));
-                // Forward chain: ip daddr <subnet> ct state related,established accept
-                batch.add(make_rule(
-                    Cow::Borrowed(FORWARDCHAIN),
-                    Cow::Owned(vec![
-                        get_subnet_match(&subnet, "daddr", stmt::Operator::EQ),
-                        stmt::Statement::Match(stmt::Match {
-                            left: expr::Expression::Named(expr::NamedExpression::CT(expr::CT {
-                                key: Cow::Borrowed("state"),
-                                family: None,
-                                dir: None,
-                            })),
-                            right: expr::Expression::List(vec![
-                                expr::Expression::String(Cow::Borrowed("established")),
-                                expr::Expression::String(Cow::Borrowed("related")),
-                            ]),
-                            op: stmt::Operator::IN,
-                        }),
-                        stmt::Statement::Accept(None),
-                    ]),
-                ));
-                // Forward chain: ip saddr <subnet> accept
-                batch.add(make_rule(
-                    Cow::Borrowed(FORWARDCHAIN),
-                    Cow::Owned(vec![
-                        get_subnet_match(&subnet, "saddr", stmt::Operator::EQ),
-                        stmt::Statement::Accept(None),
-                    ]),
-                ));
-                // Postrouting chain: ip saddr <subnet> jump <chain>
-                batch.add(make_rule(
-                    Cow::Borrowed(POSTROUTINGCHAIN),
-                    Cow::Owned(vec![
-                        get_subnet_match(&subnet, "saddr", stmt::Operator::EQ),
-                        get_jump_action(chain.clone()),
-                    ]),
-                ));
+                if !network_setup.internal {
+                    // Forward chain: ip daddr <subnet> ct state related,established accept
+                    batch.add(make_rule(
+                        Cow::Borrowed(FORWARDCHAIN),
+                        Cow::Owned(vec![
+                            get_subnet_match(&subnet, "daddr", stmt::Operator::EQ),
+                            stmt::Statement::Match(stmt::Match {
+                                left: expr::Expression::Named(expr::NamedExpression::CT(
+                                    expr::CT {
+                                        key: Cow::Borrowed("state"),
+                                        family: None,
+                                        dir: None,
+                                    },
+                                )),
+                                right: expr::Expression::List(vec![
+                                    expr::Expression::String(Cow::Borrowed("established")),
+                                    expr::Expression::String(Cow::Borrowed("related")),
+                                ]),
+                                op: stmt::Operator::IN,
+                            }),
+                            stmt::Statement::Accept(None),
+                        ]),
+                    ));
+
+                    // Forward chain: ip saddr <subnet> accept
+                    batch.add(make_rule(
+                        Cow::Borrowed(FORWARDCHAIN),
+                        Cow::Owned(vec![
+                            get_subnet_match(&subnet, "saddr", stmt::Operator::EQ),
+                            stmt::Statement::Accept(None),
+                        ]),
+                    ));
+
+                    // Postrouting chain: ip saddr <subnet> jump <chain>
+                    batch.add(make_rule(
+                        Cow::Borrowed(POSTROUTINGCHAIN),
+                        Cow::Owned(vec![
+                            get_subnet_match(&subnet, "saddr", stmt::Operator::EQ),
+                            get_jump_action(chain.clone()),
+                        ]),
+                    ));
+                }
             }
         }
 
@@ -761,33 +774,34 @@ impl firewall::FirewallDriver for Nftables {
             }
         }
 
-        if let Some(ip_v4) = setup_portfw.container_ip_v4 {
-            if let Some(subnet_v4) = setup_portfw.subnet_v4 {
-                for rule in get_dnat_rules_for_addr_family(
-                    ip_v4,
-                    subnet_v4,
-                    &setup_portfw.network_id,
-                    &existing_rules,
-                    &setup_portfw,
-                )? {
-                    batch.add(rule);
+        if !setup_portfw.internal {
+            if let Some(ip_v4) = setup_portfw.container_ip_v4 {
+                if let Some(subnet_v4) = setup_portfw.subnet_v4 {
+                    for rule in get_dnat_rules_for_addr_family(
+                        ip_v4,
+                        subnet_v4,
+                        &setup_portfw.network_id,
+                        &existing_rules,
+                        &setup_portfw,
+                    )? {
+                        batch.add(rule);
+                    }
+                }
+            }
+            if let Some(ip_v6) = setup_portfw.container_ip_v6 {
+                if let Some(subnet_v6) = setup_portfw.subnet_v6 {
+                    for rule in get_dnat_rules_for_addr_family(
+                        ip_v6,
+                        subnet_v6,
+                        &setup_portfw.network_id,
+                        &existing_rules,
+                        &setup_portfw,
+                    )? {
+                        batch.add(rule);
+                    }
                 }
             }
         }
-        if let Some(ip_v6) = setup_portfw.container_ip_v6 {
-            if let Some(subnet_v6) = setup_portfw.subnet_v6 {
-                for rule in get_dnat_rules_for_addr_family(
-                    ip_v6,
-                    subnet_v6,
-                    &setup_portfw.network_id,
-                    &existing_rules,
-                    &setup_portfw,
-                )? {
-                    batch.add(rule);
-                }
-            }
-        }
-
         let rules = batch.to_nftables();
 
         helper::apply_ruleset(&rules)?;

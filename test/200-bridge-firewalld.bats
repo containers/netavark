@@ -488,3 +488,17 @@ function strict_port_forwarding_invalid_value_should_warn_and_allow_port_forward
 @test "nftables - strict port forwarding invalid value should warn and allow port forwarding" {
     strict_port_forwarding_invalid_value_should_warn_and_allow_port_forwarding nftables
 }
+
+@test "$fw_driver - internal network does not create firewalld rules" {
+    run_netavark --file ${TESTSDIR}/testfiles/internal-dns.json setup $(get_container_netns_path)
+
+    expected_rc=2 run_in_host_netns firewall-cmd --get-zone-of-source=10.89.3.0/24
+    assert "$output" == "no zone" "internal ipv4 subnet must not be in a netavark zone"
+    expected_rc=2 run_in_host_netns firewall-cmd --get-zone-of-source=fd10:88:a::/64
+    assert "$output" == "no zone" "internal ipv6 subnet must not be in a netavark zone"
+
+    run_in_host_netns firewall-cmd --get-policies
+    assert "$output" "!~" "netavark" "no netavark policies created for internal network"
+
+    run_netavark --file ${TESTSDIR}/testfiles/internal-dns.json teardown $(get_container_netns_path)
+}

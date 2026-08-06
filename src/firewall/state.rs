@@ -272,10 +272,11 @@ mod tests {
             network_hash_name: "hash".to_string(),
             isolation: IsolateOption::Never,
             dns_port: 53,
+            internal: false,
             outbound_addr4: None,
             outbound_addr6: None,
         };
-        let net_conf_json = r#"{"subnets":["10.0.0.0/24"],"bridge_name":"bridge","network_id":"c2c8a073252874648259997d53b0a1bffa491e21f04bc1bf8609266359931395","network_hash_name":"hash","isolation":"Never","dns_port":53}"#;
+        let net_conf_json = r#"{"subnets":["10.0.0.0/24"],"bridge_name":"bridge","network_id":"c2c8a073252874648259997d53b0a1bffa491e21f04bc1bf8609266359931395","network_hash_name":"hash","isolation":"Never","dns_port":53,"internal":false}"#;
 
         let port_conf = PortForwardConfig {
             container_id: container_id.to_string(),
@@ -290,8 +291,9 @@ mod tests {
             subnet_v6: None,
             dns_port: 53,
             dns_server_ips: &vec![],
+            internal: false,
         };
-        let port_conf_json = r#"{"container_id":"123","network_id":"c2c8a073252874648259997d53b0a1bffa491e21f04bc1bf8609266359931395","port_mappings":null,"network_name":"name","network_hash_name":"hash","container_ip_v4":"10.0.0.2","subnet_v4":"10.0.0.0/24","container_ip_v6":null,"subnet_v6":null,"dns_port":53,"dns_server_ips":[]}"#;
+        let port_conf_json = r#"{"container_id":"123","network_id":"c2c8a073252874648259997d53b0a1bffa491e21f04bc1bf8609266359931395","port_mappings":null,"network_name":"name","network_hash_name":"hash","container_ip_v4":"10.0.0.2","subnet_v4":"10.0.0.0/24","container_ip_v6":null,"subnet_v6":null,"dns_port":53,"dns_server_ips":[],"internal":false}"#;
 
         let res = write_fw_config(
             config_dir,

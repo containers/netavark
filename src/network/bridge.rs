@@ -362,8 +362,9 @@ impl driver::NetworkDriver for Bridge<'_> {
         };
 
         if let BridgeMode::Managed = data.mode {
-            // if the network is internal do not setup firewall rules
-            if !self.info.network.internal {
+            // Internal networks normally skip firewall setup, but when DNS is
+            // enabled, we still need the DNS rules so aardvark-dns is reachable.
+            if !self.info.network.internal || self.info.network.dns_enabled {
                 self.setup_firewall(data)?
             }
         }
@@ -484,7 +485,9 @@ impl<'a> Bridge<'a> {
         };
 
         // 2. Tear down firewall & sysctl FIRST (while routes still exist)
-        if !self.info.network.internal && mode == BridgeMode::Managed {
+        if (!self.info.network.internal || self.info.network.dns_enabled)
+            && mode == BridgeMode::Managed
+        {
             match self.teardown_firewall(complete_teardown, bridge_name.clone()) {
                 Ok(_) => {}
                 Err(err) => {
@@ -543,6 +546,7 @@ impl<'a> Bridge<'a> {
             network_hash_name: id_network_hash.clone(),
             isolation: isolate,
             dns_port: self.info.dns_port,
+            internal: self.info.network.internal,
             outbound_addr4,
             outbound_addr6,
         };
@@ -586,6 +590,7 @@ impl<'a> Bridge<'a> {
             subnet_v6: net_v6,
             dns_port: self.info.dns_port,
             dns_server_ips: nameservers,
+            internal: self.info.network.internal,
         };
         Ok((sn, spf))
     }
