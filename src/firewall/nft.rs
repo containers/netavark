@@ -197,34 +197,27 @@ impl firewall::FirewallDriver for Nftables {
         // We need rules in Prerouting and Output pointing to our dnat chain.
         // But only if they do not exist.
         let match_jump_dnat = get_rule_matcher_jump_to(DNATCHAIN.to_string());
-        // Prerouting: fib daddr type local jump <dnat_chain>
-        // Output: fib daddr type local jump <dnat_chain>
+        // Prerouting: fib daddr type { local, broadcast, multicast } jump <dnat_chain>
+        // Output: fib daddr type { local, broadcast, multicast } jump <dnat_chain>
         let mut rules_hash: HashSet<expr::FibFlag> = HashSet::new();
         rules_hash.insert(expr::FibFlag::Daddr);
-        let base_conditions = [
-            stmt::Statement::Match(stmt::Match {
-                left: expr::Expression::Named(expr::NamedExpression::Fib(expr::Fib {
-                    result: expr::FibResult::Type,
-                    flags: rules_hash,
-                })),
-                right: expr::Expression::String(Cow::Borrowed("local")),
-                op: stmt::Operator::EQ,
-            }),
-            get_jump_action(Cow::Borrowed(DNATCHAIN)),
-        ];
-        if get_matching_rules_in_chain(&existing_rules, PREROUTINGCHAIN, &match_jump_dnat)
-            .is_empty()
-        {
-            batch.add(make_rule(
-                Cow::Borrowed(PREROUTINGCHAIN),
-                Cow::Borrowed(&base_conditions),
-            ));
-        }
-        if get_matching_rules_in_chain(&existing_rules, OUTPUTCHAIN, &match_jump_dnat).is_empty() {
-            batch.add(make_rule(
-                Cow::Borrowed(OUTPUTCHAIN),
-                Cow::Borrowed(&base_conditions),
-            ));
+        for chain in [PREROUTINGCHAIN, OUTPUTCHAIN] {
+            if get_matching_rules_in_chain(&existing_rules, chain, &match_jump_dnat).is_empty() {
+                for fib_type in ["local", "broadcast", "multicast"] {
+                    let base_conditions = vec![
+                        stmt::Statement::Match(stmt::Match {
+                            left: expr::Expression::Named(expr::NamedExpression::Fib(expr::Fib {
+                                result: expr::FibResult::Type,
+                                flags: rules_hash.clone(),
+                            })),
+                            right: expr::Expression::String(Cow::Borrowed(fib_type)),
+                            op: stmt::Operator::EQ,
+                        }),
+                        get_jump_action(Cow::Borrowed(DNATCHAIN)),
+                    ];
+                    batch.add(make_rule(Cow::Borrowed(chain), Cow::Owned(base_conditions)));
+                }
+            }
         }
 
         // Forward chain: ct state invalid drop
@@ -589,7 +582,7 @@ impl firewall::FirewallDriver for Nftables {
             }
         }
 
-        let rules = batch.to_nftables();
+        let rules = batch.to_nftables(); std::fs::write("/tmp/netavark_rules.json", serde_json::to_string(&rules).unwrap()).unwrap();
 
         helper::apply_ruleset(&rules)?;
 
@@ -691,7 +684,7 @@ impl firewall::FirewallDriver for Nftables {
             batch.delete(schema::NfListObject::Rule(rule));
         }
 
-        let rules = batch.to_nftables();
+        let rules = batch.to_nftables(); std::fs::write("/tmp/netavark_rules.json", serde_json::to_string(&rules).unwrap()).unwrap();
 
         helper::apply_ruleset(&rules)?;
         Ok(())
@@ -788,7 +781,7 @@ impl firewall::FirewallDriver for Nftables {
             }
         }
 
-        let rules = batch.to_nftables();
+        let rules = batch.to_nftables(); std::fs::write("/tmp/netavark_rules.json", serde_json::to_string(&rules).unwrap()).unwrap();
 
         helper::apply_ruleset(&rules)?;
 
@@ -859,7 +852,7 @@ impl firewall::FirewallDriver for Nftables {
             }
         }
 
-        let rules = batch.to_nftables();
+        let rules = batch.to_nftables(); std::fs::write("/tmp/netavark_rules.json", serde_json::to_string(&rules).unwrap()).unwrap();
 
         helper::apply_ruleset(&rules)?;
 

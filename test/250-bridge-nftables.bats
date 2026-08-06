@@ -517,6 +517,79 @@ export NETAVARK_FW=nftables
     test_port_fw ip=dual proto=udp
 }
 
+@test "$fw_driver - port forwarding ipv4 - udp broadcast" {
+    local host_port=$(random_port)
+    local container_port=$(random_port)
+    local container_id=$(random_string 64)
+    local container_name="name-$(random_string 10)"
+    local ipv4_subnet=$(random_subnet)
+    local ipv4_gateway=$(gateway_from_subnet $ipv4_subnet)
+    local ipv4_container_ip=$(random_ip_in_subnet $ipv4_subnet)
+    local broadcast_ip=$(echo $ipv4_subnet | sed "s/\.0\/24/.255/")
+
+    read -r -d '\0' config <<EOF
+{
+   "container_id": "$container_id",
+   "container_name": "$container_name",
+   "port_mappings": [
+     {
+       "host_ip": "",
+       "container_port": $container_port,
+       "host_port": $host_port,
+       "range": 1,
+       "protocol": "udp"
+     }
+   ],
+   "networks": {
+      "podman": {
+         "static_ips": ["$ipv4_container_ip"],
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "$(random_string 64)",
+         "driver": "bridge",
+         "network_interface": "podman0",
+         "subnets": [{"subnet": "$ipv4_subnet", "gateway": "$ipv4_gateway"}],
+         "ipv6_enabled": false,
+         "internal": false,
+         "dns_enabled": false,
+         "ipam_options": {
+            "driver": "host-local"
+         }
+      }
+   }
+}
+\0
+EOF
+
+    run_netavark setup $(get_container_netns_path) <<<"$config"
+
+    # Run socat in container to listen for UDP broadcast on the specific port
+    run_in_container_netns bash -c "socat UDP4-RECVFROM:$container_port,fork SYSTEM:'echo SUCCESS > /tmp/socat_success' >/dev/null 2>&1 < /dev/null & echo \$! > /tmp/socat.pid"
+    
+    # Give socat a moment to start up and bind to the socket
+    sleep 1
+
+    # Send broadcast UDP from host netns to the podman bridge
+    # The broadcast IP (e.g. 10.x.x.255) ensures it routes down the podman bridge.
+    run_in_host_netns bash -c "echo 'TEST' | socat - UDP4-DATAGRAM:$broadcast_ip:$host_port,broadcast,so-bindtodevice=podman0" > /dev/null 2>&1
+
+    # Give socat a moment to process the received datagram
+    sleep 1
+
+    # Verify that socat successfully received the broadcast and created the success file
+    run_in_container_netns cat /tmp/socat_success
+    assert "$output" == "SUCCESS" "socat did not receive the broadcast packet or failed to respond"
+
+    # Cleanup socat
+    run_in_container_netns bash -c "kill \$(cat /tmp/socat.pid) || true"
+
+    run_netavark teardown $(get_container_netns_path) <<<"$config"
+}
+
 @test "$fw_driver - port forwarding ipv4 - sctp" {
     setup_sctp_kernel_module
     test_port_fw proto=sctp
@@ -1278,6 +1351,12 @@ net/ipv4/conf/podman1/rp_filter = 2"
 }
 
 function check_simple_bridge_nftables() {
+    # check nftables PREROUTING chain
+    run_in_host_netns nft list chain inet netavark PREROUTING
+    assert "$output" =~ "fib daddr type local jump NETAVARK-HOSTPORT-DNAT" "Prerouting local jump rule"
+    assert "$output" =~ "fib daddr type broadcast jump NETAVARK-HOSTPORT-DNAT" "Prerouting broadcast jump rule"
+    assert "$output" =~ "fib daddr type multicast jump NETAVARK-HOSTPORT-DNAT" "Prerouting multicast jump rule"
+
     # check nftables POSTROUTING chain
     run_in_host_netns nft list chain inet netavark POSTROUTING
     assert "${lines[3]}" =~ "meta mark & 0x00002000 == 0x00002000 masquerade" "Mark-masquerade rule"
