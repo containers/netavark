@@ -1,5 +1,12 @@
 # Release Notes
 
+## v2.1.0
+
+* Allow isolated networks to access published ports on other networks when trying to connect to them via the host port. ([#709](https://github.com/containers/netavark/issues/709))
+* Fixed a network teardown problem when the netns is not accessible to still do as much as we can, i.e. remove firewall rules. ([#1451](https://github.com/containers/netavark/issues/1451))
+* Fixed a network teardown ordering problem, the bridge interface is now removed after the firewall rules to avoid routing issues. ([#1482](https://github.com/containers/netavark/issues/1482))
+* Dependency updates.
+
 ## v2.0.0
 
 This is major release with breaking changes. It is required for podman 6.0 and buildah 1.44 and only supported to be used with them together. Packagers need to ensure they update the versions in sync.
