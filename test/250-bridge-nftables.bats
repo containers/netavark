@@ -567,25 +567,8 @@ EOF
 
     run_netavark setup $(get_container_netns_path) <<<"$config"
 
-    # Run socat in container to listen for UDP broadcast on the specific port
-    run_in_container_netns bash -c "socat UDP4-RECVFROM:$container_port,fork SYSTEM:'echo SUCCESS > /tmp/socat_success' >/dev/null 2>&1 < /dev/null & echo \$! > /tmp/socat.pid"
-    
-    # Give socat a moment to start up and bind to the socket
-    sleep 1
-
-    # Send broadcast UDP from host netns to the podman bridge
-    # The broadcast IP (e.g. 10.x.x.255) ensures it routes down the podman bridge.
-    run_in_host_netns bash -c "echo 'TEST' | socat - UDP4-DATAGRAM:$broadcast_ip:$host_port,broadcast,so-bindtodevice=podman0" > /dev/null 2>&1
-
-    # Give socat a moment to process the received datagram
-    sleep 1
-
-    # Verify that socat successfully received the broadcast and created the success file
-    run_in_container_netns cat /tmp/socat_success
-    assert "$output" == "SUCCESS" "socat did not receive the broadcast packet or failed to respond"
-
-    # Cleanup socat
-    run_in_container_netns bash -c "kill \$(cat /tmp/socat.pid) || true"
+    # Use netavark-connection-tester instead of socat since socat may not be installed in CI
+    run_connection_test "0" "udp" $container_port $broadcast_ip $host_port
 
     run_netavark teardown $(get_container_netns_path) <<<"$config"
 }

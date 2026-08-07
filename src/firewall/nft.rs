@@ -582,7 +582,7 @@ impl firewall::FirewallDriver for Nftables {
             }
         }
 
-        let rules = batch.to_nftables(); std::fs::write("/tmp/netavark_rules.json", serde_json::to_string(&rules).unwrap()).unwrap();
+        let rules = batch.to_nftables();
 
         helper::apply_ruleset(&rules)?;
 
@@ -684,7 +684,7 @@ impl firewall::FirewallDriver for Nftables {
             batch.delete(schema::NfListObject::Rule(rule));
         }
 
-        let rules = batch.to_nftables(); std::fs::write("/tmp/netavark_rules.json", serde_json::to_string(&rules).unwrap()).unwrap();
+        let rules = batch.to_nftables();
 
         helper::apply_ruleset(&rules)?;
         Ok(())
@@ -781,7 +781,7 @@ impl firewall::FirewallDriver for Nftables {
             }
         }
 
-        let rules = batch.to_nftables(); std::fs::write("/tmp/netavark_rules.json", serde_json::to_string(&rules).unwrap()).unwrap();
+        let rules = batch.to_nftables();
 
         helper::apply_ruleset(&rules)?;
 
@@ -852,7 +852,7 @@ impl firewall::FirewallDriver for Nftables {
             }
         }
 
-        let rules = batch.to_nftables(); std::fs::write("/tmp/netavark_rules.json", serde_json::to_string(&rules).unwrap()).unwrap();
+        let rules = batch.to_nftables();
 
         helper::apply_ruleset(&rules)?;
 
