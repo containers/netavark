@@ -48,13 +48,10 @@ all: build docs
 bin:
 	mkdir -p $@
 
-$(CARGO_TARGET_DIR):
-	mkdir -p $@
-
 .PHONY: build
 build: bin/netavark
 
-bin/netavark: $(SOURCES) bin $(CARGO_TARGET_DIR)
+bin/netavark: $(SOURCES) bin
 	$(CARGO) build $(release)
 	cp $(CARGO_TARGET_DIR)/$(profile)/netavark bin/netavark
 	cp $(CARGO_TARGET_DIR)/$(profile)/netavark-dhcp-proxy-client bin/netavark-dhcp-proxy-client
@@ -62,7 +59,7 @@ bin/netavark: $(SOURCES) bin $(CARGO_TARGET_DIR)
 
 
 .PHONY: examples
-examples: bin $(CARGO_TARGET_DIR)
+examples: bin
 	cargo build --examples $(release)
 
 .PHONY: crate-publish
@@ -83,7 +80,7 @@ clean:
 	$(MAKE) -C docs clean
 
 .PHONY: client
-client: bin $(CARGO_TARGET_DIR)
+client: bin
 	$(CARGO) build --bin netavark-dhcp-proxy-client $(release)
 
 
@@ -133,21 +130,21 @@ test: unit integration
 
 # Used by CI to compile the unit tests but not run them
 .PHONY: build_unit
-build_unit: $(CARGO_TARGET_DIR)
+build_unit:
 	$(CARGO) test --no-run
 
 .PHONY: unit
-unit: $(CARGO_TARGET_DIR)
+unit:
 	$(CARGO) test
 
 .PHONY: integration
-integration: $(CARGO_TARGET_DIR) examples
+integration: examples
 	# needs to be run as root or with podman unshare --rootless-netns
 	bats test/
 	bats test-dhcp/
 
 .PHONY: validate
-validate: $(CARGO_TARGET_DIR)
+validate:
 	$(CARGO) fmt --all -- --check
 	$(CARGO) clippy -p netavark -- -D warnings
 	$(MAKE) docs
