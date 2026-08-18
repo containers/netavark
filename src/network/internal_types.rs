@@ -26,6 +26,9 @@ pub struct SetupNetwork {
     pub isolation: IsolateOption,
     /// port used for the dns server
     pub dns_port: u16,
+    /// whether the network is internal, only DNS firewall rules are applied for these networks
+    #[serde(default)]
+    pub internal: bool,
     /// outbound IPv4 address for SNAT
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
@@ -76,6 +79,9 @@ pub struct PortForwardConfigGeneric<Ports, IpAddresses> {
     pub dns_port: u16,
     /// dns servers IPs where forwarding rule to port 53 from dns_port are necessary
     pub dns_server_ips: IpAddresses,
+    // whether network is internal; skip container port forwarding rules
+    #[serde(default)]
+    pub internal: bool,
 }
 
 // Some trickery to define two struct one with references and one with owned data,
@@ -100,6 +106,7 @@ impl<'a> From<&'a PortForwardConfigOwned> for PortForwardConfig<'a> {
             subnet_v6: p.subnet_v6,
             dns_port: p.dns_port,
             dns_server_ips: &p.dns_server_ips,
+            internal: p.internal,
         }
     }
 }
