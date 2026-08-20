@@ -523,7 +523,7 @@ impl firewall::FirewallDriver for Nftables {
                 }
 
                 // Next, populate basic chains with forwarding rules
-                // Input chain: ip saddr <subnet> udp dport 53 accept
+                // Input chain: ip saddr <subnet> udp dport <dns_port> accept
                 batch.add(make_rule(
                     Cow::Borrowed(INPUTCHAIN),
                     Cow::Owned(vec![
@@ -551,7 +551,7 @@ impl firewall::FirewallDriver for Nftables {
                                     field: Cow::Borrowed("dport"),
                                 }),
                             )),
-                            right: expr::Expression::Number(53),
+                            right: expr::Expression::Number(network_setup.dns_port as u32),
                             op: stmt::Operator::EQ,
                         }),
                         stmt::Statement::Accept(None),
