@@ -1173,9 +1173,9 @@ dependencies = [
 
 [[package]]
 name = "mozim"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3cbbd829ba3312b0f3b68b4c9953eabd72d3218b697b02e89be627a395b0dab2"
+checksum = "078aec06f40dd603e750d96b20f9bf90a34547ea472d738ca2819a3880faa783"
 dependencies = [
  "etherparse",
  "futures",
