@@ -61,7 +61,7 @@ futures-channel = "0.3.34"
 futures-core = "0.3.34"
 futures-util = "0.3.34"
 tower = { version = "0.5.3", features = ["util"] }
-hyper-util = "0.1.20"
+hyper-util = "0.1.21"
 regex = "1.13.1"
 serde_with = "3.21.0"
 chrono = { version = "0.4.45", features = ["serde"] }
