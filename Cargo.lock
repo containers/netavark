@@ -522,9 +522,9 @@ checksum = "0e60eed09d8c01d3cee5b7d30acb059b76614c918fa0f992e0dd6eeb10daad6f"
 
 [[package]]
 name = "dhcproto"
-version = "0.9.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcee045385d5f7819022821f41209b9945d17550760b0b2349aaef4ecfa14bc3"
+checksum = "f6794294f2c4665aae452e950c2803a1e487c5672dc8448f0bfa3f52ff67e270"
 dependencies = [
  "dhcproto-macros",
  "hex",
@@ -1390,18 +1390,19 @@ dependencies = [
 
 [[package]]
 name = "mozim"
-version = "0.2.5"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "610e34113d007c3588631f879854c14fbf291f3ab7853b833220f7cbf6ece8ad"
+checksum = "b1be338b9461a9c635c944d457c97d3ac06b67497aa0116cb90390dcb3659f4f"
 dependencies = [
  "byteorder",
  "dhcproto",
  "etherparse",
  "futures",
+ "ipnet",
  "libc",
  "log",
  "nispor",
- "nix 0.27.1",
+ "nix 0.29.0",
  "rand 0.8.5",
 ]
 
