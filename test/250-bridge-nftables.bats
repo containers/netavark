@@ -517,6 +517,62 @@ export NETAVARK_FW=nftables
     test_port_fw ip=dual proto=udp
 }
 
+@test "$fw_driver - port forwarding ipv4 - udp broadcast" {
+    local host_port=$(random_port)
+    local container_port=$(random_port)
+    local container_id=$(random_string 64)
+    local container_name="name-$(random_string 10)"
+    local ipv4_subnet=$(random_subnet)
+    local ipv4_gateway=$(gateway_from_subnet $ipv4_subnet)
+    local ipv4_container_ip=$(random_ip_in_subnet $ipv4_subnet)
+    local broadcast_ip=$(echo $ipv4_subnet | sed "s/\.0\/24/.255/")
+
+    read -r -d '\0' config <<EOF
+{
+   "container_id": "$container_id",
+   "container_name": "$container_name",
+   "port_mappings": [
+     {
+       "host_ip": "",
+       "container_port": $container_port,
+       "host_port": $host_port,
+       "range": 1,
+       "protocol": "udp"
+     }
+   ],
+   "networks": {
+      "podman": {
+         "static_ips": ["$ipv4_container_ip"],
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "$(random_string 64)",
+         "driver": "bridge",
+         "network_interface": "podman0",
+         "subnets": [{"subnet": "$ipv4_subnet", "gateway": "$ipv4_gateway"}],
+         "ipv6_enabled": false,
+         "internal": false,
+         "dns_enabled": false,
+         "ipam_options": {
+            "driver": "host-local"
+         }
+      }
+   }
+}
+\0
+EOF
+
+    run_netavark setup $(get_container_netns_path) <<<"$config"
+
+    # Use netavark-connection-tester instead of socat since socat may not be installed in CI
+    run_connection_test "0" "udp" $container_port $broadcast_ip $host_port
+
+    run_netavark teardown $(get_container_netns_path) <<<"$config"
+}
+
 @test "$fw_driver - port forwarding ipv4 - sctp" {
     setup_sctp_kernel_module
     test_port_fw proto=sctp
@@ -1278,6 +1334,12 @@ net/ipv4/conf/podman1/rp_filter = 2"
 }
 
 function check_simple_bridge_nftables() {
+    # check nftables PREROUTING chain
+    run_in_host_netns nft list chain inet netavark PREROUTING
+    assert "$output" =~ "fib daddr type local jump NETAVARK-HOSTPORT-DNAT" "Prerouting local jump rule"
+    assert "$output" =~ "fib daddr type broadcast jump NETAVARK-HOSTPORT-DNAT" "Prerouting broadcast jump rule"
+    assert "$output" =~ "fib daddr type multicast jump NETAVARK-HOSTPORT-DNAT" "Prerouting multicast jump rule"
+
     # check nftables POSTROUTING chain
     run_in_host_netns nft list chain inet netavark POSTROUTING
     assert "${lines[3]}" =~ "meta mark & 0x00002000 == 0x00002000 masquerade" "Mark-masquerade rule"
