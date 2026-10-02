@@ -22,6 +22,13 @@ Netavark is a tool for configuring networking for Linux containers. Its features
 - [Podman](https://podman.io/docs) 4.0+
 - [protoc](https://grpc.io/docs/protoc-installation/)
 
+At runtime, Netavark needs at least Linux kernel 4.20. It relies on
+`NETLINK_GET_STRICT_CHK` strict netlink checking, which was added in 4.20; on
+older kernels netlink calls fail with `Protocol not available`
+(EPROTONOSUPPORT). This is a lower bound rather than a tested floor: kernels
+older than those in CI are not exercised, so it is possible that other parts of
+Netavark already require something newer than 4.20.
+
 ## MSRV (Minimum Supported Rust Version)
 
 v1.88
