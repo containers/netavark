@@ -651,7 +651,7 @@ fn create_zone_if_not_exist(conn: &Connection, zone_name: &str) -> NetavarkResul
     let body = zones_msg.body();
     let zones: Vec<&str> = wrap!(
         body.deserialize(),
-        format!("Error decoding DBus message for active zones")
+        "Error decoding DBus message for active zones"
     )?;
     for &zone in zones.iter() {
         if zone == zone_name {

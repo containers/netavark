@@ -1500,8 +1500,8 @@ EOF
 
     # INPUT: base chain + one DNS accept per subnet (v4, v6), nothing else
     run_in_host_netns nft list chain inet netavark INPUT
-    assert "${lines[3]}" =~ "ip saddr 10.89.3.0/24 meta l4proto \{ tcp, udp \} th dport 53 accept" "ipv4 DNS accept rule"
-    assert "${lines[4]}" =~ "ip6 saddr fd10:88:a::/64 meta l4proto \{ tcp, udp \} th dport 53 accept" "ipv6 DNS accept rule"
+    assert "${lines[3]}" =~ "ip saddr 10.89.3.0/24 meta l4proto \{ tcp, udp \} th dport $dns_port accept" "ipv4 DNS accept rule"
+    assert "${lines[4]}" =~ "ip6 saddr fd10:88:a::/64 meta l4proto \{ tcp, udp \} th dport $dns_port accept" "ipv6 DNS accept rule"
     assert "${#lines[@]}" = 7 "only DNS accept rules in INPUT chain"
 
     # per-subnet chains must be empty: no daddr accept, no masquerade/SNAT
@@ -1524,8 +1524,6 @@ EOF
 
     # after the redirect DNS arrives on dns_port, so accept that under the drop policy
     run_in_host_netns nft add chain inet netavark INPUT \{ type filter hook input priority 0 \; policy drop \; \}
-    run_in_host_netns nft add rule inet netavark INPUT ip saddr 10.89.3.0/24 meta l4proto \{ tcp, udp \} th dport $dns_port accept
-    run_in_host_netns nft add rule inet netavark INPUT ip6 saddr fd10:88:a::/64 meta l4proto \{ tcp, udp \} th dport $dns_port accept
     run_in_host_netns nft add rule inet netavark INPUT ct state related,established accept
     run_in_host_netns nft add rule inet netavark INPUT meta l4proto ipv6-icmp accept
 
