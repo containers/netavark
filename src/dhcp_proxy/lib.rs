@@ -17,7 +17,7 @@ use tonic::transport::{Channel, Endpoint};
 use tonic::Request;
 use tower::service_fn;
 
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::double_must_use)]
 pub mod g_rpc {
     include!(concat!(env!("OUT_DIR"), "/netavark_proxy.rs"));
     use crate::dhcp_proxy::lib::VectorConv;
