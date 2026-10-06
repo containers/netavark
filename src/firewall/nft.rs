@@ -314,10 +314,53 @@ impl firewall::FirewallDriver for Nftables {
 
         let match_our_bridge = get_rule_matcher_bridge(&network_setup.bridge_name);
 
-        // If and only if isolation is enabled: add isolation chains.
-        // Some isolation rules are shared. Other rules are specific to one type
-        // of isolation.
-        if let IsolateOption::Normal | IsolateOption::Strict = network_setup.isolation {
+        if network_setup.internal {
+            // Internal networks must never forward to or from other interfaces.
+            // The per-bridge forwarding sysctl is not enough: the kernel ignores
+            // per-interface IPv6 forwarding once net.ipv6.conf.all.forwarding=1.
+            if get_matching_rules_in_chain(&existing_rules, ISOLATION1CHAIN, &match_our_bridge)
+                .is_empty()
+            {
+                // NETAVARK-ISOLATION-1: iifname <bridge> oifname != <bridge> drop
+                batch.add(make_rule(
+                    Cow::Borrowed(ISOLATION1CHAIN),
+                    Cow::Owned(vec![
+                        get_bridge_match(
+                            &network_setup.bridge_name,
+                            expr::MetaKey::Iifname,
+                            stmt::Operator::EQ,
+                        ),
+                        get_bridge_match(
+                            &network_setup.bridge_name,
+                            expr::MetaKey::Oifname,
+                            stmt::Operator::NEQ,
+                        ),
+                        stmt::Statement::Drop(None),
+                    ]),
+                ));
+
+                // NETAVARK-ISOLATION-1: oifname <bridge> iifname != <bridge> drop
+                batch.add(make_rule(
+                    Cow::Borrowed(ISOLATION1CHAIN),
+                    Cow::Owned(vec![
+                        get_bridge_match(
+                            &network_setup.bridge_name,
+                            expr::MetaKey::Oifname,
+                            stmt::Operator::EQ,
+                        ),
+                        get_bridge_match(
+                            &network_setup.bridge_name,
+                            expr::MetaKey::Iifname,
+                            stmt::Operator::NEQ,
+                        ),
+                        stmt::Statement::Drop(None),
+                    ]),
+                ));
+            }
+        } else if let IsolateOption::Normal | IsolateOption::Strict = network_setup.isolation {
+            // If and only if isolation is enabled: add isolation chains.
+            // Some isolation rules are shared. Other rules are specific to one type
+            // of isolation.
             // NETAVARK-ISOLATION-1: iifname <bridgename> oifname != <bridgename> jump NETAVARK-ISOLATION-{2,3}
             // (Exact target varies based on Strict vs Normal Isolation - strict goes to 3, otherwise 2)
             let isolation_1_jump_target = if let IsolateOption::Strict = network_setup.isolation {
@@ -402,6 +445,10 @@ impl firewall::FirewallDriver for Nftables {
             ));
         }
 
+        // Internal networks without DNS need no host access at all, skip the
+        // DNS accept rule and do not add them to firewalld's trusted zone.
+        let needs_host_access = !network_setup.internal || network_setup.dns_enabled;
+
         // Basic forwarding for all subnets
         if let Some(nets) = network_setup.subnets {
             for subnet in nets {
@@ -409,7 +456,9 @@ impl firewall::FirewallDriver for Nftables {
 
                 // Add us to firewalld if necessary.
                 // Do this first, as firewalld doesn't wipe our rules - so after a reload, we skip everything below.
-                firewalld::add_firewalld_if_possible(dbus_conn, &subnet);
+                if needs_host_access {
+                    firewalld::add_firewalld_if_possible(dbus_conn, &subnet);
+                }
 
                 // Do we already have a chain for the subnet?
                 if get_chain(&existing_rules, &chain).is_some() {
@@ -523,40 +572,42 @@ impl firewall::FirewallDriver for Nftables {
                 }
 
                 // Next, populate basic chains with forwarding rules
-                // Input chain: ip saddr <subnet> udp dport <dns_port> accept
-                batch.add(make_rule(
-                    Cow::Borrowed(INPUTCHAIN),
-                    Cow::Owned(vec![
-                        get_subnet_match(&subnet, "saddr", stmt::Operator::EQ),
-                        stmt::Statement::Match(stmt::Match {
-                            left: expr::Expression::Named(expr::NamedExpression::Meta(
-                                expr::Meta {
-                                    key: expr::MetaKey::L4proto,
-                                },
-                            )),
-                            right: expr::Expression::Named(expr::NamedExpression::Set(vec![
-                                expr::SetItem::Element(expr::Expression::String(Cow::Borrowed(
-                                    "udp",
-                                ))),
-                                expr::SetItem::Element(expr::Expression::String(Cow::Borrowed(
-                                    "tcp",
-                                ))),
-                            ])),
-                            op: stmt::Operator::EQ,
-                        }),
-                        stmt::Statement::Match(stmt::Match {
-                            left: expr::Expression::Named(expr::NamedExpression::Payload(
-                                expr::Payload::PayloadField(expr::PayloadField {
-                                    protocol: Cow::Borrowed("th"),
-                                    field: Cow::Borrowed("dport"),
-                                }),
-                            )),
-                            right: expr::Expression::Number(network_setup.dns_port as u32),
-                            op: stmt::Operator::EQ,
-                        }),
-                        stmt::Statement::Accept(None),
-                    ]),
-                ));
+                if needs_host_access {
+                    // Input chain: ip saddr <subnet> udp dport <dns_port> accept
+                    batch.add(make_rule(
+                        Cow::Borrowed(INPUTCHAIN),
+                        Cow::Owned(vec![
+                            get_subnet_match(&subnet, "saddr", stmt::Operator::EQ),
+                            stmt::Statement::Match(stmt::Match {
+                                left: expr::Expression::Named(expr::NamedExpression::Meta(
+                                    expr::Meta {
+                                        key: expr::MetaKey::L4proto,
+                                    },
+                                )),
+                                right: expr::Expression::Named(expr::NamedExpression::Set(vec![
+                                    expr::SetItem::Element(expr::Expression::String(
+                                        Cow::Borrowed("udp"),
+                                    )),
+                                    expr::SetItem::Element(expr::Expression::String(
+                                        Cow::Borrowed("tcp"),
+                                    )),
+                                ])),
+                                op: stmt::Operator::EQ,
+                            }),
+                            stmt::Statement::Match(stmt::Match {
+                                left: expr::Expression::Named(expr::NamedExpression::Payload(
+                                    expr::Payload::PayloadField(expr::PayloadField {
+                                        protocol: Cow::Borrowed("th"),
+                                        field: Cow::Borrowed("dport"),
+                                    }),
+                                )),
+                                right: expr::Expression::Number(network_setup.dns_port as u32),
+                                op: stmt::Operator::EQ,
+                            }),
+                            stmt::Statement::Accept(None),
+                        ]),
+                    ));
+                }
                 if !network_setup.internal {
                     // Forward chain: ip daddr <subnet> ct state related,established accept
                     batch.add(make_rule(
@@ -673,7 +724,10 @@ impl firewall::FirewallDriver for Nftables {
                 }
 
                 // After all nftables work is done, remove us from firewalld.
-                firewalld::rm_firewalld_if_possible(&subnet);
+                // Internal networks without DNS were never added to the trusted zone.
+                if !tear.config.internal || tear.config.dns_enabled {
+                    firewalld::rm_firewalld_if_possible(&subnet);
+                }
             }
         }
 
@@ -890,6 +944,14 @@ fn cmp_rules(rule1: &schema::Rule, rule2: &schema::Rule) -> bool {
         return true;
     }
     false
+}
+
+fn get_bridge_match(bridge: &str, key: expr::MetaKey, op: stmt::Operator) -> stmt::Statement<'_> {
+    stmt::Statement::Match(stmt::Match {
+        left: expr::Expression::Named(expr::NamedExpression::Meta(expr::Meta { key })),
+        right: expr::Expression::String(Cow::Borrowed(bridge)),
+        op,
+    })
 }
 
 fn delete_port_rules<'a>(

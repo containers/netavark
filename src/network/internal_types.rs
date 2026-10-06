@@ -29,6 +29,9 @@ pub struct SetupNetwork {
     /// whether the network is internal, only DNS firewall rules are applied for these networks
     #[serde(default)]
     pub internal: bool,
+    /// whether aardvark-dns is enabled for this network
+    #[serde(default = "default_dns_enabled")]
+    pub dns_enabled: bool,
     /// outbound IPv4 address for SNAT
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
@@ -131,4 +134,10 @@ pub enum IsolateOption {
     Strict,
     Normal,
     Never,
+}
+
+// Firewall state written before dns_enabled existed only contains internal
+// networks with DNS enabled, so default to true when reading old state.
+fn default_dns_enabled() -> bool {
+    true
 }
