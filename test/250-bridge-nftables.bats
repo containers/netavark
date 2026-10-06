@@ -14,22 +14,57 @@ export NETAVARK_FW=nftables
 }
 
 @test "$fw_driver - internal network" {
-   # Table doesn't exist at this point otherwise
-   run_in_host_netns nft add table inet netavark
-   run_in_host_netns nft list table inet netavark
-   before="$output"
+    run_netavark --file ${TESTSDIR}/testfiles/internal.json setup $(get_container_netns_path)
 
-   run_netavark --file ${TESTSDIR}/testfiles/internal.json setup $(get_container_netns_path)
+    # internal networks must drop all forwarded traffic to and from other interfaces,
+    # the per-bridge forwarding sysctl does not block IPv6 forwarding
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-1
+    assert "${lines[2]}" =~ 'iifname "podman0" oifname != "podman0" drop' "drop traffic leaving internal bridge"
+    assert "${lines[3]}" =~ 'oifname "podman0" iifname != "podman0" drop' "drop traffic entering internal bridge"
+    assert "${#lines[@]}" = 6 "only the internal drop rules in ISOLATION-1"
 
-   run_in_host_netns nft list table inet netavark
-   assert "$output" == "$before" "make sure tables have not changed"
+    # no routing/NAT rules for internal networks
+    run_in_host_netns nft list chain inet netavark FORWARD
+    assert "${#lines[@]}" = 8 "no per-network FORWARD rules for internal network"
+    run_in_host_netns nft list chain inet netavark POSTROUTING
+    assert "${#lines[@]}" = 6 "no per-network POSTROUTING rules for internal network"
+    run_in_host_netns nft list chain inet netavark INPUT
+    assert "$output" "!~" "10.88.0.0/16" "no DNS accept rule for internal network without DNS"
+    assert "$output" "!~" "fd10:88:b::/64" "no IPv6 DNS accept rule for internal network without DNS"
+    run_in_host_netns nft list chain inet netavark nv_53ce4390_10_88_0_0_nm16
+    assert "${#lines[@]}" = 4 "ipv4 subnet chain is empty for internal network"
+    run_in_host_netns nft list chain inet netavark nv_53ce4390_fd10-88-b--_nm64
+    assert "${#lines[@]}" = 4 "ipv6 subnet chain is empty for internal network"
 
-   run_in_container_netns ip route show
-   assert "$output" "!~" "default" "No default route for internal networks"
+    run_in_container_netns ip route show
+    assert "$output" "!~" "default" "No default route for internal networks"
 
-   run_in_container_netns ping -c 1 10.88.0.1
+    run_in_container_netns ping -c 1 10.88.0.1
+    run_in_container_netns ping -c 1 fd10:88:b::1
 
-   run_netavark --file ${TESTSDIR}/testfiles/internal.json teardown $(get_container_netns_path)
+    # set up a second, non-internal, non-isolated network and confirm it
+    # actually cannot reach the internal network - not just that the right
+    # nft lines exist, but that forwarded traffic is really dropped
+    create_container_ns
+    run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json setup $(get_container_netns_path 1)
+
+    # sanity: the external network can reach itself
+    run_in_container_netns 1 ping -w 1 -c 1 10.89.3.2
+    run_in_container_netns 1 ping -w 1 -c 1 fd10:88:a::2
+
+    # the external network must not be able to reach the internal network
+    expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 10.88.0.2
+    expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 fd10:88:b::2
+
+    run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json teardown $(get_container_netns_path 1)
+
+    run_netavark --file ${TESTSDIR}/testfiles/internal.json teardown $(get_container_netns_path)
+
+    # drop rules and subnet chains are removed on teardown
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-1
+    assert "${#lines[@]}" = 4 "internal drop rules removed on teardown"
+    expected_rc=1 run_in_host_netns nft list chain inet netavark nv_53ce4390_10_88_0_0_nm16
+    expected_rc=1 run_in_host_netns nft list chain inet netavark nv_53ce4390_fd10-88-b--_nm64
 }
 
 @test "$fw_driver - simple bridge" {
