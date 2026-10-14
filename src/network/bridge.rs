@@ -485,18 +485,19 @@ impl<'a> Bridge<'a> {
         };
 
         // 2. Tear down firewall & sysctl FIRST (while routes still exist)
-        if (!self.info.network.internal || self.info.network.dns_enabled)
-            && mode == BridgeMode::Managed
-        {
-            match self.teardown_firewall(complete_teardown, bridge_name.clone()) {
-                Ok(_) => {}
-                Err(err) => {
-                    error_list.push(err);
+        if mode == BridgeMode::Managed {
+            if !self.info.network.internal || self.info.network.dns_enabled {
+                match self.teardown_firewall(complete_teardown, bridge_name.clone()) {
+                    Ok(_) => {}
+                    Err(err) => {
+                        error_list.push(err);
+                    }
                 }
             }
 
             if complete_teardown {
-                // delete sysctl file as well
+                // Delete the sysctl.d file as well. Must be done regardless of internal
+                // since the file is created regardless as well.
                 let path = sysctl::get_bridge_sysctl_d_path(&bridge_name);
                 if let Err(e) = fs::remove_file(&path) {
                     if e.kind() != std::io::ErrorKind::NotFound {
