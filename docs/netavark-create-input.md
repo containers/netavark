@@ -43,7 +43,8 @@ The `options` object contains creation options and settings.
 
 | Field | Description | Required |
 |-------|-------------|----------|
-| `subnet_pools` | Array of subnet pools from which to allocate subnets. Each pool contains a `base` (CIDR) and `size` (subnet size in bits). | Yes |
+| `subnet_pools` | Array of IPv4 subnet pools from which to allocate subnets. Each pool contains a `base` (CIDR) and `size` (subnet size in bits). | Yes |
+| `subnet_pools_v6` | Array of IPv6 subnet pools from which to allocate subnets. Each pool contains a `base` (IPv6 CIDR) and `size` (subnet prefix length). When empty, IPv6 subnets are generated randomly from fd00::/8 per RFC 4193. | No |
 | `default_interface_name` | Default prefix for auto-generated interface names (e.g., "podman" will generate "podman0", "podman1", etc.). | No |
 | `check_used_subnets` | Boolean flag indicating whether to check if subnets conflict with already used subnets. | Yes |
 
@@ -81,6 +82,12 @@ The `options` object contains creation options and settings.
       {
         "base": "10.89.0.0/16",
         "size": 24
+      }
+    ],
+    "subnet_pools_v6": [
+      {
+        "base": "fd00::/8",
+        "size": 64
       }
     ],
     "default_interface_name": "podman",
