@@ -1,0 +1,32 @@
+{
+   "container_id": "udp_traffic_container",
+   "container_name": "udp_traffic_test",
+   "port_mappings": [
+       {
+           "host_ip": "127.0.0.1",
+           "container_port": 8080,
+           "host_port": 10080,
+           "range": 1,
+           "protocol": "udp"
+       }
+   ],
+   "networks": {
+      "podman": {
+         "static_ips": [ "10.88.0.20" ],
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "udp_traffic_id",
+         "driver": "bridge",
+         "network_interface": "podman0",
+         "subnets": [ { "subnet": "10.88.0.0/16", "gateway": "10.88.0.1" } ],
+         "ipam_options": { "driver": "host-local" },
+         "dns_enabled": false,
+         "ipv6_enabled": false,
+         "internal": false
+      }
+   }
+}

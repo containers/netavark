@@ -90,6 +90,7 @@ Requires: bats
 Recommends: bats
 %endif
 Requires: bind-utils
+Requires: conntrack-tools
 Requires: dbus-daemon
 Requires: dnsmasq
 Requires: firewalld
@@ -97,6 +98,7 @@ Requires: jq
 Requires: net-tools
 Requires: nftables
 Requires: nmap-ncat
+Requires: socat
 
 %description tests
 %{summary}
