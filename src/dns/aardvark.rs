@@ -232,7 +232,8 @@ impl Aardvark {
         Ok(())
     }
 
-    pub fn commit_entries(&self, entries: &[AardvarkEntry]) -> NetavarkResult<()> {
+    /// Take the exclusive commit lock. It is released when the returned file is dropped.
+    fn lock_commit(&self) -> NetavarkResult<File> {
         // Acquire fs lock to ensure other instance of aardvark cannot commit
         // or start aardvark instance till already running instance has not
         // completed its `commit` phase.
@@ -259,6 +260,11 @@ impl Aardvark {
                 "Failed to acquire exclusive lock on {lockfile_path:?}: {er}"
             )));
         }
+        Ok(lockfile)
+    }
+
+    pub fn commit_entries(&self, entries: &[AardvarkEntry]) -> NetavarkResult<()> {
+        let _lockfile = self.lock_commit()?;
 
         for entry in entries {
             let mut path = Path::new(&self.config).join(entry.network_name);
@@ -407,6 +413,7 @@ impl Aardvark {
         Ok(())
     }
 
+    /// Callers must hold the commit lock, see `lock_commit()`.
     pub fn delete_entry(&self, container_id: &str, network_name: &str) -> Result<()> {
         let mut path = Path::new(&self.config).join(network_name);
         if !path.exists() {
@@ -414,24 +421,27 @@ impl Aardvark {
         }
 
         let file_content = fs::read_to_string(&path)?;
-        let lines: Vec<&str> = file_content.split_terminator('\n').collect();
+        let lines: Vec<&str> = file_content
+            .split_terminator('\n')
+            .filter(|line| !line.contains(container_id))
+            .collect();
 
-        let mut idx = 0;
-        let mut file = File::create(&path)?;
+        // nothing left in file (only header), remove it
+        if lines.len() <= 1 {
+            return fs::remove_file(&path);
+        }
 
-        for line in lines {
-            if line.contains(container_id) {
-                continue;
-            }
+        // Write a temp file outside of the config dir (aardvark reads every file in
+        // there) and rename it so aardvark never sees a truncated file.
+        let mut tmp_name = path.file_name().unwrap_or_default().to_os_string();
+        tmp_name.push(".tmp");
+        let tmp = Path::new(&self.config).join("..").join(tmp_name);
+        let mut file = File::create(&tmp)?;
+        for line in &lines {
             file.write_all(line.as_bytes())?;
             file.write_all(b"\n")?;
-            idx += 1;
         }
-        // nothing left in file (only header), remove it
-        if idx <= 1 {
-            fs::remove_file(&path)?
-        }
-        Ok(())
+        fs::rename(&tmp, &path)
     }
 
     // Modifies network dns_servers for a specific network and notifies aardvark-dns server
@@ -508,10 +518,22 @@ impl Aardvark {
     }
 
     pub fn delete_from_netavark_entries(&self, entries: &[AardvarkEntry]) -> NetavarkResult<()> {
-        for entry in entries {
-            self.delete_entry(entry.container_id.0, entry.network_name)?;
+        let mut first_err = None;
+        {
+            // Serialize with other netavark processes, deletes are a read-modify-write
+            let _lockfile = self.lock_commit()?;
+            for entry in entries {
+                if let Err(e) = self.delete_entry(entry.container_id.0, entry.network_name) {
+                    first_err.get_or_insert(e);
+                }
+            }
         }
-        self.notify(false, false)
+        // always notify so aardvark drops the entries that were removed
+        let notified = self.notify(false, false);
+        match first_err {
+            Some(e) => Err(NetavarkError::Io(e)),
+            None => notified,
+        }
     }
 }
 
@@ -626,5 +648,60 @@ mod tests {
     #[test]
     fn dns_loop_empty_entries_ok() {
         assert!(Aardvark::check_for_dns_loop(&[]).is_ok());
+    }
+
+    #[test]
+    fn concurrent_delete_removes_network_file() {
+        const N: usize = 8;
+        for _ in 0..50 {
+            let dir = tempfile::tempdir().unwrap();
+            let config = dir.path().join("aardvark-dns");
+            fs::create_dir(&config).unwrap();
+            let aardvark = Aardvark::new(config.clone(), true, OsString::from("true"), 53);
+            let gw = vec![IpAddr::V4(Ipv4Addr::new(10, 89, 0, 1))];
+            let ids: Vec<String> = (0..N).map(|i| format!("container{i}")).collect();
+            for (i, id) in ids.iter().enumerate() {
+                let entry = AardvarkEntry {
+                    network_name: "testnet",
+                    network_gateways: gw.clone(),
+                    network_dns_servers: &None,
+                    container_id: SafeString::try_from(id.as_str()).unwrap(),
+                    container_ips_v4: vec![Ipv4Addr::new(10, 89, 0, 2 + i as u8)],
+                    container_ips_v6: vec![],
+                    container_names: vec![SafeString::try_from(id.as_str()).unwrap()],
+                    container_dns_servers: &None,
+                    is_internal: false,
+                };
+                aardvark.commit_entries(&[entry]).unwrap();
+            }
+
+            let barrier = std::sync::Barrier::new(N);
+            std::thread::scope(|scope| {
+                for id in &ids {
+                    scope.spawn(|| {
+                        let entry = AardvarkEntry {
+                            network_name: "testnet",
+                            network_gateways: vec![],
+                            network_dns_servers: &None,
+                            container_id: SafeString::try_from(id.as_str()).unwrap(),
+                            container_ips_v4: vec![],
+                            container_ips_v6: vec![],
+                            container_names: vec![],
+                            container_dns_servers: &None,
+                            is_internal: false,
+                        };
+                        barrier.wait();
+                        // notify fails because no aardvark is running, that is irrelevant here
+                        let _ = aardvark.delete_from_netavark_entries(&[entry]);
+                    });
+                }
+            });
+
+            assert!(
+                !config.join("testnet").exists(),
+                "stale network file left behind: {:?}",
+                fs::read_to_string(config.join("testnet"))
+            );
+        }
     }
 }
