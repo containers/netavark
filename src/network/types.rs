@@ -85,6 +85,9 @@ pub struct NetworkCreateConfig {
 pub struct CreateOpts {
     #[serde(rename = "subnet_pools")]
     pub subnet_pools: Vec<SubnetPool>,
+    #[serde(rename = "subnet_pools_v6")]
+    #[serde(default)]
+    pub subnet_pools_v6: Vec<SubnetPool>,
     #[serde(rename = "default_interface_name")]
     pub default_interface_name: Option<String>,
     #[serde(rename = "check_used_subnets")]

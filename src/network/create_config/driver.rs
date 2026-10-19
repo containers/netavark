@@ -4,6 +4,7 @@ use crate::network::constants;
 use crate::network::core_utils::CoreUtils;
 use crate::network::create_config::subnet::{
     get_free_ipv4_network_subnet, get_free_ipv6_network_subnet,
+    get_free_ipv6_network_subnet_from_pools,
 };
 use crate::network::netlink::Socket;
 use crate::network::netlink_route::NetlinkRoute;
@@ -115,7 +116,15 @@ pub fn create_bridge(
                     updated_subnets.push(free_subnet);
                 }
                 if !ipv6 {
-                    let free_subnet = get_free_ipv6_network_subnet(&used.subnets)?;
+                    let free_subnet = if !opts.subnet_pools_v6.is_empty() {
+                        get_free_ipv6_network_subnet_from_pools(
+                            &used.subnets,
+                            &opts.subnet_pools_v6,
+                            check_used,
+                        )?
+                    } else {
+                        get_free_ipv6_network_subnet(&used.subnets)?
+                    };
                     updated_subnets.push(free_subnet);
                 }
                 if !ipv4 || !ipv6 {
