@@ -46,3 +46,14 @@
     require:
         - podman-tests
     duration: 15m
+
+/musl:
+    summary: MUSL build check
+    test: |
+        podman run --rm -v $(pwd)/../..:/src:Z -w /src docker.io/library/alpine:latest \
+            sh -c '. /etc/os-release && [ "$NAME" = "Alpine Linux" ] || { echo "Not running on Alpine Linux (NAME=$NAME) - musl check requires the alpine container image"; exit 1; }; apk add --no-cache cargo build-base protobuf && cargo build'
+    require:
+        - podman
+    adjust:
+        enabled: false
+        when: initiator is not defined or initiator != packit

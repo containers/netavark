@@ -50,3 +50,8 @@ finish:
     summary: Podman tests
     discover+:
         test: /podman
+
+/musl:
+    summary: MUSL test
+    discover+:
+        test: /musl
