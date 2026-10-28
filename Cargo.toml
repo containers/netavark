@@ -54,7 +54,7 @@ fs2 = "0.4.3"
 tokio = { version = "1.54.0", features = ["rt", "rt-multi-thread", "signal", "fs", "time"] }
 tokio-stream = { version = "0.1.19", features = ["net"] }
 tonic = "0.14.8"
-tonic-prost = "0.14.7"
+tonic-prost = "0.14.8"
 prost = "0.14.4"
 mozim = { version = "0.3.3", default-features = false }
 futures-channel = "0.3.34"

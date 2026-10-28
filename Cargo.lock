@@ -2132,9 +2132,9 @@ dependencies = [
 
 [[package]]
 name = "tonic-prost"
-version = "0.14.7"
+version = "0.14.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fe9efdab8bb668f5ef526e21c247c8cb658853a754983cb70f1dac3fc4f462a"
+checksum = "f63c616ffaa648f7c5dd5657e97d9a285fcb44ff3b70da761d436f5a13ff7be6"
 dependencies = [
  "bytes",
  "prost",
