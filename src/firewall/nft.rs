@@ -15,6 +15,8 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr};
 use std::ops::Deref;
+use std::path::Path;
+use std::sync::OnceLock;
 
 const TABLENAME: &str = "netavark";
 
@@ -49,6 +51,52 @@ const FILTERPRIO: i32 = 0;
 
 const IPV4_LOCALHOST: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
 
+/// The family of netavark's table, and of every chain and rule in it.
+///
+/// It is `inet`, which serves IPv4 and IPv6 alike, wherever it can be: the
+/// `inet` family needs a kernel with IPv6 (NF_TABLES_INET depends on IPV6).
+/// On a kernel without IPv6, where no `inet` table can be made, it is `ip`:
+/// there every network and address is IPv4, and so is every rule.
+fn table_family() -> types::NfFamily {
+    static FAMILY: OnceLock<types::NfFamily> = OnceLock::new();
+    *FAMILY.get_or_init(|| family_for_kernel(Path::new("/proc/sys/net/ipv6").exists()))
+}
+
+fn family_for_kernel(has_ipv6: bool) -> types::NfFamily {
+    if has_ipv6 {
+        types::NfFamily::INet
+    } else {
+        types::NfFamily::IP
+    }
+}
+
+/// The table's family as nft names it on its command line.
+fn table_family_name() -> &'static str {
+    family_name(table_family())
+}
+
+fn family_name(family: types::NfFamily) -> &'static str {
+    match family {
+        types::NfFamily::IP => "ip",
+        _ => "inet",
+    }
+}
+
+/// An IPv6 subnet cannot be served from an `ip` table, nor by a kernel
+/// without IPv6.
+fn check_subnet_family(subnet: &IpNet) -> NetavarkResult<()> {
+    check_subnet_in_family(subnet, table_family())
+}
+
+fn check_subnet_in_family(subnet: &IpNet, family: types::NfFamily) -> NetavarkResult<()> {
+    if subnet.addr().is_ipv6() && family == types::NfFamily::IP {
+        return Err(NetavarkError::Message(format!(
+            "network subnet {subnet} is IPv6, but this kernel has no IPv6 support"
+        )));
+    }
+    Ok(())
+}
+
 pub struct Nftables {}
 
 pub fn new() -> Result<Box<dyn firewall::FirewallDriver>, NetavarkError> {
@@ -65,11 +113,17 @@ impl firewall::FirewallDriver for Nftables {
         network_setup: internal_types::SetupNetwork,
         dbus_conn: &Option<zbus::blocking::Connection>,
     ) -> NetavarkResult<()> {
+        if let Some(subnets) = &network_setup.subnets {
+            for subnet in subnets {
+                check_subnet_family(subnet)?;
+            }
+        }
+
         let mut batch = Batch::new();
 
         // Overall table
         batch.add(schema::NfListObject::Table(schema::Table {
-            family: types::NfFamily::INet,
+            family: table_family(),
             name: Cow::Borrowed(TABLENAME),
             ..schema::Table::default()
         }));
@@ -1306,7 +1360,7 @@ fn get_dnat_rules_for_addr_family<'a>(
 /// Make a DNAT rule to allow DNS traffic to a DNS server on a non-standard port (53 -> actual port).
 fn make_dns_dnat_rule(dns_ip: &IpAddr, dns_port: u16) -> schema::NfListObject<'_> {
     let rule = schema::Rule {
-        family: types::NfFamily::INet,
+        family: table_family(),
         table: Cow::Borrowed(TABLENAME),
         chain: Cow::Borrowed(DNATCHAIN),
         expr: Cow::Owned(vec![
@@ -1354,10 +1408,10 @@ fn get_jump_action(target: Cow<str>) -> stmt::Statement {
 }
 
 /// Create an instruction to make a basic chain (no hooks, no priority).
-/// Chain is always inet, always in our overall netavark table.
+/// Chain is always in our overall netavark table, of its family.
 fn make_basic_chain(name: Cow<str>) -> schema::NfListObject {
     schema::NfListObject::Chain(schema::Chain {
-        family: types::NfFamily::INet,
+        family: table_family(),
         table: Cow::Borrowed(TABLENAME),
         name,
         ..schema::Chain::default()
@@ -1373,7 +1427,7 @@ fn make_complex_chain(
     priority: i32,
 ) -> schema::NfListObject<'_> {
     schema::NfListObject::Chain(schema::Chain {
-        family: types::NfFamily::INet,
+        family: table_family(),
         table: Cow::Borrowed(TABLENAME),
         name: Cow::Borrowed(name),
         _type: Some(chain_type),
@@ -1390,7 +1444,7 @@ fn make_rule<'a>(
     conditions: Cow<'a, [stmt::Statement<'a>]>,
 ) -> schema::NfListObject<'a> {
     schema::NfListObject::Rule(schema::Rule {
-        family: types::NfFamily::INet,
+        family: table_family(),
         table: Cow::Borrowed(TABLENAME),
         chain,
         expr: conditions,
@@ -1491,8 +1545,10 @@ fn get_chain<'a>(base_rules: &schema::Nftables<'a>, chain: &str) -> Option<schem
 }
 
 fn get_netavark_rules() -> Result<schema::Nftables<'static>, helper::NftablesError> {
-    match helper::get_current_ruleset_with_args(None::<&str>, ["list", "table", "inet", TABLENAME])
-    {
+    match helper::get_current_ruleset_with_args(
+        None::<&str>,
+        ["list", "table", table_family_name(), TABLENAME],
+    ) {
         Ok(rules) => Ok(rules),
         Err(err) => match err {
             helper::NftablesError::NftFailed {
@@ -1515,5 +1571,28 @@ fn get_netavark_rules() -> Result<schema::Nftables<'static>, helper::NftablesErr
 
             err => Err(err),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn table_family_follows_kernel_ipv6() {
+        assert_eq!(family_for_kernel(true), types::NfFamily::INet);
+        assert_eq!(family_for_kernel(false), types::NfFamily::IP);
+        assert_eq!(family_name(family_for_kernel(true)), "inet");
+        assert_eq!(family_name(family_for_kernel(false)), "ip");
+    }
+
+    #[test]
+    fn ipv6_subnet_refused_without_ipv6() {
+        let v4: IpNet = "10.88.0.0/16".parse().unwrap();
+        let v6: IpNet = "fd00::/64".parse().unwrap();
+        assert!(check_subnet_in_family(&v4, types::NfFamily::IP).is_ok());
+        assert!(check_subnet_in_family(&v6, types::NfFamily::IP).is_err());
+        assert!(check_subnet_in_family(&v4, types::NfFamily::INet).is_ok());
+        assert!(check_subnet_in_family(&v6, types::NfFamily::INet).is_ok());
     }
 }
