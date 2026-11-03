@@ -45,6 +45,15 @@ finish:
     summary: Integration tests
     discover+:
         test: /integration
+    prepare+:
+        - how: shell
+          order: 15
+          script: |
+              if [ "$TMT_REBOOT_COUNT" -eq 0 ]; then
+                  dnf install -y kernel kernel-modules kernel-modules-core kernel-modules-extra
+                  tmt-reboot
+              fi
+              modprobe sctp
 
 /podman:
     summary: Podman tests
