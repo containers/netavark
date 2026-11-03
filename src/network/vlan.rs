@@ -5,7 +5,7 @@ use std::{collections::HashMap, net::IpAddr};
 use crate::network::netlink::Socket;
 use crate::network::netlink_route::{CreateLinkOptions, LinkID, NetlinkRoute};
 use netlink_packet_route::link::{
-    InfoData, InfoIpVlan, InfoKind, InfoMacVlan, IpVlanMode, MacVlanMode,
+    InfoData, InfoIpVlan, InfoKind, InfoMacVlan, InfoVlan, IpVlanMode, MacVlanMode,
 };
 use rand::distr::{Alphanumeric, SampleString};
 
@@ -24,7 +24,9 @@ use super::{
         NO_CONTAINER_INTERFACE_ERROR, OPTION_BCLIM, OPTION_METRIC, OPTION_MODE, OPTION_MTU,
         OPTION_NO_DEFAULT_ROUTE, VALID_VLAN_OPTS,
     },
-    core_utils::{self, get_ipam_addresses, get_mac_address, parse_option, CoreUtils},
+    core_utils::{
+        self, get_ipam_addresses, get_mac_address, parse_option, parse_vlan_interface, CoreUtils,
+    },
     driver::{self, DriverInfo},
     internal_types::IPAMAddresses,
     types::{NetInterface, StatusBlock},
@@ -70,7 +72,8 @@ struct InternalData {
     kind: KindData,
     /// if set, no default gateway will be added
     no_default_route: bool,
-    // TODO: add vlan
+    /// VLAN ID
+    vlan_id: Option<u16>,
 }
 
 pub struct Vlan<'a> {
@@ -113,14 +116,16 @@ impl driver::NetworkDriver for Vlan<'_> {
             ipam.gateway_addresses = Vec::new();
         }
 
+        let (host_interface_name, vlan_id) =
+            if let Some(iface) = self.info.network.network_interface.as_deref() {
+                parse_vlan_interface(iface)?
+            } else {
+                ("", None)
+            };
+
         self.data = Some(InternalData {
             container_interface_name: self.info.per_network_opts.interface_name.clone(),
-            host_interface_name: self
-                .info
-                .network
-                .network_interface
-                .clone()
-                .unwrap_or_default(),
+            host_interface_name: host_interface_name.to_string(),
             ipam,
             mtu,
             metric: Some(metric),
@@ -139,6 +144,7 @@ impl driver::NetworkDriver for Vlan<'_> {
                 other => return Err(NetavarkError::msg(format!("unsupported VLAN type {other}"))),
             },
             no_default_route,
+            vlan_id,
         });
         Ok(())
     }
@@ -237,6 +243,26 @@ impl driver::NetworkDriver for Vlan<'_> {
         netns_sock.del_link(LinkID::Name(
             self.info.per_network_opts.interface_name.to_string(),
         ))?;
+
+        let host_sock = netlink_sockets.0;
+        if let Some(iface) = self.info.network.network_interface.as_deref() {
+            if let Ok((_, Some(_))) = parse_vlan_interface(iface) {
+                // This is VLAN sub-interface, try to clean it up. If it is used by something else,
+                // kernel won't let us delete it (EBUSY error).
+                match host_sock.del_link(LinkID::Name(iface.to_string())) {
+                    Ok(_) => {}
+                    Err(NetavarkError::Netlink(ref e))
+                        if matches!(-e.raw_code(), libc::EBUSY | libc::ENODEV | libc::ENXIO) =>
+                    {
+                        debug!("not removing VLAN sub-interface {iface}: {e}");
+                    }
+                    Err(e) => {
+                        error!("failed to remove VLAN sub-interface {iface}: {e}");
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 }
@@ -250,9 +276,27 @@ fn setup(
     netns_fd: BorrowedFd<'_>,
     kind_data: &KindData,
 ) -> NetavarkResult<String> {
-    let link = match data.host_interface_name.as_ref() {
+    let parent_link = match data.host_interface_name.as_ref() {
         "" => get_default_route_interface(host, None)?,
         host_name => host.get_link(LinkID::Name(host_name.to_string()))?,
+    };
+
+    let link = if let Some(vlan_id) = data.vlan_id {
+        let vlan_if_name = format!("{}.{}", data.host_interface_name, vlan_id);
+        host.get_link(LinkID::Name(vlan_if_name.clone()))
+            .or_else(|_| {
+                let mut vlan_opts = CreateLinkOptions::new(vlan_if_name.clone(), InfoKind::Vlan);
+                vlan_opts.link = parent_link.header.index;
+                vlan_opts.info_data = Some(InfoData::Vlan(vec![InfoVlan::Id(vlan_id)]));
+                host.create_link(vlan_opts)
+                    .wrap("create VLAN sub-interface")?;
+                host.set_up(LinkID::Name(vlan_if_name.clone()))
+                    .wrap("set VLAN sub-interface up")?;
+                host.get_link(LinkID::Name(vlan_if_name.clone()))
+                    .wrap("get VLAN sub-interface")
+            })?
+    } else {
+        parent_link
     };
 
     let opts = match kind_data {
