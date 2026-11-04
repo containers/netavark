@@ -311,6 +311,15 @@ function setup() {
     assert_json "$result" ".options.mode" == "bridge" "Mode option is set"
 }
 
+@test "create - macvlan sub-interface" {
+    run_netavark create < ${TESTSDIR}/testfiles/create/macvlan-subinterface.json
+    result="$output"
+
+    assert_json "$result" ".driver" == "macvlan" "Driver is macvlan"
+    assert_json "$result" ".ipam_options.driver" == "host-local" "IPAM driver is host-local"
+    assert_json "$result" ".dns_enabled" == "false" "DNS is disabled for macvlan"
+}
+
 # IPVLAN Tests
 @test "create - fail ipvlan without subnet (no dhcp support)" {
     expected_rc=1 run_netavark create < ${TESTSDIR}/testfiles/create/ipvlan-no-subnet.json
@@ -324,6 +333,15 @@ function setup() {
     assert_json "$result" ".driver" == "ipvlan" "Driver is ipvlan"
     assert_json "$result" ".ipam_options.driver" == "host-local" "IPAM driver is host-local"
     assert_json "$result" ".subnets[0].subnet" == "10.200.0.0/24" "Subnet matches"
+    assert_json "$result" ".dns_enabled" == "false" "DNS is disabled for ipvlan"
+}
+
+@test "create - ipvlan sub-interface" {
+    run_netavark create < ${TESTSDIR}/testfiles/create/ipvlan-subinterface.json
+    result="$output"
+
+    assert_json "$result" ".driver" == "ipvlan" "Driver is ipvlan"
+    assert_json "$result" ".ipam_options.driver" == "host-local" "IPAM driver is host-local"
     assert_json "$result" ".dns_enabled" == "false" "DNS is disabled for ipvlan"
 }
 

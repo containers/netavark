@@ -551,6 +551,26 @@ pub fn get_mtu_from_iface_attributes(attributes: &[LinkAttribute]) -> NetavarkRe
     ))
 }
 
+/// Parse an interface name in the form `parent[.vlan_id]`, e.g. `eth0.50`. Returns the parent
+/// name and the optional VLAN ID, validating that the ID is in the range 1..=4094.
+pub fn parse_vlan_interface(iface_name: &str) -> NetavarkResult<(&str, Option<u16>)> {
+    let Some((parent, vid)) = iface_name.split_once('.') else {
+        return Ok((iface_name, None));
+    };
+
+    let err = || {
+        NetavarkError::msg(format!(
+            "VLAN ID must be a number between 1 and 4094, received: {vid}"
+        ))
+    };
+
+    let vid = vid.parse::<u16>().map_err(|_| err())?;
+    if !(1..=4094).contains(&vid) {
+        return Err(err());
+    }
+    Ok((parent, Some(vid)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -687,5 +707,39 @@ mod tests {
         assert_eq!(hex, "C5964C6794A11");
         let hex = CoreUtils::create_network_hash("net1", 20);
         assert_eq!(hex, "8E48F37D5DE60467E164");
+    }
+
+    #[test]
+    fn test_parse_vlanif_simple() {
+        let (parent, vid) = parse_vlan_interface("dummy0").unwrap();
+        assert_eq!(parent, "dummy0");
+        assert_eq!(vid, None);
+    }
+
+    #[test]
+    fn test_parse_vlanif_with_id() {
+        let (parent, vid) = parse_vlan_interface("dummy0.50").unwrap();
+        assert_eq!(parent, "dummy0");
+        assert_eq!(vid, Some(50));
+    }
+
+    #[test]
+    fn test_parse_vlanif_invalid_id() {
+        let result = parse_vlan_interface("dummy0.foo");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_vlanif_id_boundaries() {
+        assert_eq!(
+            parse_vlan_interface("dummy0.1").unwrap(),
+            ("dummy0", Some(1))
+        );
+        assert_eq!(
+            parse_vlan_interface("dummy0.4094").unwrap(),
+            ("dummy0", Some(4094))
+        );
+        assert!(parse_vlan_interface("dummy0.0").is_err());
+        assert!(parse_vlan_interface("dummy0.4095").is_err());
     }
 }
