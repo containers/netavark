@@ -103,6 +103,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .expect("connect socket");
 
+    if sock_type == socket::SockType::Datagram {
+        socket::setsockopt(&connect_sock, socket::sockopt::Broadcast, &true)
+            .expect("set SO_BROADCAST");
+    }
+
     let mut send_buf = Vec::new();
     std::io::stdin()
         .read_to_end(&mut send_buf)
