@@ -614,11 +614,9 @@ impl<'a> Bridge<'a> {
             )?;
         }
 
-        let system_dbus = zbus::blocking::Connection::system().ok();
+        self.info.firewall.setup_network(sn)?;
 
-        self.info.firewall.setup_network(sn, &system_dbus)?;
-
-        self.info.firewall.setup_port_forward(spf, &system_dbus)?;
+        self.info.firewall.setup_port_forward(spf)?;
         Ok(())
     }
 

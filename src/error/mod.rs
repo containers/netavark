@@ -70,7 +70,7 @@ pub enum NetavarkError {
     Io(std::io::Error),
 
     Dbus(zbus::Error),
-    DbusVariant(zbus::zvariant::Error),
+    DbusVariant(zbus::Error),
 
     Serde(serde_json::Error),
 
@@ -191,16 +191,10 @@ impl From<zbus::Error> for NetavarkError {
     }
 }
 
-impl From<zbus::zvariant::Error> for NetavarkError {
-    fn from(err: zbus::zvariant::Error) -> NetavarkError {
-        NetavarkError::DbusVariant(err)
-    }
-}
-
 // map the new zvariant::signature::Error to a
 // NetavarkError::DbusVariant, like zvariant::Error
-impl From<zbus::zvariant::signature::Error> for NetavarkError {
-    fn from(err: zbus::zvariant::signature::Error) -> NetavarkError {
+impl From<zbus::wire::signature::Error> for NetavarkError {
+    fn from(err: zbus::wire::signature::Error) -> NetavarkError {
         NetavarkError::DbusVariant(err.into())
     }
 }

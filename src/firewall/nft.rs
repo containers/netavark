@@ -1,6 +1,6 @@
 use crate::error::{NetavarkError, NetavarkResult};
-use crate::firewall;
 use crate::firewall::firewalld;
+use crate::firewall::{self, DbusContext};
 use crate::network::internal_types;
 use crate::network::internal_types::IsolateOption;
 use crate::network::types::PortMapping;
@@ -49,10 +49,14 @@ const FILTERPRIO: i32 = 0;
 
 const IPV4_LOCALHOST: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
 
-pub struct Nftables {}
+pub struct Nftables {
+    dbus_ctx: Option<DbusContext>,
+}
 
-pub fn new() -> Result<Box<dyn firewall::FirewallDriver>, NetavarkError> {
-    Ok(Box::new(Nftables {}))
+pub fn new(
+    dbus_ctx: Option<DbusContext>,
+) -> Result<Box<dyn firewall::FirewallDriver>, NetavarkError> {
+    Ok(Box::new(Nftables { dbus_ctx }))
 }
 
 impl firewall::FirewallDriver for Nftables {
@@ -60,11 +64,7 @@ impl firewall::FirewallDriver for Nftables {
         firewall::NFTABLES
     }
 
-    fn setup_network(
-        &self,
-        network_setup: internal_types::SetupNetwork,
-        dbus_conn: &Option<zbus::blocking::Connection>,
-    ) -> NetavarkResult<()> {
+    fn setup_network(&self, network_setup: internal_types::SetupNetwork) -> NetavarkResult<()> {
         let mut batch = Batch::new();
 
         // Overall table
@@ -457,7 +457,14 @@ impl firewall::FirewallDriver for Nftables {
                 // Add us to firewalld if necessary.
                 // Do this first, as firewalld doesn't wipe our rules - so after a reload, we skip everything below.
                 if needs_host_access {
-                    firewalld::add_firewalld_if_possible(dbus_conn, &subnet);
+                    if let Some(dbus_ctx) = &self.dbus_ctx {
+                        dbus_ctx
+                            .runtime
+                            .block_on(firewalld::add_firewalld_if_possible(
+                                &dbus_ctx.conn,
+                                &subnet,
+                            ));
+                    }
                 }
 
                 // Do we already have a chain for the subnet?
@@ -726,7 +733,11 @@ impl firewall::FirewallDriver for Nftables {
                 // After all nftables work is done, remove us from firewalld.
                 // Internal networks without DNS were never added to the trusted zone.
                 if !tear.config.internal || tear.config.dns_enabled {
-                    firewalld::rm_firewalld_if_possible(&subnet);
+                    if let Some(dbus_ctx) = &self.dbus_ctx {
+                        dbus_ctx
+                            .runtime
+                            .block_on(firewalld::rm_firewalld_if_possible(&dbus_ctx.conn, &subnet))
+                    }
                 }
             }
         }
@@ -767,9 +778,15 @@ impl firewall::FirewallDriver for Nftables {
     fn setup_port_forward(
         &self,
         setup_portfw: internal_types::PortForwardConfig,
-        dbus_conn: &Option<zbus::blocking::Connection>,
     ) -> NetavarkResult<()> {
-        firewalld::check_can_forward_ports(dbus_conn, &setup_portfw)?;
+        if let Some(dbus_ctx) = &self.dbus_ctx {
+            dbus_ctx
+                .runtime
+                .block_on(firewalld::check_can_forward_ports(
+                    &dbus_ctx.conn,
+                    &setup_portfw,
+                ))?;
+        }
 
         let mut batch = Batch::new();
 
