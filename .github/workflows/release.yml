@@ -159,7 +159,7 @@ jobs:
     environment: release
     permissions:
       id-token: write
-    needs: check
+    needs: [check, release]
     steps:
     - name: Update Rust
       run: |
