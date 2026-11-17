@@ -6,7 +6,6 @@ authors = ["github.com/containers"]
 license = "Apache-2.0"
 readme = "README.md"
 description = "A container network stack"
-homepage = "https://github.com/containers/netavark"
 repository = "https://github.com/containers/netavark"
 categories = ["virtualization"]
 exclude = ["/.cirrus.yml", "/.github/*", "/hack/*"]
@@ -33,7 +32,6 @@ path = "src/test/main.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-anyhow = "1.0.93"
 clap = { version = "~4.6.6", features = ["derive", "env"] }
 env_logger = "0.11.11"
 ipnet = { version = "2.12.2", features = ["serde"] }
