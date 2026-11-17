@@ -161,10 +161,7 @@ impl<W: Write + Clear> LeaseCache<W> {
         self.mem.len()
     }
     pub fn is_empty(&self) -> bool {
-        if self.len() < 1 {
-            return true;
-        }
-        false
+        self.len() < 1
     }
 }
 
