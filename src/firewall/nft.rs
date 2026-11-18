@@ -240,7 +240,14 @@ impl firewall::FirewallDriver for Nftables {
         if get_matching_rules_in_chain(&existing_rules, FORWARDCHAIN, match_deny).is_empty() {
             batch.add(make_rule(
                 Cow::Borrowed(FORWARDCHAIN),
-                Cow::Borrowed(&[
+                Cow::Owned(vec![
+                    stmt::Statement::Match(stmt::Match {
+                        left: expr::Expression::Named(expr::NamedExpression::Meta(expr::Meta {
+                            key: expr::MetaKey::Iifname,
+                        })),
+                        right: expr::Expression::String(Cow::Borrowed(&network_setup.bridge_name)),
+                        op: stmt::Operator::EQ,
+                    }),
                     stmt::Statement::Match(stmt::Match {
                         left: expr::Expression::Named(expr::NamedExpression::CT(expr::CT {
                             key: Cow::Borrowed("state"),
@@ -755,6 +762,16 @@ impl firewall::FirewallDriver for Nftables {
             isolation_rules.len()
         );
         for rule in isolation_rules {
+            batch.delete(schema::NfListObject::Rule(rule));
+        }
+
+        let forwarding_rules =
+            get_matching_rules_in_chain(&existing_rules, FORWARDCHAIN, &match_our_bridge);
+        log::debug!(
+            "Removing {} forwarding rules for network",
+            forwarding_rules.len()
+        );
+        for rule in forwarding_rules {
             batch.delete(schema::NfListObject::Rule(rule));
         }
 
