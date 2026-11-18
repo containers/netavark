@@ -940,10 +940,7 @@ impl firewall::FirewallDriver for Nftables {
 // As we use this to compare rules from nft against rules created
 // by us in memory it means the handle id and index can never match.
 fn cmp_rules(rule1: &schema::Rule, rule2: &schema::Rule) -> bool {
-    if rule1.chain == rule2.chain && rule1.expr.deref() == rule2.expr.deref() {
-        return true;
-    }
-    false
+    rule1.chain == rule2.chain && rule1.expr.deref() == rule2.expr.deref()
 }
 
 fn get_bridge_match(bridge: &str, key: expr::MetaKey, op: stmt::Operator) -> stmt::Statement<'_> {
