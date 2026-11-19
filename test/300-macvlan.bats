@@ -132,6 +132,39 @@ function setup() {
     assert_json "$result" ".podman.interfaces.eth0.subnets[0].ipnet" "==" "$ipaddr/16" "Result contains correct IP address"
 }
 
+@test "macvlan setup sub-interface" {
+    # parent interface must be up before we can create sub-interface on it
+    run_in_host_netns ip link set dummy0 up
+
+    run_netavark --file "${TESTSDIR}/testfiles/macvlan-subinterface.json" setup "$(get_container_netns_path)"
+    result="$output"
+
+    # check that sub-interface exists on host and has VLAN ID
+    run_in_host_netns ip -j --details link show dummy0.50
+    addr_info="$output"
+    assert_json "$addr_info" ".[].link" "==" "dummy0" "parent interface matches"
+    assert_json "$addr_info" ".[].linkinfo.info_kind" "==" "vlan" "sub-interface is a VLAN device"
+    assert_json "$addr_info" ".[].linkinfo.info_data.protocol" "==" "802.1Q" "sub-interface is tagged VLAN device"
+    assert_json "$addr_info" ".[].linkinfo.info_data.id" "==" "50" "sub-interface created with correct VLAN ID"
+    assert_json "$addr_info" '.[].flags[] | select(.=="UP")' "=="  "UP" "sub-interface is up"
+
+    mac=$(jq -r '.macvlansubinterface.interfaces.eth0.mac_address' <<< "$result" )
+
+    # check that interface exists
+    run_in_container_netns ip -j --details link show eth0
+    addr_info="$output"
+    assert_json "$addr_info" ".[].address" "=="  "$mac" "sub-interface MAC matches container mac"
+    assert_json "$addr_info" '.[].flags[] | select(.=="UP")' "=="  "UP" "Container interface is up"
+    assert_json "$addr_info" ".[].linkinfo.info_kind" "==" "macvlan" "Container interface is a macvlan device"
+
+    ipaddr="10.0.50.2"
+    run_in_container_netns ip -j addr show eth0
+    addr_info="$output"
+    assert_json "$addr_info" ".[].addr_info[0].local" "==" "$ipaddr" "IP address matches container address"
+    assert_json "$addr_info" ".[].addr_info[0].prefixlen" "==" "24" "IP prefix matches container subnet"
+    assert_json "$result" ".macvlansubinterface.interfaces.eth0.subnets[0].ipnet" "==" "$ipaddr/24" "Result contains correct IP address"
+}
+
 @test "macvlan modes" {
     for mode in bridge private vepa passthru source; do
         # echo here so we know which test failed
