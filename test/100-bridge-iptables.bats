@@ -820,6 +820,43 @@ EOF
     assert "${lines[1]}" == "-A NETAVARK_ISOLATION_3 -j NETAVARK_ISOLATION_2"
 }
 
+@test "$fw_driver - isolation stays after another isolated network is torn down" {
+    # isolate3: 10.89.2.2/24, fd92::2, isolate=strict
+    run_netavark --file ${TESTSDIR}/testfiles/isolate3.json setup $(get_container_netns_path)
+
+    # isolate4: 10.89.3.2/24, fd93::2, isolate=strict
+    create_container_ns
+    run_netavark --file ${TESTSDIR}/testfiles/isolate4.json setup $(get_container_netns_path 1)
+
+    # podman: 10.88.0.2/16
+    create_container_ns
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path 2)
+
+    # from network podman to isolate3
+    expected_rc=1 run_in_container_netns 2 ping -w 1 -c 1 10.89.2.2
+
+    # The last container leaves isolate4.
+    run_netavark --file ${TESTSDIR}/testfiles/isolate4.json teardown $(get_container_netns_path 1)
+
+    run_in_host_netns iptables -S FORWARD
+    assert "$output" =~ "-A FORWARD -j NETAVARK_ISOLATION_1"
+    run_in_host_netns ip6tables -S FORWARD
+    assert "$output" =~ "-A FORWARD -j NETAVARK_ISOLATION_1"
+
+    run_in_host_netns iptables -S NETAVARK_ISOLATION_1
+    assert "${lines[1]}" == "-A NETAVARK_ISOLATION_1 -i isolate3 ! -o isolate3 -j NETAVARK_ISOLATION_3"
+
+    # ping the gateways to make sure both networks still work
+    run_in_container_netns ping -w 1 -c 1 10.89.2.1
+    run_in_container_netns 2 ping -w 1 -c 1 10.88.0.1
+
+    # from network podman to isolate3, still blocked
+    expected_rc=1 run_in_container_netns 2 ping -w 1 -c 1 10.89.2.2
+
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path 2)
+    run_netavark --file ${TESTSDIR}/testfiles/isolate3.json teardown $(get_container_netns_path)
+}
+
 @test "$fw_driver - test read only /proc" {
     if [ -n "$_CONTAINERS_ROOTLESS_UID" ]; then
         skip "test only supported when run as real root"

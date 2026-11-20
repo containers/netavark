@@ -284,10 +284,12 @@ pub fn get_network_chains<'a>(
         netavark_isolation_chain_1.create = true;
 
         // -A FORWARD -j NETAVARK_ISOLATION_1
+        // Every isolated network shares this jump, so tearing down one of them
+        // must not remove it.
         forward_chain.build_rule(VarkRule {
             rule: format!("-j {NETAVARK_ISOLATION_1}"),
             position: Some(ind),
-            td_policy: Some(TeardownPolicy::OnComplete),
+            td_policy: Some(TeardownPolicy::Never),
         });
 
         let netavark_isolation_1_target = if let IsolateOption::Strict = isolation {
