@@ -3,11 +3,12 @@ use std::{
     path::Path,
 };
 
-use zbus::{blocking::Connection, proxy, proxy::CacheProperties};
+use futures_util::StreamExt;
+use zbus::{proxy, proxy::CacheProperties};
 
 use crate::{
     error::{ErrorWrap, NetavarkResult},
-    firewall::{get_supported_firewall_driver, state::read_fw_config},
+    firewall::{get_supported_firewall_driver, state::read_fw_config, DbusContext},
     network::constants,
 };
 
@@ -28,45 +29,46 @@ pub fn listen(config_dir: Option<OsString>) -> NetavarkResult<()> {
     );
     log::debug!("looking for firewall configs in {config_dir:?}");
 
-    let conn = Connection::system()?;
-    let proxy = FirewallDDbusProxyBlocking::builder(&conn)
-        .cache_properties(CacheProperties::No)
-        .build()?;
-
-    let conn_option = Some(conn);
-
     // Setup fw rules on start because we are started after firewalld
     // this means at the time firewalld stated the fw rules were flushed
     // and we need to add them back.
     // It is important to keep things like "systemctl restart firewalld" working.
-    reload_rules(config_dir, &conn_option);
+    reload_rules(config_dir);
 
+    let dbus_ctx = DbusContext::system()?;
+    let mut signals = dbus_ctx.runtime.block_on(async {
+        let proxy = FirewallDDbusProxy::builder(&dbus_ctx.conn)
+            .cache_properties(CacheProperties::No)
+            .build()
+            .await?;
+        proxy.0.receive_signal(SIGNAL_NAME).await
+    })?;
     // This loops forever until the process is killed or there is some dbus error.
-    for _ in proxy.0.receive_signal(SIGNAL_NAME)? {
+    while dbus_ctx.runtime.block_on(signals.next()).is_some() {
         log::debug!("got firewalld {SIGNAL_NAME} signal");
-        reload_rules(config_dir, &conn_option);
+        reload_rules(config_dir);
     }
 
     Ok(())
 }
 
-fn reload_rules(config_dir: &Path, conn: &Option<Connection>) {
-    if let Err(e) = reload_rules_inner(config_dir, conn) {
+fn reload_rules(config_dir: &Path) {
+    if let Err(e) = reload_rules_inner(config_dir) {
         log::error!("failed to reload firewall rules: {e}");
     }
 }
 
-fn reload_rules_inner(config_dir: &Path, conn: &Option<Connection>) -> NetavarkResult<()> {
+fn reload_rules_inner(config_dir: &Path) -> NetavarkResult<()> {
     let conf = read_fw_config(config_dir).wrap("read firewall config")?;
     // If we got no conf there are no containers so nothing to do.
     if let Some(conf) = conf {
         let fw_driver = get_supported_firewall_driver(Some(conf.driver))?;
 
         for net in conf.net_confs {
-            fw_driver.setup_network(net, conn)?;
+            fw_driver.setup_network(net)?;
         }
         for port in &conf.port_confs {
-            fw_driver.setup_port_forward(port.into(), conn)?;
+            fw_driver.setup_port_forward(port.into())?;
         }
         log::info!("Successfully reloaded firewall rules");
     }
