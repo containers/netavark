@@ -19,6 +19,7 @@
         - cargo
         - make
         - protobuf-compiler
+        - conntrack-tools
     adjust:
         enabled: false
         when: initiator is not defined or initiator != packit
