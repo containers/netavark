@@ -32,6 +32,10 @@ fn main() {
         .type_attribute(
             "netavark_proxy.NetworkConfig",
             "#[derive(serde::Serialize)]",
+        )
+        .field_attribute(
+            "netavark_proxy.NetworkConfig.no_default_route",
+            "#[serde(default)]",
         );
 
     builder

@@ -40,6 +40,7 @@ pub fn get_dhcp_lease(
     container_macvlan_mac: &str,
     container_hostname: &str,
     container_id: &str,
+    no_default_route: bool,
 ) -> NetavarkResult<DhcpLeaseInfo> {
     let nvp_config = NetworkConfig {
         host_iface: host_network_interface.to_string(),
@@ -51,6 +52,7 @@ pub fn get_dhcp_lease(
         container_iface: container_network_interface.to_string(),
         container_mac_addr: container_macvlan_mac.to_string(),
         container_id: container_id.to_string(),
+        no_default_route,
     };
     let lease = match tokio::task::LocalSet::new().block_on(
         match &tokio::runtime::Builder::new_current_thread()
@@ -141,6 +143,7 @@ pub fn release_dhcp_lease(
         container_iface: container_network_interface.to_string(),
         container_mac_addr: container_macvlan_mac.to_string(),
         container_id: "".to_string(),
+        no_default_route: false,
     };
     match tokio::task::LocalSet::new().block_on(
         match &tokio::runtime::Builder::new_current_thread()
