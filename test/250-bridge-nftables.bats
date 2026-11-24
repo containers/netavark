@@ -114,9 +114,8 @@ export NETAVARK_FW=nftables
 
     # check FORWARD rules
     run_in_host_netns nft list chain inet netavark FORWARD
-    assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
-    assert "${lines[4]}" =~ "ct mark & 0x00001000 == 0x00001000 accept" "accept dnat traffic"
-    assert "${#lines[@]}" = 8 "too many FORWARD rules after teardown"
+    assert "${lines[3]}" =~ "ct mark & 0x00001000 == 0x00001000 accept" "accept dnat traffic"
+    assert "${#lines[@]}" = 7 "too many FORWARD rules after teardown"
 
     # check POSTROUTING rules
     run_in_host_netns nft list chain inet netavark POSTROUTING
@@ -1076,7 +1075,7 @@ net/ipv4/conf/podman1/rp_filter = 2"
 
     # check FORWARD rules
     run_in_host_netns nft list chain inet netavark FORWARD
-    assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
+    assert "${lines[3]}" =~ "iifname \"podman1\" ct state invalid drop" "CT state invalid rule"
     assert "${lines[5]}" =~ "jump NETAVARK-ISOLATION-1"
     assert "${lines[6]}" =~ "ip daddr 10.88.0.0/16 ct state established,related accept" "Related,established rule"
     assert "${lines[7]}" =~ "ip saddr 10.88.0.0/16 accept" "Subnet saddr accept rule"
@@ -1090,8 +1089,7 @@ net/ipv4/conf/podman1/rp_filter = 2"
     expected_rc=1 run_in_host_netns cat /run/sysctl.d/10-netavark-podman1.conf
 
     run_in_host_netns nft list chain inet netavark FORWARD
-    assert "${lines[3]}" =~ "ct state invalid drop" "forward rule 1"
-    assert "${#lines[@]}" = 8 "too many NETAVARK_FORWARD rules"
+    assert "${#lines[@]}" = 7 "too many NETAVARK_FORWARD rules"
 
     run_in_host_netns ip -o link
     assert "${#lines[@]}" == 1 "only loopback adapter"
@@ -1301,7 +1299,7 @@ net/ipv4/conf/podman1/rp_filter = 2"
 
     # FORWARD rules should be back to baseline
     run_in_host_netns nft list chain inet netavark FORWARD
-    assert "${#lines[@]}" = 8 "too many FORWARD rules after teardown with missing netns"
+    assert "${#lines[@]}" = 7 "too many FORWARD rules after teardown with missing netns"
 
     # POSTROUTING rules should be back to baseline
     run_in_host_netns nft list chain inet netavark POSTROUTING
@@ -1327,7 +1325,7 @@ function check_simple_bridge_nftables() {
 
     # check FORWARD rules
     run_in_host_netns nft list chain inet netavark FORWARD
-    assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
+    assert "${lines[3]}" =~ "iifname \"podman0\" ct state invalid drop" "CT state invalid rule"
     assert "${lines[4]}" =~ "ct mark & 0x00001000 == 0x00001000 accept" "accept dnat traffic"
     assert "${lines[5]}" =~ "jump NETAVARK-ISOLATION-1"
     assert "${lines[6]}" =~ "ip daddr 10.88.0.0/16 ct state established,related accept" "Related,established rule"
@@ -1482,7 +1480,7 @@ EOF
 
     # FORWARD: only base rules, no per-network accept rules
     run_in_host_netns nft list chain inet netavark FORWARD
-    assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
+    assert "${lines[3]}" =~ "iifname \"podman1\" ct state invalid drop" "CT state invalid rule"
     assert "${lines[4]}" =~ "ct mark & 0x00001000 == 0x00001000 accept" "accept dnat traffic"
     assert "${lines[5]}" =~ "jump NETAVARK-ISOLATION-1" "jump to isolation chain"
     assert "${#lines[@]}" = 8 "no per-network FORWARD rules for internal network"
@@ -1547,7 +1545,7 @@ EOF
 
     # FORWARD: only base rules, no per-network accept rules
     run_in_host_netns nft list chain inet netavark FORWARD
-    assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
+    assert "${lines[3]}" =~ "iifname \"podman1\" ct state invalid drop" "CT state invalid rule"
     assert "${lines[4]}" =~ "ct mark & 0x00001000 == 0x00001000 accept" "accept dnat traffic"
     assert "${lines[5]}" =~ "jump NETAVARK-ISOLATION-1" "jump to isolation chain"
     assert "${#lines[@]}" = 8 "no per-network FORWARD rules for internal network"
