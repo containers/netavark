@@ -133,22 +133,26 @@ fn stream_test(
     )
     .expect("connect to remote socket");
 
-    let conn = socket::accept4(listen_sock.as_raw_fd(), socket::SockFlag::empty())
-        .expect("accept connection");
+    let conn = socket::accept4(&listen_sock, socket::SockFlag::empty()).expect("accept connection");
 
-    let peer_addr = socket::getpeername::<socket::SockaddrStorage>(conn).expect("getpeername");
+    let peer_addr =
+        socket::getpeername::<socket::SockaddrStorage>(conn.as_raw_fd()).expect("getpeername");
     println!("Peer address: {peer_addr}");
 
     socket::send(connect_sock.as_raw_fd(), buf, socket::MsgFlags::empty()).expect("send msg");
 
     let mut read_buf = vec![0; buf.len()];
 
-    let len = socket::recv(conn, &mut read_buf, socket::MsgFlags::empty()).expect("recv msg");
+    let len =
+        socket::recv(conn.as_raw_fd(), &mut read_buf, socket::MsgFlags::empty()).expect("recv msg");
 
     println!(
         "Message: {}",
         std::str::from_utf8(&read_buf[..len]).expect("parse msg")
     );
+
+    // Explicitly drop connect_sock first before conn to avoid the socket getting into TIME_WAIT state and block the port later for reuse.
+    drop(connect_sock);
 }
 
 fn datagram_test(
