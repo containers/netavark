@@ -444,6 +444,8 @@ async fn process_setup<W: Write + Clear>(
         .map_err(|e| Status::new(InvalidArgument, format!("{e}")))?;
     let mac = &network_config.container_mac_addr.clone();
 
+    let no_default_route = network_config.no_default_route;
+
     let nv_lease = match network_config.version {
         //V4
         0 => {
@@ -479,6 +481,11 @@ async fn process_setup<W: Write + Clear>(
         ));
     }
 
-    ip::setup(&nv_lease, &container_network_interface, &ns_path)?;
+    ip::setup(
+        &nv_lease,
+        &container_network_interface,
+        &ns_path,
+        no_default_route,
+    )?;
     Ok(nv_lease)
 }

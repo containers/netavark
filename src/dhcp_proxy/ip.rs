@@ -134,12 +134,20 @@ impl Address<Ipv4Addr> for MacVLAN {
 
 // setup takes the DHCP lease and some additional information and
 // applies the TCP/IP information to the namespace.
-pub fn setup(lease: &NetavarkLease, interface: &str, ns_path: &str) -> Result<(), ProxyError> {
+pub fn setup(
+    lease: &NetavarkLease,
+    interface: &str,
+    ns_path: &str,
+    no_default_route: bool,
+) -> Result<(), ProxyError> {
     debug!("setting up {interface}");
     let vlan = MacVLAN::new(lease, interface)?;
     let (_, mut netns) = core_utils::open_netlink_sockets(ns_path)?;
     vlan.add_ip(&mut netns.netlink)?;
-    vlan.add_gws(&mut netns.netlink)
+    if !no_default_route {
+        vlan.add_gws(&mut netns.netlink)?;
+    }
+    Ok(())
 }
 
 // teardown is likely unnecessary but holding place here

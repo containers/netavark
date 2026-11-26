@@ -222,6 +222,7 @@ pub async fn process_client_stream(service_arc: Arc<Mutex<DhcpV4Service>>) {
                             &client.network_config.container_iface,
                             old_lease,
                             &lease,
+                            client.network_config.no_default_route,
                         ) {
                             log::error!("{err}");
                         }
@@ -255,6 +256,7 @@ fn update_lease_ip(
     interface: &str,
     old_lease: &MozimV4Lease,
     new_lease: &MozimV4Lease,
+    no_default_route: bool,
 ) -> NetavarkResult<()> {
     let (_, netns) =
         core_utils::open_netlink_sockets(netns).wrap("failed to open netlink socket in netns")?;
@@ -277,7 +279,7 @@ fn update_lease_ip(
         sock.del_addr(link.header.index, &ipnet::IpNet::V4(old_net))
             .wrap("remove old addrs")?;
     }
-    if new_lease.gateways != old_lease.gateways {
+    if !no_default_route && new_lease.gateways != old_lease.gateways {
         if let Some(gws) = &old_lease.gateways {
             let old_gw = gws.first();
             if let Some(gw) = old_gw {

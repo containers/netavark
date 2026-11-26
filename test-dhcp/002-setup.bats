@@ -125,3 +125,28 @@ EOF
         expected_rc=1 run_setup "$input_config"
         assert "$output" =~ "unable to parse mac address 123" "mac address error"
 }
+
+@test "setup with no_default_route" {
+      read -r -d '\0' input_config <<EOF
+{
+  "host_iface": "veth1",
+  "container_iface": "veth0",
+  "container_mac_addr": "$CONTAINER_MAC",
+  "domain_name": "example.com",
+  "host_name": "foobar",
+  "version": 0,
+  "ns_path": "$NS_PATH",
+  "container_id": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "no_default_route": true
+}
+  \0
+EOF
+
+        run_setup "$input_config"
+        container_ip=$(echo "$output" | jq -r .yiaddr)
+        has_ip "$container_ip" veth0
+
+        # verify no default route is present when no_default_route is set
+        run_in_container_netns ip -j route show default
+        assert "$output" == "[]" "no default route should exist with no_default_route"
+}
