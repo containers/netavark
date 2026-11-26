@@ -42,7 +42,7 @@ serde_json = "1.0.146"
 zbus = { version = "6.0.0" }
 nix = { version = "0.31.3", features = ["net", "sched", "signal", "socket", "user"] }
 rand = "0.10.4"
-sha2 = "0.11.1"
+sha2 = "0.11.2"
 base16ct = "1.0.0"
 netlink-packet-route = "0.34.0"
 netlink-packet-netfilter = "0.4.0"
