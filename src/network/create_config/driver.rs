@@ -1,7 +1,7 @@
 use crate::error::{NetavarkError, NetavarkResult};
 use crate::network::bridge::parse_bridge_opts;
 use crate::network::constants;
-use crate::network::core_utils::CoreUtils;
+use crate::network::core_utils::{parse_vlan_interface, CoreUtils};
 use crate::network::create_config::subnet::{
     get_free_ipv4_network_subnet, get_free_ipv6_network_subnet,
 };
@@ -134,11 +134,12 @@ pub fn create_bridge(
 
 pub fn create_ipvlan_macvlan(network: &mut Network) -> NetavarkResult<()> {
     if let Some(interface) = &network.network_interface {
+        let (interface, _) = parse_vlan_interface(interface)?;
+
         if let Some(interface_names) = get_link_names() {
-            if !interface_names.contains(interface) {
+            if !interface_names.iter().any(|name| name == interface) {
                 return Err(NetavarkError::msg(format!(
-                    "parent interface {} does not exist",
-                    interface
+                    "parent interface {interface} does not exist"
                 )));
             }
         }
